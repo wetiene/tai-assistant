@@ -10,13 +10,16 @@ struct AppShellView: View {
     let config: RuntimeAppConfig
 
     @State private var selectedTab: Tab = .dashboard
+    @State private var isAskTaiPresented = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
                 DashboardView(
-                    aiService: dependencies.aiService,
-                    healthService: dependencies.healthService,
+                    mealRepository: dependencies.mealRepository,
+                    goalRepository: dependencies.goalRepository,
+                    recurringMealRepository: dependencies.recurringMealRepository,
+                    alcoholPlanRepository: dependencies.alcoholPlanRepository,
                     assistantName: config.assistantName
                 )
             }
@@ -37,10 +40,17 @@ struct AppShellView: View {
             .padding(.trailing, DSSpacing.lg)
             .padding(.bottom, DSSpacing.xxl)
         }
+        .fullScreenCover(isPresented: $isAskTaiPresented) {
+            AskTaiEntrySheet(
+                assistantName: config.assistantName,
+                dismiss: { isAskTaiPresented = false }
+            )
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     private func handleAskTaiTap() {
-        // Dashboard-first loop: Ask Tai always routes back to the primary home surface.
         selectedTab = .dashboard
+        isAskTaiPresented = true
     }
 }

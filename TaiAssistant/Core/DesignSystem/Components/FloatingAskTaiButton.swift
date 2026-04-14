@@ -6,15 +6,24 @@ struct FloatingAskTaiButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label("Ask \(assistantName)", systemImage: "sparkles")
-                .font(.headline)
-                .foregroundStyle(.white)
-                .padding(.horizontal, DSSpacing.lg)
-                .padding(.vertical, DSSpacing.md)
-                .background(DSColor.accent)
-                .clipShape(Capsule())
-                .shadow(radius: 6, y: 3)
+            HStack(spacing: DSSpacing.sm) {
+                Image(systemName: "sparkles")
+                    .font(.subheadline.weight(.bold))
+                Text("Ask \(assistantName)")
+                    .font(.headline.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, DSSpacing.lg)
+            .padding(.vertical, DSSpacing.md)
+            .background(DSColor.coralGradient)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
+            )
+            .shadow(color: DSColor.coralEnd.opacity(0.35), radius: 12, y: 6)
         }
+        .buttonStyle(.plain)
         .accessibilityIdentifier("floatingAskTaiButton")
     }
 }

@@ -33,7 +33,7 @@ struct AppDependencies {
             )
         }
 
-        AppDependencies(
+        return AppDependencies(
             aiService: MockAIService(),
             healthService: MockHealthService(),
             mealRepository: MockMealRepository(),

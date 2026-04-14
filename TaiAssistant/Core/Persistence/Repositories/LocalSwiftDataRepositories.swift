@@ -11,19 +11,15 @@ final class LocalSwiftDataGoalRepository: GoalRepository {
     func fetchGoalProfiles(ownerID: String) async throws -> [GoalProfile] {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<GoalProfile>(
-            predicate: #Predicate { $0.ownerID == ownerID },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        return try context.fetch(descriptor)
+        return try context.fetch(descriptor).filter { $0.ownerID == ownerID }
     }
 
     func upsertGoalProfile(_ profile: GoalProfile) async throws {
         let context = ModelContext(container)
-        let existing = try context.fetch(
-            FetchDescriptor<GoalProfile>(
-                predicate: #Predicate { $0.id == profile.id }
-            )
-        ).first
+        let existing = try context.fetch(FetchDescriptor<GoalProfile>())
+            .first { $0.id == profile.id }
 
         if let existing {
             existing.title = profile.title
@@ -40,21 +36,15 @@ final class LocalSwiftDataGoalRepository: GoalRepository {
 
     func fetchDailyTargets(goalProfileID: UUID) async throws -> DailyTargets? {
         let context = ModelContext(container)
-        let goal = try context.fetch(
-            FetchDescriptor<GoalProfile>(
-                predicate: #Predicate { $0.id == goalProfileID }
-            )
-        ).first
+        let goal = try context.fetch(FetchDescriptor<GoalProfile>())
+            .first { $0.id == goalProfileID }
         return goal?.dailyTargets
     }
 
     func saveDailyTargets(_ targets: DailyTargets, goalProfileID: UUID) async throws {
         let context = ModelContext(container)
-        guard let goal = try context.fetch(
-            FetchDescriptor<GoalProfile>(
-                predicate: #Predicate { $0.id == goalProfileID }
-            )
-        ).first else { return }
+        guard let goal = try context.fetch(FetchDescriptor<GoalProfile>())
+            .first(where: { $0.id == goalProfileID }) else { return }
 
         let existing = goal.dailyTargets
         if let existing {
@@ -84,21 +74,17 @@ final class LocalSwiftDataMealRepository: MealRepository {
     func fetchMealLogs(ownerID: String, from startDate: Date, to endDate: Date) async throws -> [MealLog] {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<MealLog>(
-            predicate: #Predicate {
-                $0.ownerID == ownerID && $0.eatenAt >= startDate && $0.eatenAt < endDate
-            },
             sortBy: [SortDescriptor(\.eatenAt, order: .reverse)]
         )
-        return try context.fetch(descriptor)
+        return try context.fetch(descriptor).filter {
+            $0.ownerID == ownerID && $0.eatenAt >= startDate && $0.eatenAt < endDate
+        }
     }
 
     func upsertMealLog(_ mealLog: MealLog) async throws {
         let context = ModelContext(container)
-        let existing = try context.fetch(
-            FetchDescriptor<MealLog>(
-                predicate: #Predicate { $0.id == mealLog.id }
-            )
-        ).first
+        let existing = try context.fetch(FetchDescriptor<MealLog>())
+            .first { $0.id == mealLog.id }
 
         if let existing {
             existing.eatenAt = mealLog.eatenAt
@@ -117,11 +103,8 @@ final class LocalSwiftDataMealRepository: MealRepository {
 
     func deleteMealLog(id: UUID) async throws {
         let context = ModelContext(container)
-        guard let existing = try context.fetch(
-            FetchDescriptor<MealLog>(
-                predicate: #Predicate { $0.id == id }
-            )
-        ).first else { return }
+        guard let existing = try context.fetch(FetchDescriptor<MealLog>())
+            .first(where: { $0.id == id }) else { return }
         context.delete(existing)
         try context.save()
     }
@@ -137,10 +120,9 @@ final class LocalSwiftDataFineTuneCorrectionRepository: FineTuneCorrectionReposi
     func fetchCorrections(ownerID: String, since: Date?) async throws -> [FineTuneCorrection] {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<FineTuneCorrection>(
-            predicate: #Predicate { $0.ownerID == ownerID },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        let corrections = try context.fetch(descriptor)
+        let corrections = try context.fetch(descriptor).filter { $0.ownerID == ownerID }
         guard let since else { return corrections }
         return corrections.filter { $0.createdAt >= since }
     }
@@ -162,20 +144,16 @@ final class LocalSwiftDataRecurringMealRepository: RecurringMealRepository {
     func fetchRecurringMeals(ownerID: String, activeOnly: Bool) async throws -> [RecurringMeal] {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<RecurringMeal>(
-            predicate: #Predicate { $0.ownerID == ownerID },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        let recurringMeals = try context.fetch(descriptor)
+        let recurringMeals = try context.fetch(descriptor).filter { $0.ownerID == ownerID }
         return activeOnly ? recurringMeals.filter(\.isActive) : recurringMeals
     }
 
     func upsertRecurringMeal(_ recurringMeal: RecurringMeal) async throws {
         let context = ModelContext(container)
-        let existing = try context.fetch(
-            FetchDescriptor<RecurringMeal>(
-                predicate: #Predicate { $0.id == recurringMeal.id }
-            )
-        ).first
+        let existing = try context.fetch(FetchDescriptor<RecurringMeal>())
+            .first { $0.id == recurringMeal.id }
 
         if let existing {
             existing.name = recurringMeal.name
@@ -203,19 +181,15 @@ final class LocalSwiftDataAlcoholPlanRepository: AlcoholPlanRepository {
     func fetchAlcoholPlan(ownerID: String) async throws -> AlcoholPlan? {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<AlcoholPlan>(
-            predicate: #Predicate { $0.ownerID == ownerID },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        return try context.fetch(descriptor).first
+        return try context.fetch(descriptor).first { $0.ownerID == ownerID }
     }
 
     func saveAlcoholPlan(_ plan: AlcoholPlan) async throws {
         let context = ModelContext(container)
-        let existing = try context.fetch(
-            FetchDescriptor<AlcoholPlan>(
-                predicate: #Predicate { $0.ownerID == plan.ownerID }
-            )
-        ).first
+        let existing = try context.fetch(FetchDescriptor<AlcoholPlan>())
+            .first { $0.ownerID == plan.ownerID }
 
         if let existing {
             existing.maxStandardDrinksPerDay = plan.maxStandardDrinksPerDay
@@ -242,10 +216,9 @@ final class LocalSwiftDataWeightLogRepository: WeightLogRepository {
     func fetchWeightLogs(ownerID: String, limit: Int?) async throws -> [WeightLog] {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<WeightLog>(
-            predicate: #Predicate { $0.ownerID == ownerID },
             sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
         )
-        let logs = try context.fetch(descriptor)
+        let logs = try context.fetch(descriptor).filter { $0.ownerID == ownerID }
         guard let limit else { return logs }
         return Array(logs.prefix(limit))
     }
@@ -267,19 +240,15 @@ final class LocalSwiftDataAppConfigRepository: AppConfigRepository {
     func fetchAppConfig(ownerID: String) async throws -> AppConfig? {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<AppConfig>(
-            predicate: #Predicate { $0.ownerID == ownerID },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        return try context.fetch(descriptor).first
+        return try context.fetch(descriptor).first { $0.ownerID == ownerID }
     }
 
     func saveAppConfig(_ config: AppConfig) async throws {
         let context = ModelContext(container)
-        let existing = try context.fetch(
-            FetchDescriptor<AppConfig>(
-                predicate: #Predicate { $0.ownerID == config.ownerID }
-            )
-        ).first
+        let existing = try context.fetch(FetchDescriptor<AppConfig>())
+            .first { $0.ownerID == config.ownerID }
 
         if let existing {
             existing.measurementSystem = config.measurementSystem
