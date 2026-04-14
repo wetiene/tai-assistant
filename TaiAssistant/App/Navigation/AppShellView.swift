@@ -7,7 +7,7 @@ struct AppShellView: View {
     }
 
     let dependencies: AppDependencies
-    let config: AppConfig
+    let config: RuntimeAppConfig
 
     @State private var selectedTab: Tab = .dashboard
 

@@ -1,10 +1,17 @@
 import SwiftData
 
 enum AppModelContainerFactory {
-    static func makeContainer(inMemory: Bool) -> ModelContainer {
+    static func makeContainer(inMemory: Bool, includePreviewSeedData: Bool = false) -> ModelContainer {
         let schema = Schema([
-            MealRecord.self,
-            GoalRecord.self
+            GoalProfile.self,
+            DailyTargets.self,
+            MealLog.self,
+            MealItem.self,
+            FineTuneCorrection.self,
+            RecurringMeal.self,
+            AlcoholPlan.self,
+            WeightLog.self,
+            AppConfig.self
         ])
 
         // Architecture decision: one shared container for the scaffold keeps
@@ -14,10 +21,14 @@ enum AppModelContainerFactory {
         )
 
         do {
-            return try ModelContainer(
+            let container = try ModelContainer(
                 for: schema,
                 configurations: [configuration]
             )
+            if includePreviewSeedData {
+                try PreviewSeedData.seedIfNeeded(in: container)
+            }
+            return container
         } catch {
             fatalError("Failed to build SwiftData container: \(error)")
         }

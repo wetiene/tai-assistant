@@ -1,6 +1,7 @@
 import Foundation
 
 protocol MealRepository {
-    func fetchMeals(for date: Date) async throws -> [MealRecord]
-    func saveMeal(summary: String, date: Date) async throws
+    func fetchMealLogs(ownerID: String, from startDate: Date, to endDate: Date) async throws -> [MealLog]
+    func upsertMealLog(_ mealLog: MealLog) async throws
+    func deleteMealLog(id: UUID) async throws
 }

@@ -3,16 +3,20 @@ import SwiftUI
 
 @main
 struct TaiAssistantApp: App {
-    private let config: AppConfig
+    private let config: RuntimeAppConfig
     private let dependencies: AppDependencies
     private let modelContainer: ModelContainer
 
     init() {
-        let config = AppConfig.default
+        let config = RuntimeAppConfig.default
         self.config = config
-        self.dependencies = AppDependencies.makeDefault()
+        self.dependencies = AppDependencies.makeDefault(
+            useLocalPersistence: false,
+            inMemoryStore: config.useInMemoryStore
+        )
         self.modelContainer = AppModelContainerFactory.makeContainer(
-            inMemory: config.useInMemoryStore
+            inMemory: config.useInMemoryStore,
+            includePreviewSeedData: config.useInMemoryStore
         )
     }
 

@@ -1,6 +1,8 @@
 import Foundation
 
 protocol GoalRepository {
-    func fetchGoals() async throws -> [GoalRecord]
-    func saveGoal(title: String, targetValue: Double) async throws
+    func fetchGoalProfiles(ownerID: String) async throws -> [GoalProfile]
+    func upsertGoalProfile(_ profile: GoalProfile) async throws
+    func fetchDailyTargets(goalProfileID: UUID) async throws -> DailyTargets?
+    func saveDailyTargets(_ targets: DailyTargets, goalProfileID: UUID) async throws
 }
