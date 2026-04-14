@@ -1,0 +1,18 @@
+---
+description: Multi-agent ownership boundaries
+alwaysApply: true
+---
+
+# Multi-agent boundaries
+
+Agents must stay within their owned folders and features.
+
+If another owned area needs a change:
+- minimize edits
+- prefer creating stubs/interfaces
+- clearly call it out in the completion report
+
+Avoid:
+- large refactors across unrelated features
+- renaming shared abstractions without need
+- changing UI and persistence in the same task unless explicitly requested

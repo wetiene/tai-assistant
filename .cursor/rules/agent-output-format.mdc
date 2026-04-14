@@ -1,0 +1,44 @@
+---
+description: Standard completion report for all coding agents
+alwaysApply: true
+---
+
+# Agent completion contract
+
+Before making changes:
+- briefly state a plan in 4 to 6 bullets
+- mention any assumptions
+- identify likely shared files
+
+After finishing:
+Return a completion report with these exact sections.
+
+## 1. What I changed
+- files created
+- files updated
+- what each change does
+
+## 2. Architecture decisions
+- important decisions made
+- assumptions
+- anything intentionally deferred
+
+## 3. Open issues
+- incomplete work
+- blockers
+- possible cross-agent conflicts
+
+## 4. How to review
+- files to inspect first
+- what should now run
+- which flows to test
+
+## 5. Risks / cleanup needed
+- placeholder code
+- mocks
+- likely refactor areas
+
+Rules:
+- keep the report concise but specific
+- if shared files were touched, call them out explicitly
+- do not stop after code generation without the completion report
