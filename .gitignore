@@ -1,3 +1,10 @@
 .DS_Store
 build/
-DerivedData/
+DerivedData
+
+/# Xcode user/local state
+**/xcuserdata/
+**/*.xcuserstate
+
+# Derived data / local build artifacts
+.deriveddata/
