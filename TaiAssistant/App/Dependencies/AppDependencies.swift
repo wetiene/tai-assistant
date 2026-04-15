@@ -14,10 +14,11 @@ struct AppDependencies {
     let appConfigRepository: AppConfigRepository
 
     /// Production wiring: all repositories read/write the same `ModelContainer` injected into the SwiftUI tree.
-    static func live(modelContainer: ModelContainer) -> AppDependencies {
+    static func live(modelContainer: ModelContainer, config: RuntimeAppConfig = .default) -> AppDependencies {
         let persistence = LocalPersistenceService(container: modelContainer)
+        let aiService = makeAIService(config: config)
         return AppDependencies(
-            aiService: MockAIService(),
+            aiService: aiService,
             askTaiGuidance: MockAskTaiGuidanceService(),
             healthService: MockHealthService(),
             mealRepository: persistence.makeMealRepository(),
@@ -31,9 +32,9 @@ struct AppDependencies {
     }
 
     /// Fully in-memory repositories for UI experiments without SwiftData (no disk container required).
-    static func mocksOnly() -> AppDependencies {
+    static func mocksOnly(config: RuntimeAppConfig = .default) -> AppDependencies {
         AppDependencies(
-            aiService: MockAIService(),
+            aiService: makeAIService(config: config),
             askTaiGuidance: MockAskTaiGuidanceService(),
             healthService: MockHealthService(),
             mealRepository: MockMealRepository(),
@@ -44,5 +45,24 @@ struct AppDependencies {
             weightLogRepository: MockWeightLogRepository(),
             appConfigRepository: MockAppConfigRepository()
         )
+    }
+
+    private static func makeAIService(config: RuntimeAppConfig) -> AIService {
+        switch config.mealInterpretationProvider {
+        case .mock:
+            return MockAIService()
+        case .openAIProxy:
+            guard let baseURL = config.aiProxyBaseURL else {
+                assertionFailure("mealInterpretationProvider is openAIProxy but aiProxyBaseURL is not set; falling back to MockAIService.")
+                return MockAIService()
+            }
+            return OpenAIProxyAIService(
+                config: OpenAIProxyServiceConfig(
+                    baseURL: baseURL,
+                    interpretMealPath: config.aiInterpretMealPath,
+                    proxyBearerToken: config.aiProxyBearerToken
+                )
+            )
+        }
     }
 }

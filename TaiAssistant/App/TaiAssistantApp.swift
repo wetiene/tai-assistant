@@ -16,7 +16,7 @@ struct TaiAssistantApp: App {
             ownerID: config.localOwnerID
         )
         self.modelContainer = container
-        self.dependencies = AppDependencies.live(modelContainer: container)
+        self.dependencies = AppDependencies.live(modelContainer: container, config: config)
     }
 
     var body: some Scene {
