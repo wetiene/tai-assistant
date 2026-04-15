@@ -11,6 +11,7 @@ struct AppShellView: View {
 
     @State private var selectedTab: Tab = .dashboard
     @State private var isAskTaiPresented = false
+    @State private var askTaiSeedPrompt: String?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -20,14 +21,18 @@ struct AppShellView: View {
                     goalRepository: dependencies.goalRepository,
                     recurringMealRepository: dependencies.recurringMealRepository,
                     alcoholPlanRepository: dependencies.alcoholPlanRepository,
-                    assistantName: config.assistantName
+                    ownerID: config.localOwnerID,
+                    assistantName: config.assistantName,
+                    onAskTaiRequested: { prompt in
+                        handleAskTaiTap(seedPrompt: prompt)
+                    }
                 )
             }
             .tabItem { Label("Dashboard", systemImage: "square.grid.2x2.fill") }
             .tag(Tab.dashboard)
 
             NavigationStack {
-                GoalsView(goalRepository: dependencies.goalRepository)
+                GoalsView(goalRepository: dependencies.goalRepository, ownerID: config.localOwnerID)
             }
             .tabItem { Label("Goals", systemImage: "target") }
             .tag(Tab.goals)
@@ -35,7 +40,7 @@ struct AppShellView: View {
         .overlay(alignment: .bottomTrailing) {
             FloatingAskTaiButton(
                 assistantName: config.assistantName,
-                action: handleAskTaiTap
+                action: { handleAskTaiTap(seedPrompt: nil) }
             )
             .padding(.trailing, DSSpacing.lg)
             .padding(.bottom, DSSpacing.xxl)
@@ -43,14 +48,20 @@ struct AppShellView: View {
         .fullScreenCover(isPresented: $isAskTaiPresented) {
             AskTaiEntrySheet(
                 assistantName: config.assistantName,
-                dismiss: { isAskTaiPresented = false }
+                askTaiGuidance: dependencies.askTaiGuidance,
+                initialPrompt: askTaiSeedPrompt,
+                dismiss: {
+                    isAskTaiPresented = false
+                    askTaiSeedPrompt = nil
+                }
             )
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
-    private func handleAskTaiTap() {
+    private func handleAskTaiTap(seedPrompt: String? = nil) {
         selectedTab = .dashboard
+        askTaiSeedPrompt = seedPrompt
         isAskTaiPresented = true
     }
 }

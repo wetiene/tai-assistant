@@ -18,41 +18,81 @@ struct MockHealthService: HealthService {
 
 final class MockMealRepository: MealRepository {
     private var meals: [MealLog]
-    private let lock = NSLock()
 
     init() {
         self.meals = MockSeedData.makeMealLogs()
     }
 
     func fetchMealLogs(ownerID: String, from startDate: Date, to endDate: Date) async throws -> [MealLog] {
-        lock.lock()
-        defer { lock.unlock() }
         return meals.filter {
             $0.ownerID == ownerID && $0.eatenAt >= startDate && $0.eatenAt < endDate
         }
     }
 
-    func upsertMealLog(_ mealLog: MealLog) async throws {
-        lock.lock()
-        defer { lock.unlock() }
-        if let index = meals.firstIndex(where: { $0.id == mealLog.id }) {
-            meals[index] = mealLog
-        } else {
-            meals.append(mealLog)
+    func createMealLog(_ meal: MealLog) async throws {
+        if meals.contains(where: { $0.id == meal.id }) {
+            throw MealRepositoryError.mealLogAlreadyExists(id: meal.id)
         }
+        meals.append(meal)
+    }
+
+    func updateMealLog(_ meal: MealLog) async throws {
+        guard let index = meals.firstIndex(where: { $0.id == meal.id }) else {
+            throw MealRepositoryError.mealLogNotFound(id: meal.id)
+        }
+        meals[index] = meal
+    }
+
+    func duplicateMealLog(from source: MealLog, eatenAt: Date) -> MealLog {
+        let copy = MealLog(
+            ownerID: source.ownerID,
+            visibility: source.visibility,
+            sharingGroupID: source.sharingGroupID,
+            eatenAt: eatenAt,
+            timing: source.timing,
+            notes: source.notes,
+            alcoholStandardDrinks: source.alcoholStandardDrinks
+        )
+        copy.items = source.items.map { Self.cloneMealItem(from: $0) }
+        return copy
+    }
+
+    func duplicateMealLog(fromRecurringTemplate template: RecurringMeal, eatenAt: Date) -> MealLog {
+        let copy = MealLog(
+            ownerID: template.ownerID,
+            visibility: template.visibility,
+            sharingGroupID: template.sharingGroupID,
+            eatenAt: eatenAt,
+            timing: template.preferredTiming,
+            notes: template.name,
+            alcoholStandardDrinks: 0
+        )
+        copy.items = template.items.map { Self.cloneMealItem(from: $0) }
+        return copy
     }
 
     func deleteMealLog(id: UUID) async throws {
-        lock.lock()
-        defer { lock.unlock() }
         meals.removeAll { $0.id == id }
+    }
+
+    private static func cloneMealItem(from source: MealItem) -> MealItem {
+        MealItem(
+            name: source.name,
+            amount: source.amount,
+            unit: source.unit,
+            calories: source.calories,
+            proteinGrams: source.proteinGrams,
+            carbsGrams: source.carbsGrams,
+            fatGrams: source.fatGrams,
+            fiberGrams: source.fiberGrams,
+            alcoholGrams: source.alcoholGrams
+        )
     }
 }
 
 final class MockGoalRepository: GoalRepository {
     private var goals: [GoalProfile]
     private var targetsByGoalID: [UUID: DailyTargets]
-    private let lock = NSLock()
 
     init() {
         let seeded = MockSeedData.makeGoalProfileAndTargets()
@@ -61,14 +101,10 @@ final class MockGoalRepository: GoalRepository {
     }
 
     func fetchGoalProfiles(ownerID: String) async throws -> [GoalProfile] {
-        lock.lock()
-        defer { lock.unlock() }
         return goals.filter { $0.ownerID == ownerID }
     }
 
     func upsertGoalProfile(_ profile: GoalProfile) async throws {
-        lock.lock()
-        defer { lock.unlock() }
         if let index = goals.firstIndex(where: { $0.id == profile.id }) {
             goals[index] = profile
         } else {
@@ -77,55 +113,41 @@ final class MockGoalRepository: GoalRepository {
     }
 
     func fetchDailyTargets(goalProfileID: UUID) async throws -> DailyTargets? {
-        lock.lock()
-        defer { lock.unlock() }
         return targetsByGoalID[goalProfileID]
     }
 
     func saveDailyTargets(_ targets: DailyTargets, goalProfileID: UUID) async throws {
-        lock.lock()
-        defer { lock.unlock() }
         targetsByGoalID[goalProfileID] = targets
     }
 }
 
 final class MockFineTuneCorrectionRepository: FineTuneCorrectionRepository {
     private var corrections: [FineTuneCorrection] = []
-    private let lock = NSLock()
 
     func fetchCorrections(ownerID: String, since: Date?) async throws -> [FineTuneCorrection] {
-        lock.lock()
-        defer { lock.unlock() }
         let ownerScoped = corrections.filter { $0.ownerID == ownerID }
         guard let since else { return ownerScoped }
         return ownerScoped.filter { $0.createdAt >= since }
     }
 
     func saveCorrection(_ correction: FineTuneCorrection) async throws {
-        lock.lock()
-        defer { lock.unlock() }
         corrections.append(correction)
     }
 }
 
 final class MockRecurringMealRepository: RecurringMealRepository {
     private var recurringMeals: [RecurringMeal]
-    private let lock = NSLock()
 
     init() {
         self.recurringMeals = MockSeedData.makeRecurringMeals()
     }
 
     func fetchRecurringMeals(ownerID: String, activeOnly: Bool) async throws -> [RecurringMeal] {
-        lock.lock()
-        defer { lock.unlock() }
         let ownerScoped = recurringMeals.filter { $0.ownerID == ownerID }
         return activeOnly ? ownerScoped.filter(\.isActive) : ownerScoped
     }
 
     func upsertRecurringMeal(_ recurringMeal: RecurringMeal) async throws {
-        lock.lock()
-        defer { lock.unlock() }
         if let index = recurringMeals.firstIndex(where: { $0.id == recurringMeal.id }) {
             recurringMeals[index] = recurringMeal
         } else {
@@ -136,7 +158,6 @@ final class MockRecurringMealRepository: RecurringMealRepository {
 
 final class MockAlcoholPlanRepository: AlcoholPlanRepository {
     private var plansByOwnerID: [String: AlcoholPlan]
-    private let lock = NSLock()
 
     init() {
         let plan = MockSeedData.makeAlcoholPlan()
@@ -144,50 +165,36 @@ final class MockAlcoholPlanRepository: AlcoholPlanRepository {
     }
 
     func fetchAlcoholPlan(ownerID: String) async throws -> AlcoholPlan? {
-        lock.lock()
-        defer { lock.unlock() }
         return plansByOwnerID[ownerID]
     }
 
     func saveAlcoholPlan(_ plan: AlcoholPlan) async throws {
-        lock.lock()
-        defer { lock.unlock() }
         plansByOwnerID[plan.ownerID] = plan
     }
 }
 
 final class MockWeightLogRepository: WeightLogRepository {
     private var logs: [WeightLog] = []
-    private let lock = NSLock()
 
     func fetchWeightLogs(ownerID: String, limit: Int?) async throws -> [WeightLog] {
-        lock.lock()
-        defer { lock.unlock() }
         let ownerScoped = logs.filter { $0.ownerID == ownerID }.sorted { $0.loggedAt > $1.loggedAt }
         guard let limit else { return ownerScoped }
         return Array(ownerScoped.prefix(limit))
     }
 
     func saveWeightLog(_ log: WeightLog) async throws {
-        lock.lock()
-        defer { lock.unlock() }
         logs.append(log)
     }
 }
 
 final class MockAppConfigRepository: AppConfigRepository {
     private var configsByOwnerID: [String: AppConfig] = [:]
-    private let lock = NSLock()
 
     func fetchAppConfig(ownerID: String) async throws -> AppConfig? {
-        lock.lock()
-        defer { lock.unlock() }
         return configsByOwnerID[ownerID]
     }
 
     func saveAppConfig(_ config: AppConfig) async throws {
-        lock.lock()
-        defer { lock.unlock() }
         configsByOwnerID[config.ownerID] = config
     }
 }

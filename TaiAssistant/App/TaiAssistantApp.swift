@@ -10,14 +10,13 @@ struct TaiAssistantApp: App {
     init() {
         let config = RuntimeAppConfig.default
         self.config = config
-        self.dependencies = AppDependencies.makeDefault(
-            useLocalPersistence: false,
-            inMemoryStore: config.useInMemoryStore
-        )
-        self.modelContainer = AppModelContainerFactory.makeContainer(
+        let container = AppModelContainerFactory.makeContainer(
             inMemory: config.useInMemoryStore,
-            includePreviewSeedData: config.useInMemoryStore
+            includePreviewSeedData: config.useInMemoryStore,
+            ownerID: config.localOwnerID
         )
+        self.modelContainer = container
+        self.dependencies = AppDependencies.live(modelContainer: container)
     }
 
     var body: some Scene {

@@ -5,19 +5,46 @@ struct DashboardView: View {
     let goalRepository: GoalRepository
     let recurringMealRepository: RecurringMealRepository
     let alcoholPlanRepository: AlcoholPlanRepository
+    let ownerID: String
     let assistantName: String
+    var onAskTaiRequested: ((String) -> Void)? = nil
 
     @State private var state = DashboardState.placeholder
     @State private var isLoading = false
-
-    private let ownerID = "preview.user"
+    @State private var isMealCapturePresented = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.xxl) {
                 header
 
-                BestNextMoveCard(state: state, assistantName: assistantName)
+                Button {
+                    isMealCapturePresented = true
+                } label: {
+                    HStack(spacing: DSSpacing.md) {
+                        Image(systemName: "camera.fill")
+                            .font(.title3.weight(.semibold))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Log Meal")
+                                .font(.headline.weight(.semibold))
+                            Text("Capture, fine tune, and save in under a minute")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.9))
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.right.circle.fill")
+                            .font(.title3)
+                    }
+                }
+                .buttonStyle(CoralGradientButtonStyle())
+
+                BestNextMoveCard(
+                    state: state,
+                    assistantName: assistantName,
+                    onAskTaiTap: {
+                        onAskTaiRequested?(dashboardAskPrompt)
+                    }
+                )
 
                 DashboardCard(title: "Macro Rhythm", icon: "chart.bar.fill", tint: .blue) {
                     MacroProgressRow(
@@ -110,6 +137,20 @@ struct DashboardView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
+        .fullScreenCover(isPresented: $isMealCapturePresented) {
+            MealCaptureFlowView(
+                mealRepository: mealRepository,
+                ownerID: ownerID,
+                onSaved: {
+                    Task {
+                        await loadDashboard()
+                    }
+                },
+                dismiss: {
+                    isMealCapturePresented = false
+                }
+            )
+        }
     }
 
     private var header: some View {
@@ -121,6 +162,14 @@ struct DashboardView: View {
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(DSColor.textPrimary)
         }
+    }
+
+    private var dashboardAskPrompt: String {
+        var prompt = "Help me pick dinner options with \(state.caloriesRemaining) kcal left and protein-first macros."
+        if let remaining = state.alcoholRemainingDrinks, remaining > 0 {
+            prompt += " I may have up to \(remaining) drinks tonight."
+        }
+        return prompt
     }
 
     private func loadDashboard() async {
@@ -162,49 +211,10 @@ struct DashboardView: View {
     }
 }
 
-private struct DashboardHeroCard: View {
-    let state: DashboardState
-
-    var body: some View {
-        HStack(spacing: DSSpacing.lg) {
-            ZStack {
-                ProgressRing(progress: state.calorieProgress, lineWidth: 10)
-                    .frame(width: 94, height: 94)
-                VStack(spacing: 2) {
-                    Text("\(state.caloriesRemaining)")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.white)
-                    Text("kcal left")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-            }
-
-            VStack(alignment: .leading, spacing: DSSpacing.xs) {
-                Text(state.confidenceHeadline)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
-                Text(state.confidenceBody)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.88))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(DSSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DSColor.coralGradient)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-        )
-        .shadow(color: DSColor.coralEnd.opacity(0.3), radius: 16, y: 8)
-    }
-}
-
 private struct BestNextMoveCard: View {
     let state: DashboardState
     let assistantName: String
+    let onAskTaiTap: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSSpacing.lg) {
@@ -238,7 +248,10 @@ private struct BestNextMoveCard: View {
             HStack(spacing: DSSpacing.sm) {
                 DominantChip(label: state.topMacroChip, icon: "fork.knife")
                 DominantChip(label: state.momentumChip, icon: "flame.fill")
-                DominantChip(label: "Ask \(assistantName)", icon: "sparkles")
+                Button(action: onAskTaiTap) {
+                    DominantChip(label: "Ask \(assistantName)", icon: "sparkles")
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(DSSpacing.xl)

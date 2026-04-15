@@ -1,7 +1,9 @@
 import Foundation
+import SwiftData
 
 struct AppDependencies {
     let aiService: AIService
+    let askTaiGuidance: any AskTaiGuidanceService
     let healthService: HealthService
     let mealRepository: MealRepository
     let goalRepository: GoalRepository
@@ -11,30 +13,28 @@ struct AppDependencies {
     let weightLogRepository: WeightLogRepository
     let appConfigRepository: AppConfigRepository
 
-    static func makeDefault(useLocalPersistence: Bool = false, inMemoryStore: Bool = false) -> AppDependencies {
-        // Architecture decision: ship the app shell with mocks by default so
-        // feature teams can build UI/flows before backend and HealthKit wiring exists.
-        if useLocalPersistence {
-            let container = AppModelContainerFactory.makeContainer(
-                inMemory: inMemoryStore,
-                includePreviewSeedData: inMemoryStore
-            )
-            let persistence = LocalPersistenceService(container: container)
-            return AppDependencies(
-                aiService: MockAIService(),
-                healthService: MockHealthService(),
-                mealRepository: persistence.makeMealRepository(),
-                goalRepository: persistence.makeGoalRepository(),
-                fineTuneCorrectionRepository: persistence.makeFineTuneCorrectionRepository(),
-                recurringMealRepository: persistence.makeRecurringMealRepository(),
-                alcoholPlanRepository: persistence.makeAlcoholPlanRepository(),
-                weightLogRepository: persistence.makeWeightLogRepository(),
-                appConfigRepository: persistence.makeAppConfigRepository()
-            )
-        }
-
+    /// Production wiring: all repositories read/write the same `ModelContainer` injected into the SwiftUI tree.
+    static func live(modelContainer: ModelContainer) -> AppDependencies {
+        let persistence = LocalPersistenceService(container: modelContainer)
         return AppDependencies(
             aiService: MockAIService(),
+            askTaiGuidance: MockAskTaiGuidanceService(),
+            healthService: MockHealthService(),
+            mealRepository: persistence.makeMealRepository(),
+            goalRepository: persistence.makeGoalRepository(),
+            fineTuneCorrectionRepository: persistence.makeFineTuneCorrectionRepository(),
+            recurringMealRepository: persistence.makeRecurringMealRepository(),
+            alcoholPlanRepository: persistence.makeAlcoholPlanRepository(),
+            weightLogRepository: persistence.makeWeightLogRepository(),
+            appConfigRepository: persistence.makeAppConfigRepository()
+        )
+    }
+
+    /// Fully in-memory repositories for UI experiments without SwiftData (no disk container required).
+    static func mocksOnly() -> AppDependencies {
+        AppDependencies(
+            aiService: MockAIService(),
+            askTaiGuidance: MockAskTaiGuidanceService(),
             healthService: MockHealthService(),
             mealRepository: MockMealRepository(),
             goalRepository: MockGoalRepository(),

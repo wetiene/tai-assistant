@@ -2,10 +2,14 @@ import SwiftUI
 
 struct AskTaiEntrySheet: View {
     let assistantName: String
+    let askTaiGuidance: any AskTaiGuidanceService
+    let initialPrompt: String?
     let dismiss: () -> Void
     @State private var draftPrompt = ""
+    @State private var responseRoute: AskTaiResponseRoute?
 
-    private let suggestionPrompts = AskPrompt.defaultPrompts
+    private let suggestionPrompts = AskTaiPromptPreset.defaultPrompts
+    private let featuredPrompt = "Plan a high-protein dinner from my remaining macros"
 
     var body: some View {
         NavigationStack {
@@ -22,8 +26,8 @@ struct AskTaiEntrySheet: View {
 
                     BestAskCard(
                         title: "Best next ask",
-                        prompt: "Plan a high-protein dinner from my remaining macros",
-                        action: { draftPrompt = "Plan a high-protein dinner from my remaining macros" }
+                        prompt: featuredPrompt,
+                        action: { openResponse(with: featuredPrompt) }
                     )
 
                     VStack(alignment: .leading, spacing: DSSpacing.md) {
@@ -36,7 +40,7 @@ struct AskTaiEntrySheet: View {
                                 AskDecisionTile(
                                     prompt: prompt,
                                     isSelected: draftPrompt == prompt.text,
-                                    action: { draftPrompt = prompt.text }
+                                    action: { openResponse(with: prompt.text) }
                                 )
                             }
                         }
@@ -62,10 +66,11 @@ struct AskTaiEntrySheet: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        dismiss()
+                        let prompt = draftPrompt.isEmpty ? featuredPrompt : draftPrompt
+                        openResponse(with: prompt)
                     } label: {
                         HStack(spacing: DSSpacing.sm) {
-                            Text(draftPrompt.isEmpty ? "Start strategy conversation" : draftPrompt)
+                            Text(draftPrompt.isEmpty ? "Start strategy response" : draftPrompt)
                                 .lineLimit(1)
                             Spacer()
                             Image(systemName: "arrow.up.circle.fill")
@@ -83,47 +88,26 @@ struct AskTaiEntrySheet: View {
                     Button("Done", action: dismiss)
                 }
             }
+            .navigationDestination(item: $responseRoute) { route in
+                AskTaiResponseView(assistantName: assistantName, prompt: route.prompt, guidance: askTaiGuidance)
+            }
+            .onAppear {
+                if draftPrompt.isEmpty, let initialPrompt {
+                    draftPrompt = initialPrompt
+                }
+            }
         }
+    }
+
+    private func openResponse(with prompt: String) {
+        draftPrompt = prompt
+        responseRoute = AskTaiResponseRoute(prompt: prompt)
     }
 }
 
-private struct AskPrompt: Identifiable {
-    let id: String
-    let title: String
-    let text: String
-    let icon: String
-    let tint: Color
-
-    static let defaultPrompts: [AskPrompt] = [
-        AskPrompt(
-            id: "protein-dinner",
-            title: "Dinner move",
-            text: "Plan a high-protein dinner from my remaining macros",
-            icon: "fork.knife.circle.fill",
-            tint: .mint
-        ),
-        AskPrompt(
-            id: "social",
-            title: "Social plan",
-            text: "How do I stay on track for drinks tonight?",
-            icon: "wineglass.fill",
-            tint: .purple
-        ),
-        AskPrompt(
-            id: "grocery",
-            title: "Grocery sprint",
-            text: "Give me a fast grocery strategy for tomorrow",
-            icon: "cart.fill",
-            tint: .blue
-        ),
-        AskPrompt(
-            id: "prep",
-            title: "Prep now",
-            text: "What should I prep now so evening decisions are easy?",
-            icon: "takeoutbag.and.cup.and.straw.fill",
-            tint: .orange
-        )
-    ]
+private struct AskTaiResponseRoute: Hashable, Identifiable {
+    let prompt: String
+    var id: String { prompt }
 }
 
 private struct BestAskCard: View {
@@ -165,7 +149,7 @@ private struct BestAskCard: View {
 }
 
 private struct AskDecisionTile: View {
-    let prompt: AskPrompt
+    let prompt: AskTaiPromptPreset
     let isSelected: Bool
     let action: () -> Void
 

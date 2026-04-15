@@ -31,6 +31,11 @@
 		A10000000000000000000015 /* PersistenceRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* PersistenceRepositories.swift */; };
 		A10000000000000000000016 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* DashboardView.swift */; };
 		A10000000000000000000017 /* GoalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* GoalsView.swift */; };
+		A10000000000000000000018 /* AskTaiMockResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* AskTaiMockResponse.swift */; };
+		A10000000000000000000019 /* AskTaiResponseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* AskTaiResponseView.swift */; };
+		A1000000000000000000001A /* MealCaptureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* MealCaptureModels.swift */; };
+		A1000000000000000000001B /* MealCaptureMockEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* MealCaptureMockEstimator.swift */; };
+		A1000000000000000000001C /* MealCaptureFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* MealCaptureFlowView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +63,11 @@
 		A20000000000000000000015 /* PersistenceRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceRepositories.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* GoalsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoalsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* AskTaiMockResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskTaiMockResponse.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* AskTaiResponseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskTaiResponseView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001A /* MealCaptureModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCaptureModels.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* MealCaptureMockEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCaptureMockEstimator.swift; sourceTree = "<group>"; };
+		A2000000000000000000001C /* MealCaptureFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCaptureFlowView.swift; sourceTree = "<group>"; };
 		A20000000000000000000030 /* TaiAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = TaiAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -115,8 +125,10 @@
 		A00000000000000000000006 /* TaiAssistant/Features */ = {
 			isa = PBXGroup;
 			children = (
+				A0000000000000000000001A /* AskTai/Presentation */,
 				A00000000000000000000018 /* Dashboard/Presentation */,
 				A00000000000000000000019 /* Goals/Presentation */,
+				A0000000000000000000001B /* MealCapture/Presentation */,
 			);
 			path = TaiAssistant/Features;
 			sourceTree = "<group>";
@@ -239,6 +251,25 @@
 			path = Goals/Presentation;
 			sourceTree = "<group>";
 		};
+		A0000000000000000000001A /* AskTai/Presentation */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000018 /* AskTaiMockResponse.swift */,
+				A20000000000000000000019 /* AskTaiResponseView.swift */,
+			);
+			path = AskTai/Presentation;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000001B /* MealCapture/Presentation */ = {
+			isa = PBXGroup;
+			children = (
+				A2000000000000000000001A /* MealCaptureModels.swift */,
+				A2000000000000000000001B /* MealCaptureMockEstimator.swift */,
+				A2000000000000000000001C /* MealCaptureFlowView.swift */,
+			);
+			path = MealCapture/Presentation;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -331,6 +362,11 @@
 				A10000000000000000000015 /* PersistenceRepositories.swift in Sources */,
 				A10000000000000000000016 /* DashboardView.swift in Sources */,
 				A10000000000000000000017 /* GoalsView.swift in Sources */,
+				A10000000000000000000018 /* AskTaiMockResponse.swift in Sources */,
+				A10000000000000000000019 /* AskTaiResponseView.swift in Sources */,
+				A1000000000000000000001A /* MealCaptureModels.swift in Sources */,
+				A1000000000000000000001B /* MealCaptureMockEstimator.swift in Sources */,
+				A1000000000000000000001C /* MealCaptureFlowView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -468,6 +504,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Capture meal photos for nutrition estimation.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose meal photos from your library for nutrition estimation.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -496,6 +534,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Capture meal photos for nutrition estimation.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose meal photos from your library for nutrition estimation.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

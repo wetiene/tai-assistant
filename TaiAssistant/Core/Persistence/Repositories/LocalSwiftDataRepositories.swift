@@ -81,24 +81,75 @@ final class LocalSwiftDataMealRepository: MealRepository {
         }
     }
 
-    func upsertMealLog(_ mealLog: MealLog) async throws {
+    func createMealLog(_ meal: MealLog) async throws {
         let context = ModelContext(container)
-        let existing = try context.fetch(FetchDescriptor<MealLog>())
-            .first { $0.id == mealLog.id }
-
-        if let existing {
-            existing.eatenAt = mealLog.eatenAt
-            existing.timing = mealLog.timing
-            existing.notes = mealLog.notes
-            existing.alcoholStandardDrinks = mealLog.alcoholStandardDrinks
-            existing.visibility = mealLog.visibility
-            existing.sharingGroupID = mealLog.sharingGroupID
-            existing.updatedAt = .now
-        } else {
-            mealLog.updatedAt = .now
-            context.insert(mealLog)
+        let clash = try context.fetch(FetchDescriptor<MealLog>()).contains { $0.id == meal.id }
+        if clash {
+            throw MealRepositoryError.mealLogAlreadyExists(id: meal.id)
         }
+        meal.updatedAt = .now
+        context.insert(meal)
         try context.save()
+    }
+
+    func updateMealLog(_ meal: MealLog) async throws {
+        let context = ModelContext(container)
+        guard let existing = try context.fetch(FetchDescriptor<MealLog>())
+            .first(where: { $0.id == meal.id }) else {
+            throw MealRepositoryError.mealLogNotFound(id: meal.id)
+        }
+
+        // Top-level truth on the persisted row only.
+        existing.eatenAt = meal.eatenAt
+        existing.timing = meal.timing
+        existing.notes = meal.notes
+        existing.alcoholStandardDrinks = meal.alcoholStandardDrinks
+        existing.visibility = meal.visibility
+        existing.sharingGroupID = meal.sharingGroupID
+
+        // Full line-item replacement: remove old rows, attach fresh clones (V1 — no partial diff).
+        let staleItems = Array(existing.items)
+        for item in staleItems {
+            context.delete(item)
+        }
+        existing.items = []
+
+        let replacement = meal.items.map { Self.cloneMealItemDetached(from: $0) }
+        for item in replacement {
+            item.mealLog = existing
+            context.insert(item)
+        }
+        existing.items = replacement
+        existing.updatedAt = .now
+        try context.save()
+    }
+
+    func duplicateMealLog(from source: MealLog, eatenAt: Date) -> MealLog {
+        let copy = MealLog(
+            ownerID: source.ownerID,
+            visibility: source.visibility,
+            sharingGroupID: source.sharingGroupID,
+            eatenAt: eatenAt,
+            timing: source.timing,
+            notes: source.notes,
+            alcoholStandardDrinks: source.alcoholStandardDrinks
+        )
+        copy.items = source.items.map { Self.cloneMealItemDetached(from: $0) }
+        return copy
+    }
+
+    func duplicateMealLog(fromRecurringTemplate template: RecurringMeal, eatenAt: Date) -> MealLog {
+        let copy = MealLog(
+            ownerID: template.ownerID,
+            visibility: template.visibility,
+            sharingGroupID: template.sharingGroupID,
+            eatenAt: eatenAt,
+            timing: template.preferredTiming,
+            notes: template.name,
+            alcoholStandardDrinks: 0
+        )
+        copy.items = template.items.map { Self.cloneMealItemDetached(from: $0) }
+        return copy
     }
 
     func deleteMealLog(id: UUID) async throws {
@@ -107,6 +158,21 @@ final class LocalSwiftDataMealRepository: MealRepository {
             .first(where: { $0.id == id }) else { return }
         context.delete(existing)
         try context.save()
+    }
+
+    /// New `MealItem` row (new identity) for persistence; not linked to any log until caller sets `mealLog`.
+    private static func cloneMealItemDetached(from source: MealItem) -> MealItem {
+        MealItem(
+            name: source.name,
+            amount: source.amount,
+            unit: source.unit,
+            calories: source.calories,
+            proteinGrams: source.proteinGrams,
+            carbsGrams: source.carbsGrams,
+            fatGrams: source.fatGrams,
+            fiberGrams: source.fiberGrams,
+            alcoholGrams: source.alcoholGrams
+        )
     }
 }
 

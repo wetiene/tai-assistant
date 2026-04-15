@@ -1,7 +1,7 @@
 import SwiftData
 
 enum AppModelContainerFactory {
-    static func makeContainer(inMemory: Bool, includePreviewSeedData: Bool = false) -> ModelContainer {
+    static func makeContainer(inMemory: Bool, includePreviewSeedData: Bool = false, ownerID: String = "preview.user") -> ModelContainer {
         let schema = Schema([
             GoalProfile.self,
             DailyTargets.self,
@@ -26,7 +26,7 @@ enum AppModelContainerFactory {
                 configurations: [configuration]
             )
             if includePreviewSeedData {
-                try PreviewSeedData.seedIfNeeded(in: container)
+                try PreviewSeedData.seedIfNeeded(in: container, ownerID: ownerID)
             }
             return container
         } catch {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GoalsView: View {
     let goalRepository: GoalRepository
+    let ownerID: String
 
     @State private var goalPrompt = ""
     @State private var draft: GoalDraft?
@@ -9,7 +10,6 @@ struct GoalsView: View {
     @State private var saveMessage: String?
     @State private var saveError: String?
 
-    private let ownerID = "preview.user"
     private let samplePrompts = GoalPreset.defaultPresets
 
     var body: some View {
