@@ -4,6 +4,99 @@ struct MockAIService: AIService {
     func send(message: String, context: [String: String]) async throws -> String {
         "Mock response from Tai: \(message)"
     }
+
+    func interpretMeal(request: AIInterpretMealRequest) async throws -> AIInterpretMealResponse {
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let normalized = request.text?.lowercased() ?? ""
+        let now = Date()
+        let isoFormatter = ISO8601DateFormatter()
+        let containsImage = request.image?.base64Data?.isEmpty == false || request.image?.uploadReference?.isEmpty == false
+
+        let defaultMeal = AIInterpretedMeal(
+            label: "Detected meal",
+            timing: "other",
+            eatenAtGuessISO8601: isoFormatter.string(from: now),
+            items: [
+                AIInterpretedMealItem(
+                    name: "Main plate",
+                    amount: 280,
+                    unit: "g",
+                    calories: 370,
+                    proteinGrams: 24,
+                    carbsGrams: 35,
+                    fatGrams: 14,
+                    fiberGrams: 4
+                ),
+                AIInterpretedMealItem(
+                    name: "Side",
+                    amount: 120,
+                    unit: "g",
+                    calories: 150,
+                    proteinGrams: 8,
+                    carbsGrams: 19,
+                    fatGrams: 4,
+                    fiberGrams: 3
+                )
+            ],
+            calories: containsImage ? 610 : 520,
+            proteinGrams: 32,
+            carbsGrams: 54,
+            fatGrams: 18,
+            confidence: 0.63
+        )
+
+        if normalized.contains("breakfast") || normalized.contains("shake") {
+            return AIInterpretMealResponse(
+                interpretedMeals: [
+                    AIInterpretedMeal(
+                        label: normalized.contains("shake") ? "Protein shake" : "Usual breakfast",
+                        timing: "breakfast",
+                        eatenAtGuessISO8601: isoFormatter.string(from: now),
+                        items: [
+                            AIInterpretedMealItem(name: "Whey protein", amount: 35, unit: "g", calories: 140, proteinGrams: 28, carbsGrams: 3, fatGrams: 2, fiberGrams: 0),
+                            AIInterpretedMealItem(name: "Banana", amount: 100, unit: "g", calories: 89, proteinGrams: 1.1, carbsGrams: 23, fatGrams: 0.3, fiberGrams: 2.6),
+                            AIInterpretedMealItem(name: "Milk", amount: 240, unit: "ml", calories: 110, proteinGrams: 8, carbsGrams: 11, fatGrams: 5, fiberGrams: 0)
+                        ],
+                        calories: normalized.contains("shake") ? 280 : 430,
+                        proteinGrams: normalized.contains("shake") ? 34 : 33,
+                        carbsGrams: normalized.contains("shake") ? 24 : 46,
+                        fatGrams: normalized.contains("shake") ? 7 : 14,
+                        confidence: 0.83
+                    )
+                ],
+                uiNotes: "Mock AI interpretation. Adjust items before saving."
+            )
+        }
+
+        if normalized.contains("lunch") || normalized.contains("dinner") || normalized.contains("family") {
+            return AIInterpretMealResponse(
+                interpretedMeals: [
+                    AIInterpretedMeal(
+                        label: normalized.contains("family") ? "Family dinner" : "Inferred meal",
+                        timing: normalized.contains("dinner") || normalized.contains("family") ? "dinner" : "lunch",
+                        eatenAtGuessISO8601: isoFormatter.string(from: now),
+                        items: [
+                            AIInterpretedMealItem(name: "Chicken breast", amount: 140, unit: "g", calories: 220, proteinGrams: 43, carbsGrams: 0, fatGrams: 4.5, fiberGrams: 0),
+                            AIInterpretedMealItem(name: "Rice", amount: 160, unit: "g", calories: 210, proteinGrams: 4, carbsGrams: 45, fatGrams: 0.5, fiberGrams: 1),
+                            AIInterpretedMealItem(name: "Vegetables", amount: 110, unit: "g", calories: 80, proteinGrams: 3, carbsGrams: 13, fatGrams: 1, fiberGrams: 4)
+                        ],
+                        calories: normalized.contains("family") ? 760 : 620,
+                        proteinGrams: normalized.contains("family") ? 42 : 36,
+                        carbsGrams: normalized.contains("family") ? 71 : 58,
+                        fatGrams: normalized.contains("family") ? 31 : 24,
+                        confidence: 0.76
+                    )
+                ],
+                uiNotes: "Mock AI interpretation. Nutrients are approximate."
+            )
+        }
+
+        return AIInterpretMealResponse(
+            interpretedMeals: [defaultMeal],
+            uiNotes: "Mock AI interpretation from generic meal template."
+        )
+    }
 }
 
 struct MockHealthService: HealthService {
