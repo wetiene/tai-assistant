@@ -7,4 +7,5 @@ enum DSSpacing {
     static let lg: CGFloat = 16
     static let xl: CGFloat = 24
     static let xxl: CGFloat = 32
+    static let customBottomNavHeight: CGFloat = 118
 }
