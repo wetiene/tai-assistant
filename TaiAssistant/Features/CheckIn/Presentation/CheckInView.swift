@@ -10,6 +10,7 @@ struct CheckInView: View {
     @State private var isCameraPresented = false
     @State private var isInterpreting = false
     @State private var isSaving = false
+    @State private var isPhotoPreviewPresented = false
     @State private var saveMessage: String?
     @State private var errorMessage: String?
     @FocusState private var isComposerFocused: Bool
@@ -72,6 +73,9 @@ struct CheckInView: View {
                 handleCapturedImage(image)
                 isCameraPresented = false
             }
+        }
+        .sheet(isPresented: $isPhotoPreviewPresented) {
+            selectedPhotoPreview
         }
         .alert("Check In", isPresented: Binding(
             get: { errorMessage != nil || saveMessage != nil },
@@ -162,6 +166,76 @@ struct CheckInView: View {
                 .buttonStyle(CoralGradientButtonStyle(isCompact: true))
                 .disabled(session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && session.selectedPhotoData == nil)
             }
+
+            selectedPhotoThumbnail
+        }
+    }
+
+    @ViewBuilder
+    private var selectedPhotoThumbnail: some View {
+        if let photoData = session.selectedPhotoData, let image = UIImage(data: photoData) {
+            HStack(spacing: DSSpacing.sm) {
+                ZStack(alignment: .topTrailing) {
+                    Button {
+                        isPhotoPreviewPresented = true
+                    } label: {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 56, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(DSColor.coralStart.opacity(0.28), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: {
+                        session.selectedPhotoData = nil
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.white)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                    }
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+                    .offset(x: 8, y: -8)
+                }
+
+                Text("Photo attached")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DSColor.textSecondary)
+
+                Spacer()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var selectedPhotoPreview: some View {
+        if let photoData = session.selectedPhotoData, let image = UIImage(data: photoData) {
+            NavigationStack {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(DSSpacing.lg)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            isPhotoPreviewPresented = false
+                        }
+                    }
+                }
+            }
+        } else {
+            Color.clear
+                .presentationDetents([.medium])
         }
     }
 
