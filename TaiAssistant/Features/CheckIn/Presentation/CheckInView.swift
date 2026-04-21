@@ -54,21 +54,7 @@ struct CheckInView: View {
         .navigationTitle("Check In")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
-            if !session.interpretedMeals.isEmpty {
-                Button(action: saveInterpretedMeals) {
-                    if isSaving {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Label(session.confirmTitle, systemImage: "checkmark.circle.fill")
-                    }
-                }
-                .buttonStyle(CoralGradientButtonStyle())
-                .padding(.horizontal, DSSpacing.lg)
-                .background(.ultraThinMaterial)
-                .padding(.top, DSSpacing.sm)
-                .padding(.bottom, DSSpacing.checkInConfirmCTAExtraBottomClearance)
-            }
+            bottomConfirmBar
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -106,6 +92,33 @@ struct CheckInView: View {
                     .padding(DSSpacing.lg)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
+        }
+        .onAppear {
+            print("USING CHECKINVIEW")
+        }
+    }
+
+    @ViewBuilder
+    private var bottomConfirmBar: some View {
+        if !session.interpretedMeals.isEmpty {
+            Button(action: saveInterpretedMeals) {
+                bottomConfirmButtonLabel
+            }
+            .buttonStyle(CoralGradientButtonStyle())
+            .padding(.horizontal, DSSpacing.lg)
+            .background(.ultraThinMaterial)
+            .padding(.top, DSSpacing.sm)
+            .padding(.bottom, 120)
+        }
+    }
+
+    @ViewBuilder
+    private var bottomConfirmButtonLabel: some View {
+        if isSaving {
+            ProgressView()
+                .tint(.white)
+        } else {
+            Label(session.confirmTitle, systemImage: "checkmark.circle.fill")
         }
     }
 

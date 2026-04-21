@@ -7,6 +7,7 @@ struct DashboardView: View {
     let alcoholPlanRepository: AlcoholPlanRepository
     let ownerID: String
     let assistantName: String
+    var onCheckInRequested: (() -> Void)? = nil
     var onAskTaiRequested: ((String) -> Void)? = nil
 
     @State private var state = DashboardState.placeholder
@@ -19,7 +20,11 @@ struct DashboardView: View {
                 header
 
                 Button {
-                    isMealCapturePresented = true
+                    if let onCheckInRequested {
+                        onCheckInRequested()
+                    } else {
+                        isMealCapturePresented = true
+                    }
                 } label: {
                     HStack(spacing: DSSpacing.md) {
                         Image(systemName: "camera.fill")
@@ -123,7 +128,8 @@ struct DashboardView: View {
             .padding(DSSpacing.lg)
         }
         .background(DSColor.background.ignoresSafeArea())
-        .navigationTitle("Dashboard")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .refreshable {
             await loadDashboard()
         }
@@ -150,6 +156,9 @@ struct DashboardView: View {
                     isMealCapturePresented = false
                 }
             )
+            .onAppear {
+                print("USING MEALCAPTUREFLOWVIEW")
+            }
         }
     }
 

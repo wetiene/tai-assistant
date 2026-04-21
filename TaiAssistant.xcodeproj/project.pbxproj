@@ -36,6 +36,11 @@
 		A1000000000000000000001A /* MealCaptureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* MealCaptureModels.swift */; };
 		A1000000000000000000001B /* MealCaptureMockEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* MealCaptureMockEstimator.swift */; };
 		A1000000000000000000001C /* MealCaptureFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* MealCaptureFlowView.swift */; };
+		A1000000000000000000001D /* CheckInModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001D /* CheckInModels.swift */; };
+		A1000000000000000000001E /* CheckInMockInterpreter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001E /* CheckInMockInterpreter.swift */; };
+		A1000000000000000000001F /* CheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001F /* CheckInView.swift */; };
+		A10000000000000000000020 /* CheckInCameraController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* CheckInCameraController.swift */; };
+		A10000000000000000000021 /* CheckInCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* CheckInCameraView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +73,11 @@
 		A2000000000000000000001A /* MealCaptureModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCaptureModels.swift; sourceTree = "<group>"; };
 		A2000000000000000000001B /* MealCaptureMockEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCaptureMockEstimator.swift; sourceTree = "<group>"; };
 		A2000000000000000000001C /* MealCaptureFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCaptureFlowView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001D /* CheckInModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInModels.swift; sourceTree = "<group>"; };
+		A2000000000000000000001E /* CheckInMockInterpreter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInMockInterpreter.swift; sourceTree = "<group>"; };
+		A2000000000000000000001F /* CheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInView.swift; sourceTree = "<group>"; };
+		A20000000000000000000020 /* CheckInCameraController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInCameraController.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* CheckInCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInCameraView.swift; sourceTree = "<group>"; };
 		A20000000000000000000030 /* TaiAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = TaiAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -126,6 +136,7 @@
 			isa = PBXGroup;
 			children = (
 				A0000000000000000000001A /* AskTai/Presentation */,
+				A0000000000000000000001D /* CheckIn/Presentation */,
 				A00000000000000000000018 /* Dashboard/Presentation */,
 				A00000000000000000000019 /* Goals/Presentation */,
 				A0000000000000000000001B /* MealCapture/Presentation */,
@@ -270,6 +281,18 @@
 			path = MealCapture/Presentation;
 			sourceTree = "<group>";
 		};
+		A0000000000000000000001D /* CheckIn/Presentation */ = {
+			isa = PBXGroup;
+			children = (
+				A2000000000000000000001D /* CheckInModels.swift */,
+				A2000000000000000000001E /* CheckInMockInterpreter.swift */,
+				A2000000000000000000001F /* CheckInView.swift */,
+				A20000000000000000000020 /* CheckInCameraController.swift */,
+				A20000000000000000000021 /* CheckInCameraView.swift */,
+			);
+			path = CheckIn/Presentation;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -367,6 +390,11 @@
 				A1000000000000000000001A /* MealCaptureModels.swift in Sources */,
 				A1000000000000000000001B /* MealCaptureMockEstimator.swift in Sources */,
 				A1000000000000000000001C /* MealCaptureFlowView.swift in Sources */,
+				A1000000000000000000001D /* CheckInModels.swift in Sources */,
+				A1000000000000000000001E /* CheckInMockInterpreter.swift in Sources */,
+				A1000000000000000000001F /* CheckInView.swift in Sources */,
+				A10000000000000000000020 /* CheckInCameraController.swift in Sources */,
+				A10000000000000000000021 /* CheckInCameraView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
