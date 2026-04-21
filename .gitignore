@@ -8,3 +8,6 @@ DerivedData
 
 # Derived data / local build artifacts
 .deriveddata/
+.DS_Store
+xcuserdata/
+.cursor/
