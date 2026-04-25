@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct DashboardView: View {
     let mealRepository: MealRepository
@@ -12,6 +13,8 @@ struct DashboardView: View {
 
     @State private var state = DashboardState.placeholder
     @State private var isLoading = false
+    @State private var pendingUndoMeal: DashboardState.TodayMealRestorePayload?
+    @State private var undoDismissTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
@@ -19,6 +22,8 @@ struct DashboardView: View {
                 header
 
                 TodayStatusHero(state: state)
+
+                NextBestMealCard(state: state)
 
                 DashboardCard(title: "Macros Remaining", icon: "flame.fill", tint: .orange) {
                     MacroProgressRow(
@@ -44,14 +49,14 @@ struct DashboardView: View {
                     )
                 }
 
-                NextBestMealCard(state: state)
+                TodaysMealsCard(state: state, onDeleteMeal: deleteMeal)
 
                 SmartPatternsCard(state: state)
 
                 AlcoholBudgetCard(state: state)
 
                 Color.clear
-                    .frame(height: 92)
+                    .frame(height: DSSpacing.customBottomNavHeight + DSSpacing.lg)
             }
             .padding(DSSpacing.lg)
         }
@@ -69,6 +74,30 @@ struct DashboardView: View {
                 ProgressView()
                     .padding(DSSpacing.lg)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if pendingUndoMeal != nil {
+                HStack(spacing: DSSpacing.sm) {
+                    Text("Meal removed")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Button("Undo") {
+                        Task { await undoDeleteMeal() }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, DSSpacing.sm)
+                    .padding(.vertical, 4)
+                    .background(.white.opacity(0.18))
+                    .clipShape(Capsule())
+                }
+                .padding(.horizontal, DSSpacing.md)
+                .padding(.vertical, DSSpacing.sm)
+                .background(.black.opacity(0.8))
+                .clipShape(Capsule())
+                .padding(.bottom, DSSpacing.customBottomNavHeight + DSSpacing.md)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
@@ -123,6 +152,44 @@ struct DashboardView: View {
             )
         } catch {
             state = DashboardState.placeholder
+        }
+    }
+
+    private func deleteMeal(_ meal: DashboardState.TodayMealSummary) {
+        Task {
+            do {
+                try await mealRepository.deleteMealLog(id: meal.id)
+                pendingUndoMeal = meal.restorePayload
+                scheduleUndoDismiss()
+                await loadDashboard()
+            } catch {
+                // Keep current UI state if delete fails.
+            }
+        }
+    }
+
+    private func undoDeleteMeal() async {
+        guard let payload = pendingUndoMeal else { return }
+        do {
+            try await mealRepository.createMealLog(payload.makeMealLog())
+            undoDismissTask?.cancel()
+            undoDismissTask = nil
+            pendingUndoMeal = nil
+            await loadDashboard()
+        } catch {
+            // Keep toast visible if restore fails so user can retry.
+        }
+    }
+
+    private func scheduleUndoDismiss() {
+        undoDismissTask?.cancel()
+        undoDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    pendingUndoMeal = nil
+                }
+            }
         }
     }
 }
@@ -220,6 +287,189 @@ private struct NextBestMealCard: View {
     }
 }
 
+private struct TodaysMealsCard: View {
+    let state: DashboardState
+    let onDeleteMeal: (DashboardState.TodayMealSummary) -> Void
+
+    var body: some View {
+        DashboardCard(title: "Today's meals", icon: "list.bullet.rectangle.portrait", tint: .pink) {
+            if state.todaysMeals.isEmpty {
+                VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                    Text("No meals yet today")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(DSColor.textPrimary)
+                    Text("Start by checking in your first meal")
+                        .font(.caption)
+                        .foregroundStyle(DSColor.textSecondary)
+                }
+            } else {
+                ForEach(state.todaysMeals) { meal in
+                    TodayMealSwipeRow(meal: meal, onDelete: onDeleteMeal)
+                }
+            }
+        }
+    }
+}
+
+private struct TodayMealSwipeRow: View {
+    let meal: DashboardState.TodayMealSummary
+    let onDelete: (DashboardState.TodayMealSummary) -> Void
+
+    @State private var settledOffset: CGFloat = 0
+    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var isDeleteArmed = false
+    @State private var didCommitDelete = false
+
+    private let openOffset: CGFloat = 96
+    private let armThreshold: CGFloat = 92
+    private let commitThreshold: CGFloat = 142
+    private let easySwipeDistance: CGFloat = 60
+    private let resistanceFactor: CGFloat = 0.55
+    private let maxPullDistance: CGFloat = 220
+    private let commitSlideDistance: CGFloat = 420
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            deleteBackground
+            rowContent
+                .offset(x: effectiveOffset)
+                .contentShape(Rectangle())
+                .gesture(dragGesture)
+                .onTapGesture {
+                    if settledOffset != 0 {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                            settledOffset = 0
+                        }
+                        isDeleteArmed = false
+                    }
+                }
+        }
+        .clipped()
+        .onChange(of: abs(effectiveOffset) >= armThreshold) { _, isArmed in
+            guard isArmed != isDeleteArmed else { return }
+            isDeleteArmed = isArmed
+            if isArmed {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        }
+    }
+
+    private var rowContent: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DSSpacing.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meal.label)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(DSColor.textPrimary)
+                    .lineLimit(1)
+                Text(meal.eatenAt.formatted(.dateTime.hour().minute()))
+                    .font(.caption)
+                    .foregroundStyle(DSColor.textSecondary)
+            }
+            Spacer()
+            Text("\(meal.calories) kcal")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DSColor.textPrimary)
+        }
+        .padding(.vertical, DSSpacing.xs)
+        .background(DSColor.surface)
+    }
+
+    private var effectiveOffset: CGFloat {
+        if didCommitDelete {
+            return -maxPullDistance
+        }
+        let drag = transformedDrag(dragTranslation)
+        let combined = settledOffset + drag
+        return min(0, max(-maxPullDistance, combined))
+    }
+
+    private var revealProgress: CGFloat {
+        min(abs(effectiveOffset) / armThreshold, 1)
+    }
+
+    @ViewBuilder
+    private var deleteBackground: some View {
+        let absoluteOffset = abs(effectiveOffset)
+        let shouldFillRow = absoluteOffset >= armThreshold
+        let backgroundWidth = max(40, absoluteOffset + 26)
+        let iconScale = shouldFillRow ? 1.12 : 0.92 + (0.12 * revealProgress)
+        let labelOpacity = min(max((absoluteOffset - armThreshold) / 26, 0), 1)
+
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(DSColor.coralEnd.opacity(0.92))
+            .frame(width: backgroundWidth)
+            .frame(maxWidth: shouldFillRow ? .infinity : nil, alignment: .trailing)
+            .overlay(alignment: .trailing) {
+                HStack(spacing: 6) {
+                    Image(systemName: "trash.fill")
+                        .font(.callout.weight(.semibold))
+                        .scaleEffect(iconScale)
+                        .opacity(0.35 + (0.65 * revealProgress))
+                    Text("Delete")
+                        .font(.caption.weight(.semibold))
+                        .opacity(labelOpacity)
+                }
+                .foregroundStyle(.white)
+                .padding(.trailing, DSSpacing.md)
+                .animation(.easeOut(duration: 0.16), value: shouldFillRow)
+                .animation(.easeOut(duration: 0.12), value: labelOpacity)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .updating($dragTranslation) { value, state, _ in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                state = value.translation.width
+            }
+            .onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+
+                let predicted = settledOffset + transformedDrag(value.predictedEndTranslation.width)
+                let finalPredicted = min(0, max(-maxPullDistance, predicted))
+                let predictedDistance = abs(finalPredicted)
+
+                if predictedDistance >= commitThreshold {
+                    commitDelete()
+                    return
+                }
+
+                let shouldOpen = predictedDistance >= armThreshold
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.84)) {
+                    settledOffset = shouldOpen ? -openOffset : 0
+                }
+                if !shouldOpen {
+                    isDeleteArmed = false
+                }
+            }
+    }
+
+    private func transformedDrag(_ translation: CGFloat) -> CGFloat {
+        if translation > 0 {
+            return translation * 0.72
+        }
+        let distance = abs(translation)
+        guard distance > easySwipeDistance else { return translation }
+        let resisted = easySwipeDistance + ((distance - easySwipeDistance) * resistanceFactor)
+        return -resisted
+    }
+
+    private func commitDelete() {
+        guard !didCommitDelete else { return }
+        didCommitDelete = true
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        withAnimation(.spring(response: 0.26, dampingFraction: 0.9)) {
+            settledOffset = -commitSlideDistance
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            onDelete(meal)
+        }
+    }
+}
+
 private struct SmartPatternsCard: View {
     let state: DashboardState
 
@@ -299,6 +549,73 @@ private struct PatternPill: View {
 }
 
 private struct DashboardState {
+    struct TodayMealItemRestorePayload {
+        let id: UUID
+        let name: String
+        let amount: Double
+        let unit: String
+        let calories: Int
+        let proteinGrams: Double
+        let carbsGrams: Double
+        let fatGrams: Double
+        let fiberGrams: Double
+        let alcoholGrams: Double
+
+        func makeMealItem() -> MealItem {
+            MealItem(
+                id: id,
+                name: name,
+                amount: amount,
+                unit: unit,
+                calories: calories,
+                proteinGrams: proteinGrams,
+                carbsGrams: carbsGrams,
+                fatGrams: fatGrams,
+                fiberGrams: fiberGrams,
+                alcoholGrams: alcoholGrams
+            )
+        }
+    }
+
+    struct TodayMealRestorePayload {
+        let id: UUID
+        let ownerID: String
+        let visibility: VisibilityScope
+        let sharingGroupID: String?
+        let eatenAt: Date
+        let timing: MealTiming
+        let notes: String
+        let alcoholStandardDrinks: Double
+        let createdAt: Date
+        let updatedAt: Date
+        let items: [TodayMealItemRestorePayload]
+
+        func makeMealLog() -> MealLog {
+            let mealLog = MealLog(
+                id: id,
+                ownerID: ownerID,
+                visibility: visibility,
+                sharingGroupID: sharingGroupID,
+                eatenAt: eatenAt,
+                timing: timing,
+                notes: notes,
+                alcoholStandardDrinks: alcoholStandardDrinks,
+                createdAt: createdAt,
+                updatedAt: updatedAt
+            )
+            mealLog.items = items.map { $0.makeMealItem() }
+            return mealLog
+        }
+    }
+
+    struct TodayMealSummary: Identifiable {
+        let id: UUID
+        let label: String
+        let eatenAt: Date
+        let calories: Int
+        let restorePayload: TodayMealRestorePayload
+    }
+
     let caloriesConsumed: Int
     let calorieTarget: Int
     let caloriesRemaining: Int
@@ -318,6 +635,7 @@ private struct DashboardState {
     let recurringPreview: [String]
     let alcoholRemainingDrinks: Int?
     let alcoholDailyCap: Int?
+    let todaysMeals: [TodayMealSummary]
 
     var consumedCalories: Int {
         caloriesConsumed
@@ -372,7 +690,8 @@ private struct DashboardState {
         alcoholGuidance: "Set an alcohol plan to keep meals and social events aligned with your weekly goal.",
         recurringPreview: [],
         alcoholRemainingDrinks: nil,
-        alcoholDailyCap: nil
+        alcoholDailyCap: nil,
+        todaysMeals: []
     )
 
     var nextBestMealTagline: String {
@@ -513,6 +832,43 @@ private struct DashboardState {
         )
         let dailyCap = alcoholPlan.map { Int($0.maxStandardDrinksPerDay.rounded()) }
         let remainingDrinks = alcoholPlan.map { Int(($0.maxStandardDrinksPerDay - consumedDrinks).rounded(.down)) }
+        let todayMealSummaries = meals
+            .sorted { $0.eatenAt > $1.eatenAt }
+            .map { meal in
+                let label = meal.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                return TodayMealSummary(
+                    id: meal.id,
+                    label: label.isEmpty ? meal.timing.rawValue.capitalized : label,
+                    eatenAt: meal.eatenAt,
+                    calories: meal.items.reduce(0) { $0 + $1.calories },
+                    restorePayload: TodayMealRestorePayload(
+                        id: meal.id,
+                        ownerID: meal.ownerID,
+                        visibility: meal.visibility,
+                        sharingGroupID: meal.sharingGroupID,
+                        eatenAt: meal.eatenAt,
+                        timing: meal.timing,
+                        notes: meal.notes,
+                        alcoholStandardDrinks: meal.alcoholStandardDrinks,
+                        createdAt: meal.createdAt,
+                        updatedAt: meal.updatedAt,
+                        items: meal.items.map {
+                            TodayMealItemRestorePayload(
+                                id: $0.id,
+                                name: $0.name,
+                                amount: $0.amount,
+                                unit: $0.unit,
+                                calories: $0.calories,
+                                proteinGrams: $0.proteinGrams,
+                                carbsGrams: $0.carbsGrams,
+                                fatGrams: $0.fatGrams,
+                                fiberGrams: $0.fiberGrams,
+                                alcoholGrams: $0.alcoholGrams
+                            )
+                        }
+                    )
+                )
+            }
 
         return DashboardState(
             caloriesConsumed: consumedCalories,
@@ -533,7 +889,8 @@ private struct DashboardState {
             alcoholGuidance: alcoholCopy.body,
             recurringPreview: Array(recurringMeals.prefix(3).map(\.name)),
             alcoholRemainingDrinks: remainingDrinks,
-            alcoholDailyCap: dailyCap
+            alcoholDailyCap: dailyCap,
+            todaysMeals: todayMealSummaries
         )
     }
 
