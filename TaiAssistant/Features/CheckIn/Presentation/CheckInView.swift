@@ -11,9 +11,28 @@ struct CheckInView: View {
     @State private var isInterpreting = false
     @State private var isSaving = false
     @State private var isPhotoPreviewPresented = false
-    @State private var saveMessage: String?
+    @State private var toastMessage: String?
     @State private var errorMessage: String?
+    @State private var isConfirmPressed = false
+    @State private var isTaiNoteExpanded = false
+    @State private var dayProgress = DayProgress()
     @FocusState private var isComposerFocused: Bool
+
+    private enum CheckInUIState {
+        case typing
+        case processing
+        case result
+    }
+
+    private var uiState: CheckInUIState {
+        if isInterpreting {
+            return .processing
+        }
+        if !session.interpretedMeals.isEmpty {
+            return .result
+        }
+        return .typing
+    }
 
     private let shortcuts = [
         "Usual breakfast",
@@ -21,6 +40,13 @@ struct CheckInView: View {
         "Yesterday lunch",
         "Family dinner"
     ]
+
+    private struct DayProgress {
+        var consumedCalories: Int = 0
+        var targetCalories: Int = 2100
+        var consumedProtein: Int = 0
+        var proteinTarget: Int = 150
+    }
 
     init(
         mealRepository: MealRepository,
@@ -40,8 +66,16 @@ struct CheckInView: View {
                     .foregroundStyle(DSColor.textPrimary)
 
                 composerCard
-                shortcutsSection
-                interpretedMealsSection
+
+                switch uiState {
+                case .typing:
+                    shortcutsSection
+                case .processing:
+                    processingSection
+                case .result:
+                    interpretedMealsSection
+                    inlineConfirmSection
+                }
             }
             .padding(.horizontal, DSSpacing.lg)
             .padding(.top, DSSpacing.lg)
@@ -54,9 +88,6 @@ struct CheckInView: View {
         .background(DSColor.background.ignoresSafeArea())
         .navigationTitle("Check In")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            bottomConfirmBar
-        }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -78,51 +109,35 @@ struct CheckInView: View {
             selectedPhotoPreview
         }
         .alert("Check In", isPresented: Binding(
-            get: { errorMessage != nil || saveMessage != nil },
+            get: { errorMessage != nil },
             set: { isPresented in
                 if !isPresented {
                     errorMessage = nil
-                    saveMessage = nil
                 }
             }
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage ?? saveMessage ?? "")
+            Text(errorMessage ?? "")
         }
-        .overlay {
-            if isInterpreting || isSaving {
-                ProgressView(isSaving ? "Saving meals..." : "Interpreting check in...")
-                    .padding(DSSpacing.lg)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(alignment: .bottom) {
+            if let toastMessage {
+                Text(toastMessage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, DSSpacing.md)
+                    .padding(.vertical, DSSpacing.sm)
+                    .background(.black.opacity(0.78))
+                    .clipShape(Capsule())
+                    .padding(.bottom, DSSpacing.customBottomNavHeight + DSSpacing.md)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .onAppear {
             print("USING CHECKINVIEW")
-        }
-    }
-
-    @ViewBuilder
-    private var bottomConfirmBar: some View {
-        if !session.interpretedMeals.isEmpty {
-            Button(action: saveInterpretedMeals) {
-                bottomConfirmButtonLabel
+            Task {
+                await refreshDayProgress()
             }
-            .buttonStyle(CoralGradientButtonStyle())
-            .padding(.horizontal, DSSpacing.lg)
-            .background(.ultraThinMaterial)
-            .padding(.top, DSSpacing.sm)
-            .padding(.bottom, 120)
-        }
-    }
-
-    @ViewBuilder
-    private var bottomConfirmButtonLabel: some View {
-        if isSaving {
-            ProgressView()
-                .tint(.white)
-        } else {
-            Label(session.confirmTitle, systemImage: "checkmark.circle.fill")
         }
     }
 
@@ -157,17 +172,38 @@ struct CheckInView: View {
                 Spacer()
 
                 Button {
+                    isComposerFocused = false
                     Task {
                         await inferMeals()
                     }
                 } label: {
-                    Label("Check In", systemImage: "sparkles")
+                    if isInterpreting {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Label("Check In", systemImage: "sparkles")
+                    }
                 }
                 .buttonStyle(CoralGradientButtonStyle(isCompact: true))
-                .disabled(session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && session.selectedPhotoData == nil)
+                .disabled(
+                    isInterpreting ||
+                    (session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && session.selectedPhotoData == nil)
+                )
             }
 
             selectedPhotoThumbnail
+        }
+    }
+
+    private var processingSection: some View {
+        PrimaryCard(cornerRadius: 24) {
+            HStack(spacing: DSSpacing.sm) {
+                ProgressView()
+                Text("Interpreting check in...")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(DSColor.textPrimary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -264,10 +300,12 @@ struct CheckInView: View {
     }
 
     private var interpretedMealsSection: some View {
-        VStack(alignment: .leading, spacing: DSSpacing.md) {
+        VStack(alignment: .leading, spacing: DSSpacing.lg) {
+            aiSummarySection
+
             if !session.interpretedMeals.isEmpty {
                 Text("Inferred meals")
-                    .font(.headline.weight(.semibold))
+                    .font(.body.weight(.medium))
                     .foregroundStyle(DSColor.textPrimary)
             }
             ForEach($session.interpretedMeals) { $meal in
@@ -276,9 +314,212 @@ struct CheckInView: View {
         }
     }
 
+    @ViewBuilder
+    private var aiSummarySection: some View {
+        if !session.interpretedMeals.isEmpty {
+            VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                Text(understoodAsText)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(DSColor.textPrimary.opacity(0.88))
+                    .lineLimit(2)
+
+                HStack(alignment: .firstTextBaseline, spacing: DSSpacing.xs) {
+                    Image(systemName: "sparkles")
+                        .font(.caption)
+                        .foregroundStyle(DSColor.coralEnd)
+                    Text(taiNoteText)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(DSColor.textPrimary)
+                        .lineLimit(isTaiNoteExpanded ? nil : 3)
+                        .onTapGesture {
+                            if shouldShowTaiNoteExpansion {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    isTaiNoteExpanded.toggle()
+                                }
+                            }
+                        }
+                }
+            }
+            .padding(.horizontal, DSSpacing.sm)
+            .padding(.vertical, DSSpacing.xs + 2)
+            .background(DSColor.warmSurface.opacity(0.55))
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(DSColor.coralGradient.opacity(0.35))
+                    .frame(width: 3)
+                    .padding(.vertical, 6)
+                    .padding(.leading, 2)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    private var understoodAsText: String {
+        let meals = session.interpretedMeals
+        guard !meals.isEmpty else { return "your meal" }
+
+        if meals.count == 1, let meal = meals.first {
+            let cleanedItems = dedupedItemNames(from: meal.items)
+            if cleanedItems.count <= 1 {
+                return meal.label
+            }
+            return naturalJoin(cleanedItems.prefix(3).map { $0 })
+        }
+
+        let labels = meals.prefix(2).map(\.label)
+        if meals.count > 2 {
+            return "\(naturalJoin(labels)) + \(meals.count - 2) more"
+        }
+        return naturalJoin(labels)
+    }
+
+    private var taiNoteText: String {
+        if let notes = session.interpretationNotes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            return notes
+        }
+
+        let allItems = session.interpretedMeals.flatMap(\.items)
+        let itemNames = allItems.map { $0.name.lowercased() }
+        let totalProtein = session.interpretedMeals.reduce(0) { $0 + $1.proteinGrams }
+        let totalCarbs = session.interpretedMeals.reduce(0) { $0 + $1.carbsGrams }
+        let totalCalories = session.interpretedMeals.reduce(0) { $0 + $1.calories }
+
+        let isOverCaloriesToday = dayProgress.consumedCalories > dayProgress.targetCalories
+        let isLowProteinToday = dayProgress.consumedProtein < dayProgress.proteinTarget
+        let isProteinPositiveMeal = totalProtein >= 25 || totalProtein >= totalCarbs
+        let isHighCarbOrCalorieMeal = totalCarbs > totalProtein + 20 || totalCalories >= 600
+        let isSuggestionInput = isSuggestionRequestInput
+
+        let alcoholKeywords = ["wine", "beer", "whiskey", "vodka", "gin", "rum", "tequila", "champagne", "cider", "cocktail", "alcohol"]
+        let hasAlcohol = itemNames.contains { name in
+            alcoholKeywords.contains { name.contains($0) }
+        }
+
+        if isSuggestionInput {
+            if isOverCaloriesToday && isLowProteinToday {
+                return "For this option, choose a lighter high-protein choice since calories are tight."
+            }
+            if isOverCaloriesToday {
+                return "For this option, keep calories lighter and prioritise protein."
+            }
+            return "For this option, keep it balanced with protein and fibre."
+        }
+
+        if isOverCaloriesToday && isLowProteinToday {
+            return "You're over calories but still short on protein — choose a lighter, protein-focused option."
+        }
+
+        if hasAlcohol {
+            return "Alcohol adds calories quickly — keep your next meal lighter and prioritise protein."
+        }
+        if isProteinPositiveMeal {
+            if isOverCaloriesToday {
+                return "Good protein choice — keep the next meal protein-rich and lighter on calories."
+            }
+            return "Good protein choice — keep your next meal protein-rich and balanced."
+        }
+        if isHighCarbOrCalorieMeal {
+            if isOverCaloriesToday {
+                return "Calories are tight today — keep your next meal lighter and protein-focused."
+            }
+            return "Carb-heavy — keep your next meal lighter on carbs and add protein."
+        }
+        return "Looks good — keep your next meal balanced with protein and fibre."
+    }
+
+    private var shouldShowTaiNoteExpansion: Bool {
+        taiNoteText.count > 130
+    }
+
+    private var isSuggestionRequestInput: Bool {
+        let input = session.userInput.lowercased()
+        let phrases = [
+            "what do you suggest",
+            "what should i eat",
+            "i want",
+            "can i have",
+            "suggest"
+        ]
+        return phrases.contains { input.contains($0) }
+    }
+
+    private func dedupedItemNames(from items: [CheckInMealItemDraft]) -> [String] {
+        var seen = Set<String>()
+        var output: [String] = []
+        for item in items {
+            let trimmed = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.lowercased()
+            if seen.insert(key).inserted {
+                output.append(trimmed.lowercased())
+            }
+        }
+        return output
+    }
+
+    private func naturalJoin(_ parts: [String]) -> String {
+        switch parts.count {
+        case 0:
+            return "your meal"
+        case 1:
+            return parts[0]
+        case 2:
+            return "\(parts[0]) and \(parts[1])"
+        default:
+            let allButLast = parts.dropLast().joined(separator: ", ")
+            return "\(allButLast), and \(parts.last ?? "")"
+        }
+    }
+
+    @ViewBuilder
+    private var inlineConfirmSection: some View {
+        if !session.interpretedMeals.isEmpty {
+            Button(action: saveInterpretedMeals) {
+                if isSaving {
+                    HStack(spacing: DSSpacing.xs) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Adding...")
+                            .font(.body.weight(.semibold))
+                    }
+                } else {
+                    Label(isSuggestionRequestInput ? "Add this option" : "Add to today", systemImage: "checkmark")
+                        .font(.body.weight(.semibold))
+                }
+            }
+            .buttonStyle(CoralGradientButtonStyle())
+            .frame(maxWidth: .infinity)
+            .scaleEffect(isConfirmPressed ? 0.98 : 1.0)
+            .opacity(isConfirmPressed ? 0.94 : 1.0)
+            .animation(.easeOut(duration: 0.12), value: isConfirmPressed)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in isConfirmPressed = true }
+                    .onEnded { _ in isConfirmPressed = false }
+            )
+        }
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+            toastMessage = message
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    if toastMessage == message {
+                        toastMessage = nil
+                    }
+                }
+            }
+        }
+    }
+
     private func inferMeals() async {
         guard !isInterpreting else { return }
         isInterpreting = true
+        isTaiNoteExpanded = false
         defer { isInterpreting = false }
         do {
             let interpretation = try await interpreter.interpret(
@@ -287,6 +528,7 @@ struct CheckInView: View {
             )
             session.interpretedMeals = interpretation.meals
             session.interpretationNotes = interpretation.uiNotes
+            await refreshDayProgress()
         } catch {
             errorMessage = "Could not interpret this check in. Please try again."
         }
@@ -327,11 +569,29 @@ struct CheckInView: View {
                     }
                     try await mealRepository.createMealLog(mealLog)
                 }
-                saveMessage = "Saved \(session.interpretedMeals.count) meal\(session.interpretedMeals.count == 1 ? "" : "s")."
+                showToast("Added to today")
                 session = CheckInSessionDraft()
+                await refreshDayProgress()
             } catch {
                 errorMessage = "Could not save check in meals. Please retry."
             }
+        }
+    }
+
+    private func refreshDayProgress() async {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: .now)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? .now
+        do {
+            let meals = try await mealRepository.fetchMealLogs(ownerID: ownerID, from: dayStart, to: dayEnd)
+            let consumedCalories = meals.flatMap(\.items).reduce(0) { $0 + $1.calories }
+            let consumedProtein = Int(meals.flatMap(\.items).reduce(0.0) { $0 + $1.proteinGrams }.rounded())
+            await MainActor.run {
+                dayProgress.consumedCalories = consumedCalories
+                dayProgress.consumedProtein = consumedProtein
+            }
+        } catch {
+            // Keep prior day progress values if refresh fails.
         }
     }
 }
@@ -350,7 +610,7 @@ private struct CheckInMealCard: View {
             }
 
             TextField("Meal label", text: $draft.label)
-                .font(.headline.weight(.semibold))
+                .font(.title3.weight(.semibold))
                 .textFieldStyle(.roundedBorder)
 
             HStack(spacing: DSSpacing.sm) {
@@ -375,8 +635,8 @@ private struct TimingChip: View {
             }
         } label: {
             Label(timing.rawValue.capitalized, systemImage: "clock")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(DSColor.coralEnd)
+                .font(.caption)
+                .foregroundStyle(DSColor.textSecondary)
                 .padding(.horizontal, DSSpacing.sm + 2)
                 .padding(.vertical, DSSpacing.xs + 2)
                 .background(DSColor.warmSurface)

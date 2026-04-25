@@ -53,6 +53,7 @@ struct MacroProgressRow: View {
     let consumed: Int
     let target: Int
     let tint: Color
+    var isPriority: Bool = false
 
     private var progress: Double {
         guard target > 0 else { return 0 }
@@ -72,7 +73,7 @@ struct MacroProgressRow: View {
                 Spacer()
                 Text("\(max(remaining, 0))g left")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(remaining < 0 ? .red : DSColor.textSecondary)
+                    .foregroundStyle(remaining < 0 ? DSColor.coralEnd : DSColor.textSecondary)
             }
 
             GeometryReader { proxy in
@@ -80,11 +81,11 @@ struct MacroProgressRow: View {
                 let fill = max(8, width * progress)
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(tint.opacity(0.15))
+                        .fill(tint.opacity(isPriority ? 0.2 : 0.14))
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [tint.opacity(0.6), tint],
+                                colors: [tint.opacity(isPriority ? 0.75 : 0.55), tint],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
@@ -94,10 +95,20 @@ struct MacroProgressRow: View {
             }
             .frame(height: 10)
 
-            Text("\(consumed)g / \(target)g")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(DSColor.textSecondary)
+            HStack {
+                Text("\(consumed)g consumed")
+                Spacer()
+                Text("\(target)g target")
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(DSColor.textSecondary)
         }
+        .padding(.vertical, isPriority ? DSSpacing.xs : 0)
+        .padding(.horizontal, isPriority ? DSSpacing.xs : 0)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isPriority ? tint.opacity(0.05) : .clear)
+        )
     }
 }
 

@@ -16,13 +16,14 @@ struct RuntimeAppConfig {
     let aiProxyBearerToken: String?
     let aiInterpretMealPath: String
 
+    /// Dev default: talk to local stub (`backend/server.mjs` on port 8080). Switch to `.mock` for fully offline UI.
     static let `default` = RuntimeAppConfig(
         assistantName: "Tai",
         useInMemoryStore: false,
         isIPhoneOnlyV1: true,
         localOwnerID: "preview.user",
-        mealInterpretationProvider: .mock,
-        aiProxyBaseURL: URL(string: "https://api.tai.your-backend.example"),
+        mealInterpretationProvider: .openAIProxy,
+        aiProxyBaseURL: URL(string: "http://192.168.86.42:8080"),
         aiProxyBearerToken: nil,
         aiInterpretMealPath: "/ai/interpret-meal"
     )

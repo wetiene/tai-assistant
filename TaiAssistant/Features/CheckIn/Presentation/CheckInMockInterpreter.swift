@@ -127,6 +127,7 @@ struct AIServiceCheckInInterpreter: CheckInInterpreting {
     }
 
     func interpret(input: String, photoData: Data?) async throws -> CheckInInterpretationResult {
+        print("USING AI SERVICE")
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageInput: AIInterpretMealImageInput?
         if let photoData, !photoData.isEmpty {
@@ -139,21 +140,29 @@ struct AIServiceCheckInInterpreter: CheckInInterpreting {
             imageInput = nil
         }
 
-        let response = try await aiService.interpretMeal(
-            request: AIInterpretMealRequest(
-                text: trimmed.isEmpty ? nil : trimmed,
-                image: imageInput,
-                context: AIInterpretMealContext(
-                    ownerID: ownerID,
-                    localeIdentifier: localeIdentifier,
-                    timeZoneIdentifier: timeZoneIdentifier
+        do {
+            let response = try await aiService.interpretMeal(
+                request: AIInterpretMealRequest(
+                    text: trimmed.isEmpty ? nil : trimmed,
+                    image: imageInput,
+                    context: AIInterpretMealContext(
+                        ownerID: ownerID,
+                        localeIdentifier: localeIdentifier,
+                        timeZoneIdentifier: timeZoneIdentifier
+                    )
                 )
             )
-        )
 
-        return CheckInInterpretationResult(
-            meals: response.interpretedMeals.map { CheckInMealDraft(aiMeal: $0) },
-            uiNotes: response.uiNotes
-        )
+            return CheckInInterpretationResult(
+                meals: response.interpretedMeals.map { CheckInMealDraft(aiMeal: $0) },
+                uiNotes: response.uiNotes
+            )
+        } catch {
+            print("AIServiceCheckInInterpreter error: \(error)")
+            if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
+                print("AIServiceCheckInInterpreter localizedError: \(description)")
+            }
+            throw error
+        }
     }
 }

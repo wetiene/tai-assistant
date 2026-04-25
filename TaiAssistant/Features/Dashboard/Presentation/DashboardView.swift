@@ -12,118 +12,46 @@ struct DashboardView: View {
 
     @State private var state = DashboardState.placeholder
     @State private var isLoading = false
-    @State private var isMealCapturePresented = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: DSSpacing.xxl) {
+            VStack(alignment: .leading, spacing: DSSpacing.xl) {
                 header
 
-                Button {
-                    if let onCheckInRequested {
-                        onCheckInRequested()
-                    } else {
-                        isMealCapturePresented = true
-                    }
-                } label: {
-                    HStack(spacing: DSSpacing.md) {
-                        Image(systemName: "camera.fill")
-                            .font(.title3.weight(.semibold))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Log Meal")
-                                .font(.headline.weight(.semibold))
-                            Text("Capture, fine tune, and save in under a minute")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.9))
-                        }
-                        Spacer()
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.title3)
-                    }
-                }
-                .buttonStyle(CoralGradientButtonStyle())
+                TodayStatusHero(state: state)
 
-                BestNextMoveCard(
-                    state: state,
-                    assistantName: assistantName,
-                    onAskTaiTap: {
-                        onAskTaiRequested?(dashboardAskPrompt)
-                    }
-                )
-
-                DashboardCard(title: "Macro Rhythm", icon: "chart.bar.fill", tint: .blue) {
+                DashboardCard(title: "Macros Remaining", icon: "flame.fill", tint: .orange) {
                     MacroProgressRow(
                         label: "Protein",
                         consumed: state.proteinConsumed,
                         target: state.proteinTarget,
-                        tint: .mint
+                        tint: .mint,
+                        isPriority: state.priorityMacro == "Protein"
                     )
                     MacroProgressRow(
                         label: "Carbs",
                         consumed: state.carbsConsumed,
                         target: state.carbsTarget,
-                        tint: .blue
+                        tint: .blue,
+                        isPriority: state.priorityMacro == "Carbs"
                     )
                     MacroProgressRow(
                         label: "Fat",
                         consumed: state.fatConsumed,
                         target: state.fatTarget,
-                        tint: .orange
+                        tint: .orange,
+                        isPriority: state.priorityMacro == "Fat"
                     )
                 }
 
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DSSpacing.md) {
-                    DecisionTile(
-                        title: "Meal Move",
-                        value: state.nextBestMealTitle,
-                        caption: state.nextBestMealTagline,
-                        icon: "takeoutbag.and.cup.and.straw.fill",
-                        tint: .green
-                    )
-                    DecisionTile(
-                        title: "Momentum",
-                        value: "\(state.caloriesRemaining) kcal left",
-                        caption: "\(Int((state.calorieProgress * 100).rounded()))% of daily target",
-                        icon: "flame.fill",
-                        tint: .orange
-                    )
-                    TonightStrategyCard(
-                        title: state.tonightStrategyTitle,
-                        caption: state.tonightStrategyBody
-                    )
-                    .gridCellColumns(2)
-                    DecisionTile(
-                        title: "Smart Patterns",
-                        value: state.recurringPreview.first ?? "Create first repeatable meal",
-                        caption: state.recurringPreview.isEmpty ? "No saved patterns yet" : "\(state.recurringPreview.count) saved this week",
-                        icon: "arrow.triangle.2.circlepath",
-                        tint: .teal
-                    )
-                }
+                NextBestMealCard(state: state)
 
-                DashboardCard(title: "Pattern Stack", icon: "leaf.fill", tint: .teal) {
-                    if state.recurringPreview.isEmpty {
-                        HStack(spacing: DSSpacing.sm) {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(.teal)
-                            Text("Save one repeatable breakfast or lunch to unlock one-tap future decisions.")
-                                .font(.subheadline)
-                                .foregroundStyle(DSColor.textSecondary)
-                        }
-                    } else {
-                        ForEach(state.recurringPreview, id: \.self) { mealName in
-                            HStack(spacing: DSSpacing.sm) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.teal)
-                                Text(mealName)
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(DSColor.textPrimary)
-                                Spacer()
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    }
-                }
+                SmartPatternsCard(state: state)
+
+                AlcoholBudgetCard(state: state)
+
+                Color.clear
+                    .frame(height: 92)
             }
             .padding(DSSpacing.lg)
         }
@@ -143,42 +71,21 @@ struct DashboardView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
-        .fullScreenCover(isPresented: $isMealCapturePresented) {
-            MealCaptureFlowView(
-                mealRepository: mealRepository,
-                ownerID: ownerID,
-                onSaved: {
-                    Task {
-                        await loadDashboard()
-                    }
-                },
-                dismiss: {
-                    isMealCapturePresented = false
-                }
-            )
-            .onAppear {
-                print("USING MEALCAPTUREFLOWVIEW")
-            }
-        }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DSSpacing.sm) {
-            Text("Today with \(assistantName)")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(DSColor.textSecondary)
-            Text("Pick the next best move")
+            Text("Today with Tai")
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(DSColor.textPrimary)
+            Text(todayDateLabel)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(DSColor.textSecondary)
         }
     }
 
-    private var dashboardAskPrompt: String {
-        var prompt = "Help me pick dinner options with \(state.caloriesRemaining) kcal left and protein-first macros."
-        if let remaining = state.alcoholRemainingDrinks, remaining > 0 {
-            prompt += " I may have up to \(remaining) drinks tonight."
-        }
-        return prompt
+    private var todayDateLabel: String {
+        Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day())
     }
 
     private func loadDashboard() async {
@@ -220,127 +127,174 @@ struct DashboardView: View {
     }
 }
 
-private struct BestNextMoveCard: View {
+private struct TodayStatusHero: View {
     let state: DashboardState
-    let assistantName: String
-    let onAskTaiTap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DSSpacing.lg) {
-            HStack(spacing: DSSpacing.md) {
+        PrimaryCard(cornerRadius: 26) {
+            VStack(spacing: 0) {
                 ZStack {
-                    ProgressRing(progress: state.calorieProgress, lineWidth: 10)
-                        .frame(width: 92, height: 92)
-                    VStack(spacing: 2) {
-                        Text("\(state.caloriesRemaining)")
-                            .font(.title3.weight(.bold))
-                        Text("kcal left")
-                            .font(.caption.weight(.semibold))
-                            .opacity(0.85)
+                    StatusRing(progress: state.calorieProgress)
+                        .frame(width: 212, height: 212)
+                    VStack(spacing: 4) {
+                        Text("\(state.consumedCalories)")
+                            .font(.system(size: 56, weight: .semibold, design: .rounded))
+                            .foregroundStyle(DSColor.textPrimary)
+                        Text("kcal")
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(DSColor.textSecondary)
                     }
-                    .foregroundStyle(.white)
                 }
+                .frame(maxWidth: .infinity)
 
-                VStack(alignment: .leading, spacing: DSSpacing.xs) {
-                    Text("Best next move")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.85))
-                    Text(state.nextBestMealTitle)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.white)
-                    Text(state.nextBestMealTagline)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.9))
-                }
-            }
+                Text(state.supportiveStatusLine)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(state.supportiveStatusTint)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 22)
 
-            HStack(spacing: DSSpacing.sm) {
-                DominantChip(label: state.topMacroChip, icon: "fork.knife")
-                DominantChip(label: state.momentumChip, icon: "flame.fill")
-                Button(action: onAskTaiTap) {
-                    DominantChip(label: "Ask \(assistantName)", icon: "sparkles")
-                }
-                .buttonStyle(.plain)
+                Text(state.heroDetailLine)
+                    .font(.caption2)
+                    .foregroundStyle(DSColor.textSecondary.opacity(0.78))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 9)
             }
+            .padding(.top, 6)
+            .padding(.bottom, 6)
         }
-        .padding(DSSpacing.xl)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DSColor.coralGradient)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.26), lineWidth: 1)
-        )
-        .shadow(color: DSColor.coralEnd.opacity(0.35), radius: 18, y: 10)
     }
 }
 
-private struct DominantChip: View {
-    let label: String
-    let icon: String
+private struct StatusRing: View {
+    let progress: Double
+
+    private var normalizedProgress: Double {
+        min(max(progress, 0), 1)
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.caption.weight(.bold))
-            Text(label)
-                .font(.caption.weight(.semibold))
+        ZStack {
+            Circle()
+                .stroke(DSColor.textSecondary.opacity(0.14), lineWidth: 18)
+            Circle()
+                .trim(from: 0, to: normalizedProgress)
+                .stroke(
+                    LinearGradient(
+                        colors: [DSColor.coralStart.opacity(0.5), DSColor.coralEnd.opacity(0.9)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, DSSpacing.sm + 2)
-        .padding(.vertical, DSSpacing.xs + 2)
-        .background(Color.white.opacity(0.16))
-        .clipShape(Capsule())
     }
 }
 
-private struct DecisionTile: View {
-    let title: String
-    let value: String
-    let caption: String
-    let icon: String
-    let tint: Color
+private struct NextBestMealCard: View {
+    let state: DashboardState
 
     var body: some View {
-        PrimaryCard(cornerRadius: 18) {
-            HStack {
-                Label(title, systemImage: icon)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(tint)
-                Spacer()
+        PrimaryCard(cornerRadius: 24, useWarmBackground: true) {
+            HStack(spacing: DSSpacing.md) {
+                Circle()
+                    .fill(Color.pink.opacity(0.15))
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Text("🍽️")
+                            .font(.title3)
+                    )
+                Text("Next Best Meal")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(DSColor.textPrimary)
             }
-            Text(value)
-                .font(.subheadline.weight(.semibold))
+
+            Text(state.nextBestMealTitle)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(DSColor.coralEnd)
+            Text(state.nextBestMealTagline)
+                .font(.body.weight(.medium))
                 .foregroundStyle(DSColor.textPrimary)
-                .lineLimit(2)
-            Text(caption)
-                .font(.caption)
-                .foregroundStyle(DSColor.textSecondary)
-                .lineLimit(2)
+                .lineLimit(3)
         }
     }
 }
 
-private struct TonightStrategyCard: View {
-    let title: String
-    let caption: String
+private struct SmartPatternsCard: View {
+    let state: DashboardState
 
-    var bodyView: some View {
-        PrimaryCard(cornerRadius: 20, useWarmBackground: true) {
-            Label("Tonight Strategy", systemImage: "moon.stars.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.purple)
-            Text(title)
-                .font(.subheadline.weight(.semibold))
+    var body: some View {
+        PrimaryCard(cornerRadius: 24) {
+            HStack(spacing: DSSpacing.md) {
+                Circle()
+                    .fill(Color.cyan.opacity(0.16))
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.teal)
+                    )
+                Text("Your Smart Patterns")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(DSColor.textPrimary)
+            }
+
+            if state.recurringPreview.isEmpty {
+                PatternPill(text: "Save your first repeatable meal")
+            } else {
+                ForEach(state.recurringPreview, id: \.self) { pattern in
+                    PatternPill(text: pattern)
+                }
+            }
+        }
+    }
+}
+
+private struct AlcoholBudgetCard: View {
+    let state: DashboardState
+
+    var body: some View {
+        PrimaryCard(cornerRadius: 24) {
+            HStack(spacing: DSSpacing.md) {
+                Circle()
+                    .fill(Color.purple.opacity(0.14))
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Image(systemName: "wineglass.fill")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.purple)
+                    )
+                Text("Alcohol Budget")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(DSColor.textPrimary)
+            }
+
+            Text(state.alcoholStatusValue)
+                .font(.title2.weight(.bold))
                 .foregroundStyle(DSColor.textPrimary)
-            Text(caption)
-                .font(.caption)
+            Text(state.alcoholStatusDetail)
+                .font(.title3.weight(.medium))
                 .foregroundStyle(DSColor.textSecondary)
         }
     }
+}
+
+private struct PatternPill: View {
+    let text: String
 
     var body: some View {
-        bodyView
+        HStack(spacing: DSSpacing.sm) {
+            Text("•")
+                .foregroundStyle(DSColor.textSecondary)
+            Text(text)
+                .font(.headline.weight(.medium))
+                .foregroundStyle(DSColor.textPrimary)
+            Spacer()
+        }
+        .padding(.horizontal, DSSpacing.md)
+        .padding(.vertical, DSSpacing.md)
+        .background(Color.white.opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -364,6 +318,18 @@ private struct DashboardState {
     let recurringPreview: [String]
     let alcoholRemainingDrinks: Int?
     let alcoholDailyCap: Int?
+
+    var consumedCalories: Int {
+        caloriesConsumed
+    }
+
+    var targetCalories: Int {
+        calorieTarget
+    }
+
+    var caloriesOverTarget: Int {
+        max(consumedCalories - targetCalories, 0)
+    }
 
     var calorieProgress: Double {
         guard calorieTarget > 0 else { return 0 }
@@ -416,19 +382,73 @@ private struct DashboardState {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? nextBestMealBody
     }
 
-    var topMacroChip: String {
+    private var calorieDelta: Int {
+        caloriesConsumed - calorieTarget
+    }
+
+    var supportiveStatusLine: String {
+        switch trackState {
+        case .onTrack:
+            return "You're on track"
+        case .slightlyOff:
+            return "Stay steady — keep meals balanced"
+        case .offTrack:
+            if calorieDelta > 0 { return "Keep your next meal lighter" }
+            return "Focus on protein next"
+        }
+    }
+
+    var supportiveStatusTint: Color {
+        switch trackState {
+        case .onTrack:
+            return Color.green
+        case .slightlyOff:
+            return DSColor.textSecondary
+        case .offTrack:
+            return DSColor.textPrimary
+        }
+    }
+
+    var heroDetailLine: String {
+        if caloriesOverTarget > 0 {
+            return "of \(targetCalories) target • +\(caloriesOverTarget) over"
+        }
+        return "of \(targetCalories) target"
+    }
+
+    private var trackState: TrackState {
+        let delta = abs(calorieDelta)
+        if delta <= 150 { return .onTrack }
+        if delta <= 400 { return .slightlyOff }
+        return .offTrack
+    }
+
+    private enum TrackState {
+        case onTrack
+        case slightlyOff
+        case offTrack
+    }
+
+    var priorityMacro: String? {
         let deficits = [
             ("Protein", proteinRemaining),
             ("Carbs", carbsRemaining),
             ("Fat", fatRemaining)
         ]
         let top = deficits.max { $0.1 < $1.1 } ?? ("Protein", 0)
-        if top.1 <= 0 { return "Macros on target" }
-        return "\(top.0) +\(top.1)g"
+        return top.1 > 0 ? top.0 : nil
     }
 
-    var momentumChip: String {
-        "\(Int((calorieProgress * 100).rounded()))% pace"
+    var alcoholStatusValue: String {
+        guard let remaining = alcoholRemainingDrinks else { return "Set plan" }
+        guard remaining >= 0 else { return "Past daily range today" }
+        let unit = remaining == 1 ? "drink" : "drinks"
+        return "\(remaining) \(unit) remaining today"
+    }
+
+    var alcoholStatusDetail: String {
+        guard let cap = alcoholDailyCap else { return "Daily and weekly guidance" }
+        return "Daily cap: \(cap)"
     }
 
     var alcoholTileCaption: String {
@@ -533,7 +553,7 @@ private struct DashboardState {
 
         if top.1 <= 0 {
             return (
-                "Macros are on target",
+                "On track",
                 "Beautiful pacing. Ask \(assistantName) for a light maintenance meal so tonight stays easy."
             )
         }
@@ -541,17 +561,17 @@ private struct DashboardState {
         switch top.0 {
         case "protein":
             return (
-                "Prioritize a high-protein meal",
+                "Protein-first next meal",
                 "About \(top.1)g protein still to go. Anchor your next plate with lean protein and let carbs follow."
             )
         case "carbs":
             return (
-                "Refuel with quality carbs",
+                "Add quality carbs",
                 "Around \(top.1)g carbs remain. Pair whole-food carbs with protein for steadier energy later."
             )
         default:
             return (
-                "Add healthy fats intentionally",
+                "Add healthy fats",
                 "Roughly \(top.1)g fat remain. Add fats intentionally around protein so your calories stay strategic."
             )
         }

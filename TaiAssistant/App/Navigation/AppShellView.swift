@@ -46,7 +46,11 @@ struct AppShellView: View {
             NavigationStack {
                 CheckInView(
                     mealRepository: dependencies.mealRepository,
-                    ownerID: config.localOwnerID
+                    ownerID: config.localOwnerID,
+                    interpreter: AIServiceCheckInInterpreter(
+                        aiService: dependencies.aiService,
+                        ownerID: config.localOwnerID
+                    )
                 )
             }
             .tabItem { Label("Check In", systemImage: "plus.circle.fill") }

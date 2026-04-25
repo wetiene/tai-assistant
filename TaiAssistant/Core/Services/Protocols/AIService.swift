@@ -119,6 +119,7 @@ struct OpenAIProxyAIService: AIService {
 
     func interpretMeal(request: AIInterpretMealRequest) async throws -> AIInterpretMealResponse {
         let endpoint = try resolvedInterpretMealURL()
+        print("OpenAIProxyAIService interpretMeal URL: \(endpoint.absoluteString)")
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -144,14 +145,19 @@ struct OpenAIProxyAIService: AIService {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AIServiceError.malformedResponse
         }
+        print("OpenAIProxyAIService status code: \(httpResponse.statusCode)")
         guard (200...299).contains(httpResponse.statusCode) else {
             let body = String(data: responsePayload, encoding: .utf8) ?? "<non-utf8>"
+            print("OpenAIProxyAIService non-200 body: \(body)")
             throw AIServiceError.unexpectedStatusCode(httpResponse.statusCode, body: body)
         }
 
         do {
             return try jsonDecoder.decode(AIInterpretMealResponse.self, from: responsePayload)
         } catch {
+            print("OpenAIProxyAIService decode error: \(error)")
+            let body = String(data: responsePayload, encoding: .utf8) ?? "<non-utf8>"
+            print("OpenAIProxyAIService decode payload: \(body)")
             throw AIServiceError.malformedResponse
         }
     }
