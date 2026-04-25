@@ -4,21 +4,99 @@ struct DashboardCard<Content: View>: View {
     let title: String
     let icon: String
     let tint: Color
+    var trailingActionTitle: String? = nil
+    var trailingAction: (() -> Void)? = nil
     @ViewBuilder let content: Content
 
     var body: some View {
-        PrimaryCard(cornerRadius: 22) {
-            HStack(spacing: DSSpacing.sm) {
-                Image(systemName: icon)
-                    .foregroundStyle(tint)
-                Text(title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(DSColor.textPrimary)
-                Spacer()
-            }
-
+        PrimaryCard(cornerRadius: 24) {
+            CardHeader(
+                title: title,
+                icon: icon,
+                tint: tint,
+                trailingActionTitle: trailingActionTitle,
+                trailingAction: trailingAction
+            )
             content
         }
+    }
+}
+
+struct CardHeader: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    var trailingActionTitle: String? = nil
+    var trailingAction: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: DSSpacing.sm) {
+            IconBadge(icon: icon, tint: tint)
+            Text(title)
+                .dashboardPrimaryText(.title)
+            Spacer(minLength: DSSpacing.sm)
+            if let trailingActionTitle, let trailingAction {
+                Button(trailingActionTitle, action: trailingAction)
+                    .buttonStyle(.plain)
+                    .dashboardSecondaryText()
+            }
+        }
+    }
+}
+
+struct IconBadge: View {
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .fill(tint.opacity(0.14))
+            .frame(width: 34, height: 34)
+            .overlay {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+    }
+}
+
+enum DashboardTextStyle {
+    case title
+    case body
+}
+
+private struct DashboardPrimaryTextModifier: ViewModifier {
+    let style: DashboardTextStyle
+
+    func body(content: Content) -> some View {
+        switch style {
+        case .title:
+            content
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(DSColor.textPrimary)
+        case .body:
+            content
+                .font(.body.weight(.medium))
+                .foregroundStyle(DSColor.textPrimary)
+        }
+    }
+}
+
+private struct DashboardSecondaryTextModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.caption)
+            .foregroundStyle(DSColor.textSecondary)
+    }
+}
+
+extension View {
+    func dashboardPrimaryText(_ style: DashboardTextStyle) -> some View {
+        modifier(DashboardPrimaryTextModifier(style: style))
+    }
+
+    func dashboardSecondaryText() -> some View {
+        modifier(DashboardSecondaryTextModifier())
     }
 }
 

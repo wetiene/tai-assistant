@@ -5,13 +5,13 @@ struct CheckInView: View {
     let mealRepository: MealRepository
     let ownerID: String
     let interpreter: any CheckInInterpreting
+    var onMealsSaved: (() -> Void)? = nil
 
     @State private var session = CheckInSessionDraft()
     @State private var isCameraPresented = false
     @State private var isInterpreting = false
     @State private var isSaving = false
     @State private var isPhotoPreviewPresented = false
-    @State private var toastMessage: String?
     @State private var errorMessage: String?
     @State private var isConfirmPressed = false
     @State private var isTaiNoteExpanded = false
@@ -51,11 +51,13 @@ struct CheckInView: View {
     init(
         mealRepository: MealRepository,
         ownerID: String,
-        interpreter: any CheckInInterpreting = MockCheckInInterpreter()
+        interpreter: any CheckInInterpreting = MockCheckInInterpreter(),
+        onMealsSaved: (() -> Void)? = nil
     ) {
         self.mealRepository = mealRepository
         self.ownerID = ownerID
         self.interpreter = interpreter
+        self.onMealsSaved = onMealsSaved
     }
 
     var body: some View {
@@ -119,19 +121,6 @@ struct CheckInView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
-        }
-        .overlay(alignment: .bottom) {
-            if let toastMessage {
-                Text(toastMessage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, DSSpacing.md)
-                    .padding(.vertical, DSSpacing.sm)
-                    .background(.black.opacity(0.78))
-                    .clipShape(Capsule())
-                    .padding(.bottom, DSSpacing.customBottomNavHeight + DSSpacing.md)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
         }
         .onAppear {
             print("USING CHECKINVIEW")
@@ -500,22 +489,6 @@ struct CheckInView: View {
         }
     }
 
-    private func showToast(_ message: String) {
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-            toastMessage = message
-        }
-        Task {
-            try? await Task.sleep(nanoseconds: 1_600_000_000)
-            await MainActor.run {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    if toastMessage == message {
-                        toastMessage = nil
-                    }
-                }
-            }
-        }
-    }
-
     private func inferMeals() async {
         guard !isInterpreting else { return }
         isInterpreting = true
@@ -569,8 +542,8 @@ struct CheckInView: View {
                     }
                     try await mealRepository.createMealLog(mealLog)
                 }
-                showToast("Added to today")
                 session = CheckInSessionDraft()
+                onMealsSaved?()
                 await refreshDayProgress()
             } catch {
                 errorMessage = "Could not save check in meals. Please retry."

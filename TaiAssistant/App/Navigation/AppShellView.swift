@@ -15,6 +15,8 @@ struct AppShellView: View {
     @State private var isAskTaiPresented = false
     @State private var askTaiSeedPrompt: String?
     @State private var isKeyboardVisible = false
+    @State private var mealAddedFeedbackTrigger = 0
+    @State private var isAskTaiDeemphasized = false
 
     init(dependencies: AppDependencies, config: RuntimeAppConfig) {
         self.dependencies = dependencies
@@ -32,11 +34,17 @@ struct AppShellView: View {
                     alcoholPlanRepository: dependencies.alcoholPlanRepository,
                     ownerID: config.localOwnerID,
                     assistantName: config.assistantName,
+                    mealAddedFeedbackTrigger: mealAddedFeedbackTrigger,
                     onCheckInRequested: {
                         selectedTab = .checkIn
                     },
                     onAskTaiRequested: { prompt in
                         handleAskTaiTap(seedPrompt: prompt)
+                    },
+                    onScrollDirectionChanged: { isScrollingDown in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isAskTaiDeemphasized = isScrollingDown
+                        }
                     }
                 )
             }
@@ -50,7 +58,11 @@ struct AppShellView: View {
                     interpreter: AIServiceCheckInInterpreter(
                         aiService: dependencies.aiService,
                         ownerID: config.localOwnerID
-                    )
+                    ),
+                    onMealsSaved: {
+                        selectedTab = .dashboard
+                        mealAddedFeedbackTrigger += 1
+                    }
                 )
             }
             .tabItem { Label("Check In", systemImage: "plus.circle.fill") }
@@ -67,10 +79,11 @@ struct AppShellView: View {
             if shouldShowAskTaiFAB {
                 FloatingAskTaiButton(
                     assistantName: config.assistantName,
+                    isDeemphasized: isAskTaiDeemphasized,
                     action: { handleAskTaiTap(seedPrompt: nil) }
                 )
                 .padding(.trailing, DSSpacing.lg)
-                .padding(.bottom, DSSpacing.customBottomNavHeight + DSSpacing.lg)
+                .padding(.bottom, -40)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -95,6 +108,13 @@ struct AppShellView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isKeyboardVisible = false
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            if newTab != .dashboard {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isAskTaiDeemphasized = false
+                }
+            }
         }
     }
 

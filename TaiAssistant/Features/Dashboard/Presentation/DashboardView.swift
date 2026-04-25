@@ -8,18 +8,34 @@ struct DashboardView: View {
     let alcoholPlanRepository: AlcoholPlanRepository
     let ownerID: String
     let assistantName: String
+    var mealAddedFeedbackTrigger: Int = 0
     var onCheckInRequested: (() -> Void)? = nil
     var onAskTaiRequested: ((String) -> Void)? = nil
+    var onScrollDirectionChanged: ((Bool) -> Void)? = nil
 
     @State private var state = DashboardState.placeholder
     @State private var isLoading = false
     @State private var pendingUndoMeal: DashboardState.TodayMealRestorePayload?
+    @State private var pendingUndoOriginalIndex: Int?
     @State private var undoDismissTask: Task<Void, Never>?
+    @State private var showsMealAddedFeedback = false
+    @State private var addFeedbackDismissTask: Task<Void, Never>?
+    @State private var lastScrollMinY: CGFloat = 0
+    @State private var isScrollingDown = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.xl) {
                 header
+
+                if showsMealAddedFeedback {
+                    DashboardInlineFeedback(
+                        message: "Meal added",
+                        icon: "checkmark.circle.fill",
+                        tint: DSColor.coralEnd
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 TodayStatusHero(state: state)
 
@@ -49,17 +65,32 @@ struct DashboardView: View {
                     )
                 }
 
-                TodaysMealsCard(state: state, onDeleteMeal: deleteMeal)
+                TodaysMealsCard(
+                    state: state,
+                    pendingUndoMeal: pendingUndoMeal,
+                    pendingUndoOriginalIndex: pendingUndoOriginalIndex,
+                    onDeleteMeal: deleteMeal,
+                    onUndoDelete: { Task { await undoDeleteMeal() } }
+                )
 
                 SmartPatternsCard(state: state)
 
                 AlcoholBudgetCard(state: state)
 
                 Color.clear
-                    .frame(height: DSSpacing.customBottomNavHeight + DSSpacing.lg)
+                    .frame(height: DSSpacing.customBottomNavHeight + 48 + 30)
             }
             .padding(DSSpacing.lg)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: DashboardScrollMinYPreferenceKey.self,
+                        value: proxy.frame(in: .named("dashboardScrollView")).minY
+                    )
+                }
+            )
         }
+        .coordinateSpace(name: "dashboardScrollView")
         .background(DSColor.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
@@ -76,29 +107,22 @@ struct DashboardView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
-        .overlay(alignment: .bottom) {
-            if pendingUndoMeal != nil {
-                HStack(spacing: DSSpacing.sm) {
-                    Text("Meal removed")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Button("Undo") {
-                        Task { await undoDeleteMeal() }
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, DSSpacing.sm)
-                    .padding(.vertical, 4)
-                    .background(.white.opacity(0.18))
-                    .clipShape(Capsule())
-                }
-                .padding(.horizontal, DSSpacing.md)
-                .padding(.vertical, DSSpacing.sm)
-                .background(.black.opacity(0.8))
-                .clipShape(Capsule())
-                .padding(.bottom, DSSpacing.customBottomNavHeight + DSSpacing.md)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+        .onChange(of: mealAddedFeedbackTrigger) { _, newValue in
+            guard newValue > 0 else { return }
+            showMealAddedFeedback()
+        }
+        .onPreferenceChange(DashboardScrollMinYPreferenceKey.self) { newMinY in
+            let delta = newMinY - lastScrollMinY
+            let threshold: CGFloat = 0.8
+
+            if delta < -threshold, !isScrollingDown {
+                isScrollingDown = true
+                onScrollDirectionChanged?(true)
+            } else if delta > threshold, isScrollingDown {
+                isScrollingDown = false
+                onScrollDirectionChanged?(false)
             }
+            lastScrollMinY = newMinY
         }
     }
 
@@ -158,8 +182,12 @@ struct DashboardView: View {
     private func deleteMeal(_ meal: DashboardState.TodayMealSummary) {
         Task {
             do {
+                let deletedIndex = state.todaysMeals.firstIndex(where: { $0.id == meal.id })
                 try await mealRepository.deleteMealLog(id: meal.id)
-                pendingUndoMeal = meal.restorePayload
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    pendingUndoMeal = meal.restorePayload
+                    pendingUndoOriginalIndex = deletedIndex
+                }
                 scheduleUndoDismiss()
                 await loadDashboard()
             } catch {
@@ -174,7 +202,10 @@ struct DashboardView: View {
             try await mealRepository.createMealLog(payload.makeMealLog())
             undoDismissTask?.cancel()
             undoDismissTask = nil
-            pendingUndoMeal = nil
+            withAnimation(.easeInOut(duration: 0.16)) {
+                pendingUndoMeal = nil
+                pendingUndoOriginalIndex = nil
+            }
             await loadDashboard()
         } catch {
             // Keep toast visible if restore fails so user can retry.
@@ -188,9 +219,33 @@ struct DashboardView: View {
             await MainActor.run {
                 withAnimation(.easeOut(duration: 0.2)) {
                     pendingUndoMeal = nil
+                    pendingUndoOriginalIndex = nil
                 }
             }
         }
+    }
+
+    private func showMealAddedFeedback() {
+        addFeedbackDismissTask?.cancel()
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+            showsMealAddedFeedback = true
+        }
+        addFeedbackDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 1_700_000_000)
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showsMealAddedFeedback = false
+                }
+            }
+        }
+    }
+}
+
+private struct DashboardScrollMinYPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -219,6 +274,12 @@ private struct TodayStatusHero: View {
                     .foregroundStyle(state.supportiveStatusTint)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 22)
+
+                Text("Need specifics? Ask Tai for your best next move.")
+                    .font(.footnote)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 6)
 
                 Text(state.heroDetailLine)
                     .font(.caption2)
@@ -262,50 +323,99 @@ private struct NextBestMealCard: View {
     let state: DashboardState
 
     var body: some View {
-        PrimaryCard(cornerRadius: 24, useWarmBackground: true) {
-            HStack(spacing: DSSpacing.md) {
-                Circle()
-                    .fill(Color.pink.opacity(0.15))
-                    .frame(width: 42, height: 42)
-                    .overlay(
-                        Text("🍽️")
-                            .font(.title3)
-                    )
-                Text("Next Best Meal")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(DSColor.textPrimary)
-            }
-
+        DashboardCard(title: "Next Best Meal", icon: "fork.knife", tint: .pink) {
             Text(state.nextBestMealTitle)
-                .font(.title3.weight(.bold))
+                .dashboardPrimaryText(.title)
                 .foregroundStyle(DSColor.coralEnd)
+                .lineLimit(2)
             Text(state.nextBestMealTagline)
-                .font(.body.weight(.medium))
-                .foregroundStyle(DSColor.textPrimary)
-                .lineLimit(3)
+                .dashboardSecondaryText()
+                .lineLimit(2)
         }
     }
 }
 
 private struct TodaysMealsCard: View {
     let state: DashboardState
+    let pendingUndoMeal: DashboardState.TodayMealRestorePayload?
+    let pendingUndoOriginalIndex: Int?
     let onDeleteMeal: (DashboardState.TodayMealSummary) -> Void
+    let onUndoDelete: () -> Void
 
     var body: some View {
         DashboardCard(title: "Today's meals", icon: "list.bullet.rectangle.portrait", tint: .pink) {
-            if state.todaysMeals.isEmpty {
+            let rows = displayRows
+
+            if rows.isEmpty {
                 VStack(alignment: .leading, spacing: DSSpacing.xs) {
                     Text("No meals yet today")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(DSColor.textPrimary)
+                        .dashboardPrimaryText(.body)
                     Text("Start by checking in your first meal")
-                        .font(.caption)
-                        .foregroundStyle(DSColor.textSecondary)
+                        .dashboardSecondaryText()
                 }
             } else {
-                ForEach(state.todaysMeals) { meal in
-                    TodayMealSwipeRow(meal: meal, onDelete: onDeleteMeal)
+                ForEach(rows) { row in
+                    switch row {
+                    case .meal(let meal):
+                        TodayMealSwipeRow(meal: meal, onDelete: onDeleteMeal)
+                    case .undoPlaceholder:
+                        undoPlaceholder
+                    }
                 }
+            }
+        }
+    }
+
+    private var undoPlaceholder: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DSSpacing.sm) {
+            Text("Meal removed")
+                .font(.footnote.weight(.regular))
+                .foregroundStyle(DSColor.textSecondary.opacity(0.95))
+                .lineLimit(1)
+            Spacer(minLength: DSSpacing.xs)
+            Button("Undo", action: onUndoDelete)
+                .font(.subheadline.weight(.regular))
+                .foregroundStyle(DSColor.coralEnd.opacity(0.86))
+                .buttonStyle(.plain)
+        }
+        .frame(minHeight: 40)
+        .padding(.vertical, DSSpacing.xs)
+        .background(DSColor.warmSurface.opacity(0.035))
+        .transition(.opacity)
+    }
+
+    private var displayRows: [MealRow] {
+        var rows = state.todaysMeals.map { MealRow.meal($0) }
+        guard let pendingUndoMeal else { return rows }
+
+        let insertionIndex = undoInsertionIndex(for: pendingUndoMeal, meals: state.todaysMeals)
+        rows.insert(.undoPlaceholder, at: insertionIndex)
+        return rows
+    }
+
+    private func undoInsertionIndex(
+        for pendingMeal: DashboardState.TodayMealRestorePayload,
+        meals: [DashboardState.TodayMealSummary]
+    ) -> Int {
+        if let pendingUndoOriginalIndex {
+            return min(max(pendingUndoOriginalIndex, 0), meals.count)
+        }
+
+        // Fallback when index context is missing: place near original chronological slot.
+        let idx = meals.firstIndex { $0.eatenAt <= pendingMeal.eatenAt } ?? meals.count
+        return min(max(idx, 0), meals.count)
+    }
+
+    private enum MealRow: Identifiable {
+        case meal(DashboardState.TodayMealSummary)
+        case undoPlaceholder
+
+        var id: String {
+            switch self {
+            case .meal(let meal):
+                return meal.id.uuidString
+            case .undoPlaceholder:
+                return "undo-placeholder-row"
             }
         }
     }
@@ -362,14 +472,14 @@ private struct TodayMealSwipeRow: View {
                     .foregroundStyle(DSColor.textPrimary)
                     .lineLimit(1)
                 Text(meal.eatenAt.formatted(.dateTime.hour().minute()))
-                    .font(.caption)
-                    .foregroundStyle(DSColor.textSecondary)
+                    .dashboardSecondaryText()
             }
             Spacer()
             Text("\(meal.calories) kcal")
-                .font(.caption.weight(.semibold))
+                .font(.body.weight(.medium))
                 .foregroundStyle(DSColor.textPrimary)
         }
+        .frame(minHeight: 40)
         .padding(.vertical, DSSpacing.xs)
         .background(DSColor.surface)
     }
@@ -396,7 +506,7 @@ private struct TodayMealSwipeRow: View {
         let labelOpacity = min(max((absoluteOffset - armThreshold) / 26, 0), 1)
 
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(DSColor.coralEnd.opacity(0.92))
+            .fill(DSColor.destructiveCoral.opacity(0.9))
             .frame(width: backgroundWidth)
             .frame(maxWidth: shouldFillRow ? .infinity : nil, alignment: .trailing)
             .overlay(alignment: .trailing) {
@@ -470,25 +580,33 @@ private struct TodayMealSwipeRow: View {
     }
 }
 
+private struct DashboardInlineFeedback: View {
+    let message: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: DSSpacing.sm) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DSColor.textPrimary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DSSpacing.md)
+        .padding(.vertical, DSSpacing.sm)
+        .background(DSColor.warmSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
 private struct SmartPatternsCard: View {
     let state: DashboardState
 
     var body: some View {
-        PrimaryCard(cornerRadius: 24) {
-            HStack(spacing: DSSpacing.md) {
-                Circle()
-                    .fill(Color.cyan.opacity(0.16))
-                    .frame(width: 42, height: 42)
-                    .overlay(
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.teal)
-                    )
-                Text("Your Smart Patterns")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(DSColor.textPrimary)
-            }
-
+        DashboardCard(title: "Your Smart Patterns", icon: "arrow.triangle.2.circlepath", tint: .teal) {
             if state.recurringPreview.isEmpty {
                 PatternPill(text: "Save your first repeatable meal")
             } else {
@@ -504,27 +622,11 @@ private struct AlcoholBudgetCard: View {
     let state: DashboardState
 
     var body: some View {
-        PrimaryCard(cornerRadius: 24) {
-            HStack(spacing: DSSpacing.md) {
-                Circle()
-                    .fill(Color.purple.opacity(0.14))
-                    .frame(width: 42, height: 42)
-                    .overlay(
-                        Image(systemName: "wineglass.fill")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.purple)
-                    )
-                Text("Alcohol Budget")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(DSColor.textPrimary)
-            }
-
+        DashboardCard(title: "Alcohol Budget", icon: "wineglass.fill", tint: .purple) {
             Text(state.alcoholStatusValue)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(DSColor.textPrimary)
+                .dashboardPrimaryText(.body)
             Text(state.alcoholStatusDetail)
-                .font(.title3.weight(.medium))
-                .foregroundStyle(DSColor.textSecondary)
+                .dashboardSecondaryText()
         }
     }
 }
@@ -537,14 +639,13 @@ private struct PatternPill: View {
             Text("•")
                 .foregroundStyle(DSColor.textSecondary)
             Text(text)
-                .font(.headline.weight(.medium))
-                .foregroundStyle(DSColor.textPrimary)
+                .dashboardPrimaryText(.body)
             Spacer()
         }
         .padding(.horizontal, DSSpacing.md)
         .padding(.vertical, DSSpacing.md)
-        .background(Color.white.opacity(0.55))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(DSColor.surface.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

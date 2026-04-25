@@ -8,6 +8,7 @@ enum DSColor {
     static let accent = Color.blue
     static let coralStart = Color(red: 1.0, green: 0.49, blue: 0.42)
     static let coralEnd = Color(red: 1.0, green: 0.35, blue: 0.47)
+    static let destructiveCoral = Color(red: 0.92, green: 0.34, blue: 0.42)
     static let warmSurface = Color(red: 1.0, green: 0.96, blue: 0.94)
 
     static var coralGradient: LinearGradient {
