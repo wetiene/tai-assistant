@@ -493,6 +493,9 @@ private struct CheckInMealCard: View {
     @Binding var draft: CheckInMealDraft
     var viewModel: CheckInViewModel
 
+    @FocusState private var isMealLabelFocused: Bool
+    @State private var showsCorrectionHelper = false
+
     private var showsAmbiguityBlock: Bool { draft.shouldShowAmbiguityUI }
 
     var body: some View {
@@ -508,9 +511,32 @@ private struct CheckInMealCard: View {
             TextField("Meal label", text: $draft.label)
                 .font(.title3.weight(.semibold))
                 .textFieldStyle(.roundedBorder)
+                .focused($isMealLabelFocused)
                 .onChange(of: draft.label) { _, _ in
                     viewModel.registerUserEditedMealLabel(for: draft.id)
+                    if draft.isUserConfirmed {
+                        showsCorrectionHelper = false
+                    }
                 }
+
+            HStack(spacing: DSSpacing.xs) {
+                Button("Not right?") {
+                    showsCorrectionHelper = true
+                    isMealLabelFocused = true
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DSColor.textSecondary)
+                .buttonStyle(.plain)
+
+                Spacer()
+            }
+
+            if showsCorrectionHelper && !draft.isUserConfirmed {
+                Text("Tell Tai what this actually was")
+                    .font(.caption)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if showsAmbiguityBlock {
                 if !draft.alternatives.isEmpty {
