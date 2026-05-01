@@ -1,8 +1,0 @@
-{
-  "name": "tai-ai-proxy-stub",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "start": "node server.mjs"
-  }
-}

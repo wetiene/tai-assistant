@@ -3,6 +3,11 @@
 This app lane intentionally does **not** call OpenAI from iOS.
 All OpenAI traffic must be server-side through a backend proxy.
 
+## Canonical backend
+
+`tai-ai-proxy` (Cloudflare Worker at `tai-ai-proxy/src/index.ts`) is the single production AI backend path for meal interpretation.
+Legacy local stub backend paths have been removed to avoid contract/auth/prompt drift.
+
 ## Runtime switching (mock vs live)
 
 AI provider mode is selected in `RuntimeAppConfig`:
@@ -148,19 +153,15 @@ Image payload caveats:
 - For larger photos, prefer upload flow and pass `uploadReference` instead of inline base64.
 - Ensure backend strips EXIF/PII and normalizes image format before forwarding to OpenAI.
 
-## Local contract stub (no OpenAI)
+## Local development (canonical proxy path)
 
-Repo path: `backend/server.mjs` — fixed JSON response for end-to-end transport checks.
-
-Run:
+Run the Worker locally from `tai-ai-proxy`:
 
 ```bash
-cd backend && npm start
-# or: node server.mjs
+cd tai-ai-proxy
+npm run dev
 ```
 
-- Listens on **`http://0.0.0.0:8080`** (reachable as **`http://127.0.0.1:8080`** from the iOS Simulator on the same Mac).
-- **Physical device:** use your Mac’s LAN IP, e.g. `http://192.168.1.42:8080`, in `RuntimeAppConfig.aiProxyBaseURL` (same Wi‑Fi as the Mac).
-- Debug builds set **`NSAllowsLocalNetworking`** so plain HTTP to local hosts is allowed. Release builds do not add that key; use HTTPS for production APIs.
-
-Health check: `GET http://127.0.0.1:8080/health` → `ok`.
+- Use the local Worker URL emitted by Wrangler (commonly `http://127.0.0.1:8787`) as `RuntimeAppConfig.aiProxyBaseURL` for simulator testing.
+- For physical devices, use your Mac LAN IP and matching local port.
+- Keep `aiProxyBearerToken` out of committed source and inject it via local runtime configuration.
