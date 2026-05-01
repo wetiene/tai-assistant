@@ -63,7 +63,7 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 					timing: { type: "string" },
 					eatenAtGuessISO8601: {
 						type: "string",
-						description: "ISO-8601 guess when the meal was eaten; omit if unknown",
+						description: "ISO-8601 guess when the meal was eaten; use empty string if unknown",
 					},
 					items: {
 						type: "array",
@@ -98,9 +98,11 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 					fatGrams: { type: "number" },
 					confidence: { type: "number" },
 				},
+				// Strict JSON Schema requires `required` to list every key in `properties`.
 				required: [
 					"label",
 					"timing",
+					"eatenAtGuessISO8601",
 					"items",
 					"calories",
 					"proteinGrams",
@@ -110,10 +112,16 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 				],
 			},
 		},
-		uiNotes: { type: "string", description: "Short guidance for the user; omit if none" },
-		confidence: { type: "number", description: "Aggregate confidence 0–1 when helpful; omit otherwise" },
+		uiNotes: {
+			type: "string",
+			description: "Short guidance for the user; use empty string if none",
+		},
+		confidence: {
+			type: "number",
+			description: "Aggregate confidence 0–1; use 0 if not applicable",
+		},
 	},
-	required: ["interpretedMeals"],
+	required: ["interpretedMeals", "uiNotes", "confidence"],
 } satisfies Record<string, unknown>;
 
 function json(data: unknown, status = 200): Response {
@@ -249,8 +257,8 @@ function mapMeal(raw: unknown): TaiInterpretedMeal | null {
 		items.push(it);
 	}
 	let eatenRaw = o.eatenAtGuessISO8601;
-	if (eatenRaw === null) eatenRaw = null;
-	const eatenStr = typeof eatenRaw === "string" ? eatenRaw : undefined;
+	const eatenStr =
+		typeof eatenRaw === "string" && eatenRaw.trim().length > 0 ? eatenRaw.trim() : undefined;
 	const calories = readInt(o.calories ?? o.totalCalories ?? o.total_calories, 0);
 	return {
 		label,
@@ -368,13 +376,33 @@ function buildUserContentParts(
 
 type OpenAIMealAttemptResult =
 	| { kind: "ok"; payload: TaiInterpretMealResponse }
-	| { kind: "http_error"; status: number }
+	| { kind: "http_error"; status: number; openAIDetail?: string }
 	| { kind: "structured_output_failed" };
 
 type InterpretMealOutcome =
 	| { status: "success"; payload: TaiInterpretMealResponse }
-	| { status: "ai_provider_error"; openaiHttpStatus: number }
+	| { status: "ai_provider_error"; openaiHttpStatus: number; openAIDetail?: string }
 	| { status: "malformed_ai_response" };
+
+/** Parses OpenAI JSON error payloads; trims length only (never echo secrets beyond API error.message). */
+function summarizeOpenAITextError(rawBody: string): string | undefined {
+	const trimmed = rawBody.trim();
+	if (!trimmed) return undefined;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(trimmed);
+	} catch {
+		return trimmed.slice(0, 900);
+	}
+	const root = asRecord(parsed);
+	const errBlob = root && asRecord(root.error);
+	const msg = errBlob !== null ? readString(errBlob.message) : undefined;
+	const code = errBlob !== null ? readString(errBlob.code) : undefined;
+	const param = errBlob !== null ? readString(errBlob.param) : undefined;
+	const parts = [msg, code && `(${code})`, param && `[${param}]`].filter(Boolean);
+	if (parts.length === 0) return trimmed.slice(0, 900);
+	return parts.join(" ").slice(0, 1200);
+}
 
 async function interpretWithOpenAIStructured(env: Env, body: TaiInterpretMealRequest, imageB64: string | undefined): Promise<InterpretMealOutcome> {
 	const mime = body.image?.mimeType?.trim() || "image/jpeg";
@@ -414,8 +442,15 @@ async function interpretWithOpenAIStructured(env: Env, body: TaiInterpretMealReq
 		console.log("[interpret-meal] openai_fetch_ms=", Date.now() - openAIT0, "retry_hint=", isRetryHint);
 
 		if (!openAIResponse.ok) {
-			console.log("[interpret-meal] openai_http_status=", openAIResponse.status);
-			return { kind: "http_error", status: openAIResponse.status };
+			const errText = await openAIResponse.text();
+			const openAIDetail = summarizeOpenAITextError(errText);
+			console.log(
+				"[interpret-meal] openai_http_status=",
+				openAIResponse.status,
+				"openai_error=",
+				openAIDetail ?? errText.slice(0, 500)
+			);
+			return { kind: "http_error", status: openAIResponse.status, openAIDetail };
 		}
 
 		let providerJson: unknown;
@@ -432,12 +467,14 @@ async function interpretWithOpenAIStructured(env: Env, body: TaiInterpretMealReq
 
 	let first = await attempt(false);
 	if (first.kind === "ok") return { status: "success", payload: first.payload };
-	if (first.kind === "http_error") return { status: "ai_provider_error", openaiHttpStatus: first.status };
+	if (first.kind === "http_error")
+		return { status: "ai_provider_error", openaiHttpStatus: first.status, openAIDetail: first.openAIDetail };
 
 	console.log("[interpret-meal] retrying_structured_output");
 	let second = await attempt(true);
 	if (second.kind === "ok") return { status: "success", payload: second.payload };
-	if (second.kind === "http_error") return { status: "ai_provider_error", openaiHttpStatus: second.status };
+	if (second.kind === "http_error")
+		return { status: "ai_provider_error", openaiHttpStatus: second.status, openAIDetail: second.openAIDetail };
 	return { status: "malformed_ai_response" };
 }
 
@@ -485,13 +522,12 @@ export default {
 		const outcome = await interpretWithOpenAIStructured(env, body, imageB64);
 		if (outcome.status === "success") return json(outcome.payload, 200);
 		if (outcome.status === "ai_provider_error") {
-			return json(
-				{
-					error: "ai_provider_error",
-					status: outcome.openaiHttpStatus,
-				},
-				502
-			);
+			const payload: Record<string, unknown> = {
+				error: "ai_provider_error",
+				status: outcome.openaiHttpStatus,
+			};
+			if (outcome.openAIDetail) payload.openai_detail = outcome.openAIDetail;
+			return json(payload, 502);
 		}
 		return json({ error: "malformed_ai_response" }, 502);
 	},
