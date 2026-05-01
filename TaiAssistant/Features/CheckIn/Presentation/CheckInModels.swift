@@ -18,6 +18,17 @@ struct CheckInSessionDraft {
     }
 }
 
+enum MessageRole: Equatable {
+    case user
+    case tai
+}
+
+struct CheckInMessage: Identifiable {
+    let id: UUID
+    let role: MessageRole
+    let text: String
+}
+
 struct CheckInMealDraft: Identifiable {
     let id: UUID
     var label: String

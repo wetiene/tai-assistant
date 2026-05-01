@@ -10,29 +10,6 @@ struct CheckInView: View {
     @State private var isTaiNoteExpanded = false
     @FocusState private var isComposerFocused: Bool
 
-    private enum CheckInUIState {
-        case typing
-        case processing
-        case result
-    }
-
-    private var uiState: CheckInUIState {
-        if viewModel.isInterpreting {
-            return .processing
-        }
-        if !viewModel.session.interpretedMeals.isEmpty {
-            return .result
-        }
-        return .typing
-    }
-
-    private let shortcuts = [
-        "Usual breakfast",
-        "Protein shake",
-        "Yesterday lunch",
-        "Family dinner"
-    ]
-
     init(
         mealRepository: MealRepository,
         ownerID: String,
@@ -52,19 +29,16 @@ struct CheckInView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.xl) {
-                Text("Tell Tai what happened")
+                Text("Update your meal")
                     .font(.title.weight(.bold))
                     .foregroundStyle(DSColor.textPrimary)
 
+                conversationHistorySection
                 composerCard
-
-                switch uiState {
-                case .typing:
-                    shortcutsSection
-                case .processing:
-                    processingSection
-                case .result:
+                if !viewModel.session.interpretedMeals.isEmpty {
                     interpretedMealsSection
+                }
+                if !viewModel.session.interpretedMeals.isEmpty {
                     inlineConfirmSection
                 }
             }
@@ -121,12 +95,11 @@ struct CheckInView: View {
     private var composerCard: some View {
         @Bindable var vm = viewModel
         return PrimaryCard(cornerRadius: 24) {
-            TextEditor(text: $vm.session.userInput)
-                .frame(minHeight: 154)
+            TextField("Add details or photo...", text: $vm.session.userInput, axis: .vertical)
+                .lineLimit(1...3)
                 .focused($isComposerFocused)
-                .scrollContentBackground(.hidden)
                 .padding(DSSpacing.sm)
-                .background(Color.white.opacity(0.7))
+                .background(DSColor.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -153,36 +126,24 @@ struct CheckInView: View {
                     isComposerFocused = false
                     Task {
                         isTaiNoteExpanded = false
-                        await viewModel.interpretCheckIn()
+                        await viewModel.onUpdateMealTapped()
                     }
                 } label: {
                     if viewModel.isInterpreting {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Label("Check In", systemImage: "sparkles")
+                        Label("Update meal", systemImage: "sparkles")
                     }
                 }
                 .buttonStyle(CoralGradientButtonStyle(isCompact: true))
                 .disabled(
                     viewModel.isInterpreting ||
-                    (vm.session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && vm.session.selectedPhotoData == nil)
+                    (vm.session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && vm.session.selectedPhotoData == nil && vm.session.interpretedMeals.isEmpty)
                 )
             }
 
             selectedPhotoThumbnail
-        }
-    }
-
-    private var processingSection: some View {
-        PrimaryCard(cornerRadius: 24) {
-            HStack(spacing: DSSpacing.sm) {
-                ProgressView()
-                Text("Interpreting check in...")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(DSColor.textPrimary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -254,26 +215,26 @@ struct CheckInView: View {
         }
     }
 
-    private var shortcutsSection: some View {
-        VStack(alignment: .leading, spacing: DSSpacing.sm) {
-            Text("Quick shortcuts")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(DSColor.textSecondary)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DSSpacing.sm) {
-                ForEach(shortcuts, id: \.self) { shortcut in
-                    Button {
-                        viewModel.session.userInput = shortcut
-                    } label: {
-                        Text(shortcut)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(DSColor.textPrimary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(DSSpacing.md)
-                            .background(DSColor.surface)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    private var conversationHistorySection: some View {
+        Group {
+            if !viewModel.messages.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                        ForEach(viewModel.messages) { message in
+                            HStack {
+                                Text(message.text)
+                                    .font(.caption)
+                                    .foregroundStyle(message.role == .user ? DSColor.textPrimary : DSColor.textSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, DSSpacing.sm)
+                                    .padding(.vertical, DSSpacing.xs)
+                                    .background(message.role == .user ? DSColor.warmSurface : DSColor.surface)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
+                .frame(maxHeight: 170)
             }
         }
     }
@@ -556,11 +517,32 @@ private struct CheckInMealCard: View {
                 StatPill(title: "F", value: "\(draft.fatGrams)g")
             }
 
+            Text("Confidence \(Int((draft.confidence * 100).rounded()))%")
+                .font(.caption2)
+                .foregroundStyle(DSColor.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             if draft.macrosNeedReview {
-                Text("Macros may still reflect the original estimate.")
-                    .font(.caption)
-                    .foregroundStyle(DSColor.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                    Text("Estimate may be based on earlier details.")
+                        .font(.caption)
+                        .foregroundStyle(DSColor.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        Task {
+                            await viewModel.updateEstimate(for: draft.id)
+                        }
+                    } label: {
+                        Text("Update estimate")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(DSColor.textSecondary)
+                            .padding(.horizontal, DSSpacing.sm)
+                            .padding(.vertical, DSSpacing.xs)
+                            .background(DSColor.warmSurface)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
