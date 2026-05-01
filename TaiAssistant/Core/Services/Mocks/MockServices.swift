@@ -43,7 +43,8 @@ struct MockAIService: AIService {
             proteinGrams: 32,
             carbsGrams: 54,
             fatGrams: 18,
-            confidence: 0.63
+            confidence: 0.63,
+            alternatives: []
         )
 
         if normalized.contains("breakfast") || normalized.contains("shake") {
@@ -62,7 +63,8 @@ struct MockAIService: AIService {
                         proteinGrams: normalized.contains("shake") ? 34 : 33,
                         carbsGrams: normalized.contains("shake") ? 24 : 46,
                         fatGrams: normalized.contains("shake") ? 7 : 14,
-                        confidence: 0.83
+                        confidence: 0.83,
+                        alternatives: []
                     )
                 ],
                 uiNotes: "Mock AI interpretation. Adjust items before saving."
@@ -85,7 +87,8 @@ struct MockAIService: AIService {
                         proteinGrams: normalized.contains("family") ? 42 : 36,
                         carbsGrams: normalized.contains("family") ? 71 : 58,
                         fatGrams: normalized.contains("family") ? 31 : 24,
-                        confidence: 0.76
+                        confidence: 0.76,
+                        alternatives: []
                     )
                 ],
                 uiNotes: "Mock AI interpretation. Nutrients are approximate."

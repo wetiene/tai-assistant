@@ -36,6 +36,7 @@ const RESPONSE_SCHEMA = {
           "carbsGrams",
           "fatGrams",
           "confidence",
+          "alternatives",
         ],
         properties: {
           label: { type: "string" },
@@ -74,6 +75,11 @@ const RESPONSE_SCHEMA = {
           carbsGrams: { type: "number" },
           fatGrams: { type: "number" },
           confidence: { type: "number", minimum: 0, maximum: 1 },
+          alternatives: {
+            type: "array",
+            description: "Alternative meal labels when visually ambiguous; empty when confident.",
+            items: { type: "string" },
+          },
         },
       },
     },

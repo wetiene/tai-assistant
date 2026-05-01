@@ -39,6 +39,8 @@ type TaiInterpretedMeal = {
 	carbsGrams: number;
 	fatGrams: number;
 	confidence: number;
+	/** 0–3 short alternative meal labels when visually ambiguous; empty when confident. */
+	alternatives: string[];
 };
 
 type TaiInterpretMealResponse = {
@@ -97,6 +99,11 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 					carbsGrams: { type: "number" },
 					fatGrams: { type: "number" },
 					confidence: { type: "number" },
+					alternatives: {
+						type: "array",
+						description: "1–2 alternative meal labels if visually ambiguous; otherwise []",
+						items: { type: "string" },
+					},
 				},
 				// Strict JSON Schema requires `required` to list every key in `properties`.
 				required: [
@@ -109,6 +116,7 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 					"carbsGrams",
 					"fatGrams",
 					"confidence",
+					"alternatives",
 				],
 			},
 		},
@@ -219,6 +227,20 @@ function readString(v: unknown): string | undefined {
 	return undefined;
 }
 
+/** Preserves model order; trims; caps length for safety (prompt limits count). */
+function readStringArray(v: unknown, maxItems: number): string[] {
+	if (!Array.isArray(v)) return [];
+	const out: string[] = [];
+	for (const x of v) {
+		if (typeof x !== "string") continue;
+		const t = x.trim();
+		if (t.length === 0) continue;
+		out.push(t);
+		if (out.length >= maxItems) break;
+	}
+	return out;
+}
+
 function pickMealsArray(parsed: Record<string, unknown>): unknown[] | null {
 	if (Array.isArray(parsed.interpretedMeals)) return parsed.interpretedMeals;
 	return null;
@@ -260,6 +282,7 @@ function mapMeal(raw: unknown): TaiInterpretedMeal | null {
 	const eatenStr =
 		typeof eatenRaw === "string" && eatenRaw.trim().length > 0 ? eatenRaw.trim() : undefined;
 	const calories = readInt(o.calories ?? o.totalCalories ?? o.total_calories, 0);
+	const alternatives = readStringArray(o.alternatives, 3);
 	return {
 		label,
 		timing,
@@ -270,6 +293,7 @@ function mapMeal(raw: unknown): TaiInterpretedMeal | null {
 		carbsGrams: readFiniteNumber(o.carbsGrams ?? o.carbs_g, 0),
 		fatGrams: readFiniteNumber(o.fatGrams ?? o.fat_g, 0),
 		confidence: readFiniteNumber(o.confidence, 0),
+		alternatives,
 	};
 }
 
@@ -324,6 +348,7 @@ function buildSystemPrompt(): string {
 		"- Prioritise what you see in the image over free-text guesses when both are present.",
 		"- Name foods precisely (e.g. distinguish raw fish / sashimi from avocado or similar colours).",
 		"- Estimate calories and macros conservatively when uncertain; prefer slightly lower confidence over overconfidence.",
+		"- If a dish is visually ambiguous, put 1–2 likely alternative meal labels in each meal's \"alternatives\" array (max 3 strings total). If confident, use an empty array [].",
 		"- Output must follow the response JSON schema exactly (no prose outside JSON).",
 	].join("\n");
 }
@@ -344,7 +369,7 @@ function buildUserContentParts(
 	}
 	parts.push({
 		type: "input_text",
-		text: "Identify all foods and estimate calories and macros.",
+		text: "Identify all foods and estimate calories and macros. Include alternatives in the schema when uncertain.",
 	});
 
 	const trimmed = typeof body.text === "string" ? body.text.trim() : "";
