@@ -32,6 +32,12 @@ struct CheckInMealDraft: Identifiable {
     var items: [CheckInMealItemDraft]
     /// User chose a label (chip or manual edit); not persisted.
     var isUserConfirmed: Bool = false
+    /// True when label changed after AI macro estimate and macros may be stale.
+    var macrosNeedReview: Bool = false
+    /// Original AI label used when the draft was first created.
+    var originalAILabel: String? = nil
+    /// Label text that current macro estimate is based on.
+    var lastMacroEstimateBasis: String? = nil
 }
 
 extension CheckInMealDraft {
@@ -90,5 +96,8 @@ extension CheckInMealDraft {
             )
         }
         self.isUserConfirmed = false
+        self.macrosNeedReview = false
+        self.originalAILabel = aiMeal.label
+        self.lastMacroEstimateBasis = aiMeal.label
     }
 }

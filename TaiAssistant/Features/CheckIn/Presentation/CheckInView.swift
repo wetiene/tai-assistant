@@ -555,6 +555,13 @@ private struct CheckInMealCard: View {
                 StatPill(title: "C", value: "\(draft.carbsGrams)g")
                 StatPill(title: "F", value: "\(draft.fatGrams)g")
             }
+
+            if draft.macrosNeedReview {
+                Text("Macros may still reflect the original estimate.")
+                    .font(.caption)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 

@@ -107,6 +107,7 @@ final class CheckInViewModel {
         meal.label = alt
         meal.alternatives = []
         meal.isUserConfirmed = true
+        meal.macrosNeedReview = shouldFlagMacrosForLabelChange(in: meal, newLabel: alt)
         session.interpretedMeals[idx] = meal
     }
 
@@ -116,6 +117,20 @@ final class CheckInViewModel {
         var meal = session.interpretedMeals[idx]
         meal.isUserConfirmed = true
         meal.alternatives = []
+        meal.macrosNeedReview = shouldFlagMacrosForLabelChange(in: meal, newLabel: meal.label)
         session.interpretedMeals[idx] = meal
+    }
+
+    // TODO(CheckIn): Add a lightweight per-meal "Re-estimate" that refreshes macros/items for corrected labels.
+    // Current flow intentionally stays non-blocking: corrected label is saved while stale macro state is surfaced.
+    private func shouldFlagMacrosForLabelChange(in meal: CheckInMealDraft, newLabel: String) -> Bool {
+        let basis = normalizedMealLabel(meal.lastMacroEstimateBasis)
+        let edited = normalizedMealLabel(newLabel)
+        guard !edited.isEmpty else { return meal.macrosNeedReview }
+        return basis != edited
+    }
+
+    private func normalizedMealLabel(_ value: String?) -> String {
+        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
