@@ -508,7 +508,7 @@ struct CheckInView: View {
     }
 
     private func handleCapturedImage(_ image: UIImage) {
-        guard let data = image.jpegData(compressionQuality: 0.85) else {
+        guard let data = CheckInPhotoUploadPreprocessor.prepareMealUploadJPEG(from: image) else {
             errorMessage = "Could not process this photo. Please try again."
             return
         }

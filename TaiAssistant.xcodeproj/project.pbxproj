@@ -41,6 +41,7 @@
 		A1000000000000000000001F /* CheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001F /* CheckInView.swift */; };
 		A10000000000000000000020 /* CheckInCameraController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* CheckInCameraController.swift */; };
 		A10000000000000000000021 /* CheckInCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* CheckInCameraView.swift */; };
+		A10000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -78,6 +79,7 @@
 		A2000000000000000000001F /* CheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInView.swift; sourceTree = "<group>"; };
 		A20000000000000000000020 /* CheckInCameraController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInCameraController.swift; sourceTree = "<group>"; };
 		A20000000000000000000021 /* CheckInCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInCameraView.swift; sourceTree = "<group>"; };
+		A20000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInPhotoUploadPreprocessor.swift; sourceTree = "<group>"; };
 		A20000000000000000000030 /* TaiAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = TaiAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -289,6 +291,7 @@
 				A2000000000000000000001F /* CheckInView.swift */,
 				A20000000000000000000020 /* CheckInCameraController.swift */,
 				A20000000000000000000021 /* CheckInCameraView.swift */,
+				A20000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift */,
 			);
 			path = CheckIn/Presentation;
 			sourceTree = "<group>";
@@ -395,6 +398,7 @@
 				A1000000000000000000001F /* CheckInView.swift in Sources */,
 				A10000000000000000000020 /* CheckInCameraController.swift in Sources */,
 				A10000000000000000000021 /* CheckInCameraView.swift in Sources */,
+				A10000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

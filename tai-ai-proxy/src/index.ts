@@ -249,6 +249,9 @@ export default {
 			return json({ error: "invalid_json" }, 400);
 		}
 
+		const approximateJsonBytes = new TextEncoder().encode(JSON.stringify(body)).length;
+		console.log("[interpret-meal] content_length_header=", contentLength, "approx_parsed_body_bytes=", approximateJsonBytes);
+
 		const imageB64 = body.imageBase64 ?? body.image?.base64Data;
 		if (!body.text && !imageB64) {
 			return json({ error: "text_or_image_required" }, 400);
@@ -295,6 +298,7 @@ export default {
 			});
 		}
 
+		const openAIT0 = Date.now();
 		const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
 			method: "POST",
 			headers: {
@@ -311,6 +315,7 @@ export default {
 				],
 			}),
 		});
+		console.log("[interpret-meal] openai_fetch_ms=", Date.now() - openAIT0);
 
 		if (!openAIResponse.ok) {
 			return json(
