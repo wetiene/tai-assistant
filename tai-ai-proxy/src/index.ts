@@ -5,6 +5,10 @@ export interface Env {
 
 const MAX_BODY_BYTES = 4_500_000;
 
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+/** Stronger multimodal tier than nano; aligns with Phase 2 accuracy goals. */
+const OPENAI_MEAL_MODEL = "gpt-5.4-mini";
+
 type TaiInterpretMealRequest = {
 	text?: string;
 	/** Legacy / alternate shape */
@@ -44,6 +48,74 @@ type TaiInterpretMealResponse = {
 	confidence?: number;
 };
 
+/** JSON Schema for Responses API structured outputs (`strict: true`). Matches app contract camelCase keys. */
+const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
+	type: "object",
+	additionalProperties: false,
+	properties: {
+		interpretedMeals: {
+			type: "array",
+			items: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					label: { type: "string" },
+					timing: { type: "string" },
+					eatenAtGuessISO8601: {
+						type: "string",
+						description: "ISO-8601 guess when the meal was eaten; omit if unknown",
+					},
+					items: {
+						type: "array",
+						items: {
+							type: "object",
+							additionalProperties: false,
+							properties: {
+								name: { type: "string" },
+								amount: { type: "number" },
+								unit: { type: "string" },
+								calories: { type: "integer" },
+								proteinGrams: { type: "number" },
+								carbsGrams: { type: "number" },
+								fatGrams: { type: "number" },
+								fiberGrams: { type: "number" },
+							},
+							required: [
+								"name",
+								"amount",
+								"unit",
+								"calories",
+								"proteinGrams",
+								"carbsGrams",
+								"fatGrams",
+								"fiberGrams",
+							],
+						},
+					},
+					calories: { type: "integer" },
+					proteinGrams: { type: "number" },
+					carbsGrams: { type: "number" },
+					fatGrams: { type: "number" },
+					confidence: { type: "number" },
+				},
+				required: [
+					"label",
+					"timing",
+					"items",
+					"calories",
+					"proteinGrams",
+					"carbsGrams",
+					"fatGrams",
+					"confidence",
+				],
+			},
+		},
+		uiNotes: { type: "string", description: "Short guidance for the user; omit if none" },
+		confidence: { type: "number", description: "Aggregate confidence 0–1 when helpful; omit otherwise" },
+	},
+	required: ["interpretedMeals"],
+} satisfies Record<string, unknown>;
+
 function json(data: unknown, status = 200): Response {
 	return new Response(JSON.stringify(data), {
 		status,
@@ -64,7 +136,7 @@ function asRecord(x: unknown): Record<string, unknown> | null {
 }
 
 /**
- * OpenAI Responses API: assistant text is under output[].content[].text
+ * OpenAI Responses API: assistant structured text is under output[].content[].text
  * (often output[0].content[0] with type output_text).
  */
 function extractOutputText(raw: unknown): string | undefined {
@@ -88,6 +160,28 @@ function extractOutputText(raw: unknown): string | undefined {
 	return undefined;
 }
 
+function extractFirstRefusal(raw: unknown): string | undefined {
+	const root = asRecord(raw);
+	if (!root) return undefined;
+	const output = root.output;
+	if (!Array.isArray(output)) return undefined;
+	for (const block of output) {
+		const b = asRecord(block);
+		if (!b) continue;
+		const content = b.content;
+		if (!Array.isArray(content)) continue;
+		for (const part of content) {
+			const p = asRecord(part);
+			if (!p) continue;
+			if (p.type === "refusal" && typeof p.refusal === "string") {
+				return p.refusal;
+			}
+		}
+	}
+	return undefined;
+}
+
+/** Structured outputs normally return bare JSON; keep fence stripping for defensive parsing. */
 function parseJsonFromModelText(text: string): unknown {
 	const trimmed = text.trim();
 	const unfenced = trimmed
@@ -119,8 +213,6 @@ function readString(v: unknown): string | undefined {
 
 function pickMealsArray(parsed: Record<string, unknown>): unknown[] | null {
 	if (Array.isArray(parsed.interpretedMeals)) return parsed.interpretedMeals;
-	if (Array.isArray(parsed.interpreted_meals)) return parsed.interpreted_meals;
-	if (Array.isArray(parsed.meals)) return parsed.meals;
 	return null;
 }
 
@@ -156,16 +248,14 @@ function mapMeal(raw: unknown): TaiInterpretedMeal | null {
 		if (!it) return null;
 		items.push(it);
 	}
-	const eatenAtGuessISO8601 =
-		readString(o.eatenAtGuessISO8601) ??
-		readString(o.eatenAt) ??
-		readString(o.eaten_at) ??
-		null;
+	let eatenRaw = o.eatenAtGuessISO8601;
+	if (eatenRaw === null) eatenRaw = null;
+	const eatenStr = typeof eatenRaw === "string" ? eatenRaw : undefined;
 	const calories = readInt(o.calories ?? o.totalCalories ?? o.total_calories, 0);
 	return {
 		label,
 		timing,
-		eatenAtGuessISO8601: eatenAtGuessISO8601 ?? undefined,
+		eatenAtGuessISO8601: eatenStr ?? undefined,
 		items,
 		calories,
 		proteinGrams: readFiniteNumber(o.proteinGrams ?? o.protein_g, 0),
@@ -175,22 +265,19 @@ function mapMeal(raw: unknown): TaiInterpretedMeal | null {
 	};
 }
 
-function mapUiNotes(v: unknown): string | undefined {
-	if (typeof v === "string") return v;
-	if (Array.isArray(v)) {
-		const parts = v.filter((x): x is string => typeof x === "string");
-		if (parts.length) return parts.join("\n");
+function mapProviderStructuredToAppResponse(providerJson: unknown): TaiInterpretMealResponse | null {
+	const refusal = extractFirstRefusal(providerJson);
+	if (refusal !== undefined) {
+		console.log("[interpret-meal] openai_refusal=", refusal.slice(0, 200));
+		return null;
 	}
-	return undefined;
-}
-
-function mapProviderJsonToAppResponse(providerJson: unknown): TaiInterpretMealResponse | null {
 	const text = extractOutputText(providerJson);
 	if (text === undefined) return null;
 	let parsed: unknown;
 	try {
 		parsed = parseJsonFromModelText(text);
 	} catch {
+		console.log("[interpret-meal] json_parse_failed text_prefix=", text.slice(0, 240));
 		return null;
 	}
 	const root = asRecord(parsed);
@@ -203,17 +290,155 @@ function mapProviderJsonToAppResponse(providerJson: unknown): TaiInterpretMealRe
 		if (!meal) return null;
 		interpretedMeals.push(meal);
 	}
-	const uiNotes = mapUiNotes(root.uiNotes ?? root.ui_notes);
 	const out: TaiInterpretMealResponse = { interpretedMeals };
-	if (uiNotes !== undefined) out.uiNotes = uiNotes;
-	const rootConf = readFiniteNumber(root.confidence, NaN);
-	if (Number.isFinite(rootConf)) {
-		out.confidence = rootConf;
-	} else if (interpretedMeals.length > 0) {
+	const notesCandidate = root.uiNotes ?? root.ui_notes;
+	const trimmedNotes = typeof notesCandidate === "string" ? notesCandidate.trim() : "";
+	if (trimmedNotes.length > 0) out.uiNotes = trimmedNotes;
+	const rc = root.confidence;
+	if (typeof rc === "number" && Number.isFinite(rc)) out.confidence = rc;
+	if (out.confidence === undefined && interpretedMeals.length > 0) {
 		const sum = interpretedMeals.reduce((a, m) => a + m.confidence, 0);
 		out.confidence = sum / interpretedMeals.length;
 	}
 	return out;
+}
+
+function readContextString(ctx: Record<string, unknown> | undefined, key: string): string | undefined {
+	if (!ctx) return undefined;
+	const v = ctx[key];
+	return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
+}
+
+function buildSystemPrompt(): string {
+	return [
+		"You are Tai, a practical nutrition coach helping users log meals from photos and short notes.",
+		"Rules:",
+		"- Prioritise what you see in the image over free-text guesses when both are present.",
+		"- Name foods precisely (e.g. distinguish raw fish / sashimi from avocado or similar colours).",
+		"- Estimate calories and macros conservatively when uncertain; prefer slightly lower confidence over overconfidence.",
+		"- Output must follow the response JSON schema exactly (no prose outside JSON).",
+	].join("\n");
+}
+
+function buildUserContentParts(
+	body: TaiInterpretMealRequest,
+	imageB64: string | undefined,
+	mime: string,
+	isRetryHint: boolean
+): Array<{ type: string; detail?: string; image_url?: string; text?: string }> {
+	const parts: Array<{ type: string; detail?: string; image_url?: string; text?: string }> = [];
+	if (imageB64) {
+		parts.push({
+			type: "input_image",
+			detail: "high",
+			image_url: `data:${mime};base64,${imageB64}`,
+		});
+	}
+	parts.push({
+		type: "input_text",
+		text: "Identify all foods and estimate calories and macros.",
+	});
+
+	const trimmed = typeof body.text === "string" ? body.text.trim() : "";
+	if (trimmed.length > 0) {
+		parts.push({
+			type: "input_text",
+			text: `Optional user description:\n${trimmed}`,
+		});
+	}
+
+	const ctx = body.context !== undefined ? asRecord(body.context) ?? undefined : undefined;
+	const locale = readContextString(ctx, "localeIdentifier");
+	const tz = readContextString(ctx, "timeZoneIdentifier");
+	const lines: string[] = [];
+	if (locale) lines.push(`User locale: ${locale}`);
+	if (tz) lines.push(`Local time zone: ${tz}`);
+	if (lines.length > 0) {
+		parts.push({ type: "input_text", text: lines.join("\n") });
+	}
+
+	if (isRetryHint) {
+		parts.push({
+			type: "input_text",
+			text: "Return valid JSON matching the schema exactly. No explanation or markdown.",
+		});
+	}
+	return parts;
+}
+
+type OpenAIMealAttemptResult =
+	| { kind: "ok"; payload: TaiInterpretMealResponse }
+	| { kind: "http_error"; status: number }
+	| { kind: "structured_output_failed" };
+
+type InterpretMealOutcome =
+	| { status: "success"; payload: TaiInterpretMealResponse }
+	| { status: "ai_provider_error"; openaiHttpStatus: number }
+	| { status: "malformed_ai_response" };
+
+async function interpretWithOpenAIStructured(env: Env, body: TaiInterpretMealRequest, imageB64: string | undefined): Promise<InterpretMealOutcome> {
+	const mime = body.image?.mimeType?.trim() || "image/jpeg";
+
+	const attempt = async (isRetryHint: boolean): Promise<OpenAIMealAttemptResult> => {
+		const requestBody = {
+			model: OPENAI_MEAL_MODEL,
+			input: [
+				{
+					role: "system",
+					content: [{ type: "input_text", text: buildSystemPrompt() }],
+				},
+				{
+					role: "user",
+					content: buildUserContentParts(body, imageB64, mime, isRetryHint),
+				},
+			],
+			text: {
+				format: {
+					type: "json_schema",
+					name: "tai_meal_interpretation",
+					strict: true,
+					schema: TAI_MEAL_RESPONSE_JSON_SCHEMA,
+				},
+			},
+		};
+
+		const openAIT0 = Date.now();
+		const openAIResponse = await fetch(OPENAI_RESPONSES_URL, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(requestBody),
+		});
+		console.log("[interpret-meal] openai_fetch_ms=", Date.now() - openAIT0, "retry_hint=", isRetryHint);
+
+		if (!openAIResponse.ok) {
+			console.log("[interpret-meal] openai_http_status=", openAIResponse.status);
+			return { kind: "http_error", status: openAIResponse.status };
+		}
+
+		let providerJson: unknown;
+		try {
+			providerJson = await openAIResponse.json();
+		} catch {
+			return { kind: "structured_output_failed" };
+		}
+
+		const payload = mapProviderStructuredToAppResponse(providerJson);
+		if (payload) return { kind: "ok", payload };
+		return { kind: "structured_output_failed" };
+	};
+
+	let first = await attempt(false);
+	if (first.kind === "ok") return { status: "success", payload: first.payload };
+	if (first.kind === "http_error") return { status: "ai_provider_error", openaiHttpStatus: first.status };
+
+	console.log("[interpret-meal] retrying_structured_output");
+	let second = await attempt(true);
+	if (second.kind === "ok") return { status: "success", payload: second.payload };
+	if (second.kind === "http_error") return { status: "ai_provider_error", openaiHttpStatus: second.status };
+	return { status: "malformed_ai_response" };
 }
 
 export default {
@@ -257,88 +482,17 @@ export default {
 			return json({ error: "text_or_image_required" }, 400);
 		}
 
-		const schemaHint = [
-			"Return a single JSON object with exactly these keys:",
-			'- "interpretedMeals": array of meals',
-			'- "uiNotes": optional string (short guidance for the user)',
-			"",
-			'Each meal object must have: "label", "timing", "items", "calories" (integer),',
-			'"proteinGrams", "carbsGrams", "fatGrams", "confidence" (0-1).',
-			'Optional per meal: "eatenAtGuessISO8601" (ISO-8601 string).',
-			"",
-			'Each item in "items" must have: "name", "amount", "unit", "calories" (integer),',
-			'"proteinGrams", "carbsGrams", "fatGrams", "fiberGrams".',
-		].join("\n");
-
-		const prompt = [
-			"You are Tai, an AI nutrition strategist.",
-			"Return JSON only, no markdown fences.",
-			schemaHint,
-			"",
-			"Request:",
-			JSON.stringify({
-				text: body.text ?? null,
-				hasImage: Boolean(imageB64),
-				context: body.context ?? {},
-			}),
-		].join("\n");
-
-		const inputContent: Array<Record<string, unknown>> = [
-			{
-				type: "input_text",
-				text: prompt,
-			},
-		];
-
-		if (imageB64) {
-			const mime = body.image?.mimeType?.trim() || "image/jpeg";
-			inputContent.push({
-				type: "input_image",
-				image_url: `data:${mime};base64,${imageB64}`,
-			});
-		}
-
-		const openAIT0 = Date.now();
-		const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				model: "gpt-5.4-nano",
-				input: [
-					{
-						role: "user",
-						content: inputContent,
-					},
-				],
-			}),
-		});
-		console.log("[interpret-meal] openai_fetch_ms=", Date.now() - openAIT0);
-
-		if (!openAIResponse.ok) {
+		const outcome = await interpretWithOpenAIStructured(env, body, imageB64);
+		if (outcome.status === "success") return json(outcome.payload, 200);
+		if (outcome.status === "ai_provider_error") {
 			return json(
 				{
 					error: "ai_provider_error",
-					status: openAIResponse.status,
+					status: outcome.openaiHttpStatus,
 				},
 				502
 			);
 		}
-
-		let providerJson: unknown;
-		try {
-			providerJson = await openAIResponse.json();
-		} catch {
-			return json({ error: "malformed_ai_response" }, 502);
-		}
-
-		const appPayload = mapProviderJsonToAppResponse(providerJson);
-		if (!appPayload) {
-			return json({ error: "malformed_ai_response" }, 502);
-		}
-
-		return json(appPayload, 200);
+		return json({ error: "malformed_ai_response" }, 502);
 	},
 };
