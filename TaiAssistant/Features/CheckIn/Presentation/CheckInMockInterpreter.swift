@@ -20,6 +20,7 @@ struct MockCheckInInterpreter: CheckInInterpreting {
                     carbsGrams: normalized.contains("shake") ? 24 : 46,
                     fatGrams: normalized.contains("shake") ? 7 : 14,
                     confidence: 0.83,
+                    alternatives: [],
                     items: Self.baseItems(kind: normalized.contains("shake") ? .shake : .breakfast)
                 )
             )
@@ -37,6 +38,7 @@ struct MockCheckInInterpreter: CheckInInterpreting {
                     carbsGrams: normalized.contains("family") ? 71 : 58,
                     fatGrams: normalized.contains("family") ? 31 : 24,
                     confidence: 0.76,
+                    alternatives: [],
                     items: Self.baseItems(kind: normalized.contains("family") ? .dinner : .lunch)
                 )
             )
@@ -54,6 +56,7 @@ struct MockCheckInInterpreter: CheckInInterpreting {
                     carbsGrams: 54,
                     fatGrams: 18,
                     confidence: photoData == nil ? 0.63 : 0.68,
+                    alternatives: photoData == nil ? ["Salad plate", "Sandwich & soup"] : [],
                     items: Self.baseItems(kind: .defaultMeal)
                 )
             ]

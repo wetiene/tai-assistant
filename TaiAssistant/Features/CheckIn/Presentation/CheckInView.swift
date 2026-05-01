@@ -2,20 +2,12 @@ import SwiftUI
 import UIKit
 
 struct CheckInView: View {
-    let mealRepository: MealRepository
-    let ownerID: String
-    let interpreter: any CheckInInterpreting
-    var onMealsSaved: (() -> Void)? = nil
+    @State private var viewModel: CheckInViewModel
 
-    @State private var session = CheckInSessionDraft()
     @State private var isCameraPresented = false
-    @State private var isInterpreting = false
-    @State private var isSaving = false
     @State private var isPhotoPreviewPresented = false
-    @State private var errorMessage: String?
     @State private var isConfirmPressed = false
     @State private var isTaiNoteExpanded = false
-    @State private var dayProgress = DayProgress()
     @FocusState private var isComposerFocused: Bool
 
     private enum CheckInUIState {
@@ -25,10 +17,10 @@ struct CheckInView: View {
     }
 
     private var uiState: CheckInUIState {
-        if isInterpreting {
+        if viewModel.isInterpreting {
             return .processing
         }
-        if !session.interpretedMeals.isEmpty {
+        if !viewModel.session.interpretedMeals.isEmpty {
             return .result
         }
         return .typing
@@ -41,23 +33,20 @@ struct CheckInView: View {
         "Family dinner"
     ]
 
-    private struct DayProgress {
-        var consumedCalories: Int = 0
-        var targetCalories: Int = 2100
-        var consumedProtein: Int = 0
-        var proteinTarget: Int = 150
-    }
-
     init(
         mealRepository: MealRepository,
         ownerID: String,
         interpreter: any CheckInInterpreting = MockCheckInInterpreter(),
         onMealsSaved: (() -> Void)? = nil
     ) {
-        self.mealRepository = mealRepository
-        self.ownerID = ownerID
-        self.interpreter = interpreter
-        self.onMealsSaved = onMealsSaved
+        _viewModel = State(
+            initialValue: CheckInViewModel(
+                mealRepository: mealRepository,
+                ownerID: ownerID,
+                interpreter: interpreter,
+                onMealsSaved: onMealsSaved
+            )
+        )
     }
 
     var body: some View {
@@ -111,28 +100,28 @@ struct CheckInView: View {
             selectedPhotoPreview
         }
         .alert("Check In", isPresented: Binding(
-            get: { errorMessage != nil },
+            get: { viewModel.errorMessage != nil },
             set: { isPresented in
                 if !isPresented {
-                    errorMessage = nil
+                    viewModel.errorMessage = nil
                 }
             }
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
+            Text(viewModel.errorMessage ?? "")
         }
         .onAppear {
-            print("USING CHECKINVIEW")
             Task {
-                await refreshDayProgress()
+                await viewModel.refreshDayProgress()
             }
         }
     }
 
     private var composerCard: some View {
-        PrimaryCard(cornerRadius: 24) {
-            TextEditor(text: $session.userInput)
+        @Bindable var vm = viewModel
+        return PrimaryCard(cornerRadius: 24) {
+            TextEditor(text: $vm.session.userInput)
                 .frame(minHeight: 154)
                 .focused($isComposerFocused)
                 .scrollContentBackground(.hidden)
@@ -148,7 +137,7 @@ struct CheckInView: View {
                 Button {
                     isCameraPresented = true
                 } label: {
-                    Label(session.selectedPhotoData == nil ? "Take Photo" : "Retake Photo", systemImage: "camera.fill")
+                    Label(vm.session.selectedPhotoData == nil ? "Take Photo" : "Retake Photo", systemImage: "camera.fill")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(DSColor.coralEnd)
                         .padding(.horizontal, DSSpacing.md)
@@ -163,10 +152,11 @@ struct CheckInView: View {
                 Button {
                     isComposerFocused = false
                     Task {
-                        await inferMeals()
+                        isTaiNoteExpanded = false
+                        await viewModel.interpretCheckIn()
                     }
                 } label: {
-                    if isInterpreting {
+                    if viewModel.isInterpreting {
                         ProgressView()
                             .tint(.white)
                     } else {
@@ -175,8 +165,8 @@ struct CheckInView: View {
                 }
                 .buttonStyle(CoralGradientButtonStyle(isCompact: true))
                 .disabled(
-                    isInterpreting ||
-                    (session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && session.selectedPhotoData == nil)
+                    viewModel.isInterpreting ||
+                    (vm.session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && vm.session.selectedPhotoData == nil)
                 )
             }
 
@@ -198,7 +188,7 @@ struct CheckInView: View {
 
     @ViewBuilder
     private var selectedPhotoThumbnail: some View {
-        if let photoData = session.selectedPhotoData, let image = UIImage(data: photoData) {
+        if let photoData = viewModel.session.selectedPhotoData, let image = UIImage(data: photoData) {
             HStack(spacing: DSSpacing.sm) {
                 ZStack(alignment: .topTrailing) {
                     Button {
@@ -217,7 +207,7 @@ struct CheckInView: View {
                     .buttonStyle(.plain)
 
                     Button(action: {
-                        session.selectedPhotoData = nil
+                        viewModel.session.selectedPhotoData = nil
                     }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 18))
@@ -241,7 +231,7 @@ struct CheckInView: View {
 
     @ViewBuilder
     private var selectedPhotoPreview: some View {
-        if let photoData = session.selectedPhotoData, let image = UIImage(data: photoData) {
+        if let photoData = viewModel.session.selectedPhotoData, let image = UIImage(data: photoData) {
             NavigationStack {
                 ZStack {
                     Color.black.ignoresSafeArea()
@@ -272,7 +262,7 @@ struct CheckInView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DSSpacing.sm) {
                 ForEach(shortcuts, id: \.self) { shortcut in
                     Button {
-                        session.userInput = shortcut
+                        viewModel.session.userInput = shortcut
                     } label: {
                         Text(shortcut)
                             .font(.subheadline.weight(.medium))
@@ -289,23 +279,24 @@ struct CheckInView: View {
     }
 
     private var interpretedMealsSection: some View {
-        VStack(alignment: .leading, spacing: DSSpacing.lg) {
+        @Bindable var vm = viewModel
+        return VStack(alignment: .leading, spacing: DSSpacing.lg) {
             aiSummarySection
 
-            if !session.interpretedMeals.isEmpty {
+            if !vm.session.interpretedMeals.isEmpty {
                 Text("Inferred meals")
                     .font(.body.weight(.medium))
                     .foregroundStyle(DSColor.textPrimary)
             }
-            ForEach($session.interpretedMeals) { $meal in
-                CheckInMealCard(draft: $meal)
+            ForEach($vm.session.interpretedMeals) { $meal in
+                CheckInMealCard(draft: $meal, viewModel: viewModel)
             }
         }
     }
 
     @ViewBuilder
     private var aiSummarySection: some View {
-        if !session.interpretedMeals.isEmpty {
+        if !viewModel.session.interpretedMeals.isEmpty {
             VStack(alignment: .leading, spacing: DSSpacing.xs) {
                 Text(understoodAsText)
                     .font(.body.weight(.semibold))
@@ -344,7 +335,7 @@ struct CheckInView: View {
     }
 
     private var understoodAsText: String {
-        let meals = session.interpretedMeals
+        let meals = viewModel.session.interpretedMeals
         guard !meals.isEmpty else { return "your meal" }
 
         if meals.count == 1, let meal = meals.first {
@@ -363,18 +354,18 @@ struct CheckInView: View {
     }
 
     private var taiNoteText: String {
-        if let notes = session.interpretationNotes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+        if let notes = viewModel.session.interpretationNotes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
             return notes
         }
 
-        let allItems = session.interpretedMeals.flatMap(\.items)
+        let allItems = viewModel.session.interpretedMeals.flatMap(\.items)
         let itemNames = allItems.map { $0.name.lowercased() }
-        let totalProtein = session.interpretedMeals.reduce(0) { $0 + $1.proteinGrams }
-        let totalCarbs = session.interpretedMeals.reduce(0) { $0 + $1.carbsGrams }
-        let totalCalories = session.interpretedMeals.reduce(0) { $0 + $1.calories }
+        let totalProtein = viewModel.session.interpretedMeals.reduce(0) { $0 + $1.proteinGrams }
+        let totalCarbs = viewModel.session.interpretedMeals.reduce(0) { $0 + $1.carbsGrams }
+        let totalCalories = viewModel.session.interpretedMeals.reduce(0) { $0 + $1.calories }
 
-        let isOverCaloriesToday = dayProgress.consumedCalories > dayProgress.targetCalories
-        let isLowProteinToday = dayProgress.consumedProtein < dayProgress.proteinTarget
+        let isOverCaloriesToday = viewModel.dayProgress.consumedCalories > viewModel.dayProgress.targetCalories
+        let isLowProteinToday = viewModel.dayProgress.consumedProtein < viewModel.dayProgress.proteinTarget
         let isProteinPositiveMeal = totalProtein >= 25 || totalProtein >= totalCarbs
         let isHighCarbOrCalorieMeal = totalCarbs > totalProtein + 20 || totalCalories >= 600
         let isSuggestionInput = isSuggestionRequestInput
@@ -421,7 +412,7 @@ struct CheckInView: View {
     }
 
     private var isSuggestionRequestInput: Bool {
-        let input = session.userInput.lowercased()
+        let input = viewModel.session.userInput.lowercased()
         let phrases = [
             "what do you suggest",
             "what should i eat",
@@ -462,9 +453,9 @@ struct CheckInView: View {
 
     @ViewBuilder
     private var inlineConfirmSection: some View {
-        if !session.interpretedMeals.isEmpty {
-            Button(action: saveInterpretedMeals) {
-                if isSaving {
+        if !viewModel.session.interpretedMeals.isEmpty {
+            Button(action: { viewModel.saveInterpretedMeals() }) {
+                if viewModel.isSaving {
                     HStack(spacing: DSSpacing.xs) {
                         ProgressView()
                             .tint(.white)
@@ -489,88 +480,20 @@ struct CheckInView: View {
         }
     }
 
-    private func inferMeals() async {
-        guard !isInterpreting else { return }
-        isInterpreting = true
-        isTaiNoteExpanded = false
-        defer { isInterpreting = false }
-        do {
-            let interpretation = try await interpreter.interpret(
-                input: session.userInput,
-                photoData: session.selectedPhotoData
-            )
-            session.interpretedMeals = interpretation.meals
-            session.interpretationNotes = interpretation.uiNotes
-            await refreshDayProgress()
-        } catch {
-            errorMessage = "Could not interpret this check in. Please try again."
-        }
-    }
-
     private func handleCapturedImage(_ image: UIImage) {
         guard let data = CheckInPhotoUploadPreprocessor.prepareMealUploadJPEG(from: image) else {
-            errorMessage = "Could not process this photo. Please try again."
+            viewModel.errorMessage = "Could not process this photo. Please try again."
             return
         }
-        session.selectedPhotoData = data
-    }
-
-    private func saveInterpretedMeals() {
-        guard !isSaving else { return }
-        Task {
-            isSaving = true
-            defer { isSaving = false }
-            do {
-                for draft in session.interpretedMeals {
-                    let mealLog = MealLog(
-                        ownerID: ownerID,
-                        eatenAt: draft.eatenAt,
-                        timing: draft.timing,
-                        notes: draft.label
-                    )
-                    mealLog.items = draft.items.map { item in
-                        MealItem(
-                            name: item.name,
-                            amount: item.amount,
-                            unit: item.unit,
-                            calories: item.calories,
-                            proteinGrams: item.proteinGrams,
-                            carbsGrams: item.carbsGrams,
-                            fatGrams: item.fatGrams,
-                            fiberGrams: item.fiberGrams
-                        )
-                    }
-                    try await mealRepository.createMealLog(mealLog)
-                }
-                session = CheckInSessionDraft()
-                onMealsSaved?()
-                await refreshDayProgress()
-            } catch {
-                errorMessage = "Could not save check in meals. Please retry."
-            }
-        }
-    }
-
-    private func refreshDayProgress() async {
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: .now)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? .now
-        do {
-            let meals = try await mealRepository.fetchMealLogs(ownerID: ownerID, from: dayStart, to: dayEnd)
-            let consumedCalories = meals.flatMap(\.items).reduce(0) { $0 + $1.calories }
-            let consumedProtein = Int(meals.flatMap(\.items).reduce(0.0) { $0 + $1.proteinGrams }.rounded())
-            await MainActor.run {
-                dayProgress.consumedCalories = consumedCalories
-                dayProgress.consumedProtein = consumedProtein
-            }
-        } catch {
-            // Keep prior day progress values if refresh fails.
-        }
+        viewModel.session.selectedPhotoData = data
     }
 }
 
 private struct CheckInMealCard: View {
     @Binding var draft: CheckInMealDraft
+    var viewModel: CheckInViewModel
+
+    private var showsAmbiguityBlock: Bool { draft.shouldShowAmbiguityUI }
 
     var body: some View {
         PrimaryCard(cornerRadius: 20) {
@@ -585,6 +508,20 @@ private struct CheckInMealCard: View {
             TextField("Meal label", text: $draft.label)
                 .font(.title3.weight(.semibold))
                 .textFieldStyle(.roundedBorder)
+                .onChange(of: draft.label) { _, _ in
+                    viewModel.registerUserEditedMealLabel(for: draft.id)
+                }
+
+            if showsAmbiguityBlock {
+                if !draft.alternatives.isEmpty {
+                    ambiguityChipsRow
+                } else if draft.isLowConfidence {
+                    Text("Check this looks right")
+                        .font(.caption)
+                        .foregroundStyle(DSColor.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
 
             HStack(spacing: DSSpacing.sm) {
                 StatPill(title: "kcal", value: "\(draft.calories)")
@@ -592,6 +529,33 @@ private struct CheckInMealCard: View {
                 StatPill(title: "C", value: "\(draft.carbsGrams)g")
                 StatPill(title: "F", value: "\(draft.fatGrams)g")
             }
+        }
+    }
+
+    private var ambiguityChipsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DSSpacing.xs) {
+                ForEach(Array(draft.alternatives.enumerated()), id: \.offset) { _, alt in
+                    Button {
+                        viewModel.selectAlternative(alt, for: draft.id)
+                    } label: {
+                        Text(alt)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(DSColor.textPrimary)
+                            .lineLimit(1)
+                            .padding(.horizontal, DSSpacing.sm)
+                            .padding(.vertical, DSSpacing.xs)
+                            .background(DSColor.warmSurface)
+                            .overlay(
+                                Capsule()
+                                    .stroke(DSColor.textSecondary.opacity(0.22), lineWidth: 1)
+                            )
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 2)
         }
     }
 }

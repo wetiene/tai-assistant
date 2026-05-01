@@ -1,5 +1,11 @@
 import Foundation
 
+/// Centralised thresholds for check-in AI meal UI (ambiguity, low-confidence hints).
+enum CheckInAIConfidence {
+    /// When model confidence is below this, nudge the user if there are no alternative labels.
+    static let mealAmbiguityThreshold: Double = 0.72
+}
+
 struct CheckInSessionDraft {
     var userInput: String = ""
     var selectedPhotoData: Data?
@@ -22,7 +28,18 @@ struct CheckInMealDraft: Identifiable {
     var carbsGrams: Int
     var fatGrams: Int
     var confidence: Double
+    var alternatives: [String]
     var items: [CheckInMealItemDraft]
+    /// User chose a label (chip or manual edit); not persisted.
+    var isUserConfirmed: Bool = false
+}
+
+extension CheckInMealDraft {
+    var isAmbiguous: Bool { !alternatives.isEmpty }
+
+    var isLowConfidence: Bool { confidence < CheckInAIConfidence.mealAmbiguityThreshold }
+
+    var shouldShowAmbiguityUI: Bool { isAmbiguous || isLowConfidence }
 }
 
 struct CheckInMealItemDraft: Identifiable {
@@ -58,6 +75,7 @@ extension CheckInMealDraft {
         self.carbsGrams = Int(aiMeal.carbsGrams.rounded())
         self.fatGrams = Int(aiMeal.fatGrams.rounded())
         self.confidence = min(max(aiMeal.confidence, 0), 1)
+        self.alternatives = aiMeal.alternatives
         self.items = aiMeal.items.map {
             CheckInMealItemDraft(
                 id: UUID(),
@@ -71,5 +89,6 @@ extension CheckInMealDraft {
                 fiberGrams: $0.fiberGrams
             )
         }
+        self.isUserConfirmed = false
     }
 }
