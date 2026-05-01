@@ -31,12 +31,6 @@ type TaiInterpretMealItem = {
 
 type TaiInterpretedMeal = {
 	label: string;
-	/** Ingredients that are visually certain in the image. */
-	visibleIngredients: string[];
-	/** Ingredients/components that are plausible but not visually certain. */
-	uncertainIngredients: string[];
-	/** Candidate starches when starch type is unclear. */
-	possibleStarches: string[];
 	timing: string;
 	eatenAtGuessISO8601?: string | null;
 	items: TaiInterpretMealItem[];
@@ -68,21 +62,6 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 				additionalProperties: false,
 				properties: {
 					label: { type: "string" },
-					visibleIngredients: {
-						type: "array",
-						description: "Visually certain ingredients only; [] when none",
-						items: { type: "string" },
-					},
-					uncertainIngredients: {
-						type: "array",
-						description: "Plausible but uncertain ingredients/components; [] when none",
-						items: { type: "string" },
-					},
-					possibleStarches: {
-						type: "array",
-						description: "Candidate starches if unclear (e.g. pasta/rice/potato); [] when clear or none",
-						items: { type: "string" },
-					},
 					timing: { type: "string" },
 					eatenAtGuessISO8601: {
 						type: "string",
@@ -129,9 +108,6 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 				// Strict JSON Schema requires `required` to list every key in `properties`.
 				required: [
 					"label",
-					"visibleIngredients",
-					"uncertainIngredients",
-					"possibleStarches",
 					"timing",
 					"eatenAtGuessISO8601",
 					"items",
@@ -294,9 +270,6 @@ function mapMeal(raw: unknown): TaiInterpretedMeal | null {
 	const label = readString(o.label);
 	const timing = readString(o.timing);
 	if (label === undefined || timing === undefined) return null;
-	const visibleIngredients = readStringArray(o.visibleIngredients, 12);
-	const uncertainIngredients = readStringArray(o.uncertainIngredients, 12);
-	const possibleStarches = readStringArray(o.possibleStarches, 6);
 	const itemsRaw = o.items;
 	if (!Array.isArray(itemsRaw)) return null;
 	const items: TaiInterpretMealItem[] = [];
@@ -312,9 +285,6 @@ function mapMeal(raw: unknown): TaiInterpretedMeal | null {
 	const alternatives = readStringArray(o.alternatives, 3);
 	return {
 		label,
-		visibleIngredients,
-		uncertainIngredients,
-		possibleStarches,
 		timing,
 		eatenAtGuessISO8601: eatenStr ?? undefined,
 		items,
@@ -375,16 +345,16 @@ function buildSystemPrompt(): string {
 	return [
 		"You are Tai, a practical nutrition coach helping users log meals from photos and short notes.",
 		"Rules:",
-		"- Follow this order: (1) identify visually certain components, (2) identify uncertain components, (3) infer a cautious meal label.",
+		"- Follow this order: (1) identify what is clearly visible, (2) acknowledge uncertainty, (3) infer a cautious meal label.",
 		"- Prioritise what is visually certain over stylistic dish-name guesses.",
 		"- Do not guess a specific dish if key components are unclear. Prefer generic descriptive labels.",
-		"- Keep visibleIngredients limited to what is clearly seen; put uncertain guesses in uncertainIngredients.",
-		"- If starch is not visually obvious, do not assume one starch. Use possibleStarches to list plausible options.",
+		"- If key components are uncertain, reflect uncertainty using cautious label wording, lower confidence, meaningful alternatives, and uiNotes.",
+		"- If starch is not visually obvious, do not assume one starch in the primary label.",
 		"- If multiple meal interpretations are plausible, use a broad label and provide diverse alternatives (different meal families, not near-synonyms).",
 		"- Avoid narrow labels like 'beef stew'/'chili con carne'/'spaghetti bolognese' unless clearly supported by visible evidence.",
 		"- Confidence must reflect uncertainty honestly. When uncertain, lower confidence and use cautious label wording.",
 		"- Estimate calories and macros conservatively when uncertain; prefer lower confidence over overconfidence.",
-		"- Arrays must always be present: visibleIngredients, uncertainIngredients, possibleStarches, alternatives (use [] if none).",
+		"- alternatives must always be present as an array ([] if none).",
 		"- Output must follow the response JSON schema exactly (no prose outside JSON).",
 	].join("\n");
 }
@@ -405,7 +375,7 @@ function buildUserContentParts(
 	}
 	parts.push({
 		type: "input_text",
-		text: "Return observation-first meal interpretation: list visible ingredients, then uncertain components, then a cautious label; include macros and uncertainty fields per schema.",
+		text: "Return observation-first meal interpretation with cautious labeling, confidence, alternatives, uiNotes, and full macro/item fields per schema.",
 	});
 
 	const trimmed = typeof body.text === "string" ? body.text.trim() : "";

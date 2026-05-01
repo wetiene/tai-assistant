@@ -80,7 +80,8 @@ Notes:
       "proteinGrams": 33.0,
       "carbsGrams": 46.0,
       "fatGrams": 14.0,
-      "confidence": 0.83
+      "confidence": 0.83,
+      "alternatives": []
     }
   ],
   "uiNotes": "Estimated from text and image. Please confirm portions."
@@ -88,6 +89,7 @@ Notes:
 ```
 
 `interpretedMeals` is the primary contract. Free-form prose should not be used as the primary data payload.
+Uncertainty is expressed through cautious `label` wording, `confidence`, `alternatives`, and `uiNotes` (not extra ingredient uncertainty arrays).
 
 ## Suggested backend -> OpenAI Responses API shape
 

@@ -29,7 +29,7 @@ describe("worker routing", () => {
 });
 
 describe("interpretation schema + mapping", () => {
-	it("parses visible/uncertain/starch arrays and alternatives from structured output", () => {
+	it("parses alternatives and core meal fields from structured output", () => {
 		const providerPayload = {
 			output: [
 				{
@@ -40,9 +40,6 @@ describe("interpretation schema + mapping", () => {
 								interpretedMeals: [
 									{
 										label: "tomato-based beef dish with unknown starch",
-										visibleIngredients: ["beef mince", "tomato sauce", "sausage"],
-										uncertainIngredients: ["onion", "chili"],
-										possibleStarches: ["pasta", "potato", "rice"],
 										timing: "dinner",
 										eatenAtGuessISO8601: "",
 										items: [
@@ -76,13 +73,11 @@ describe("interpretation schema + mapping", () => {
 
 		const mapped = __test.mapProviderStructuredToAppResponse(providerPayload);
 		expect(mapped).not.toBeNull();
-		expect(mapped?.interpretedMeals[0].visibleIngredients).toEqual(["beef mince", "tomato sauce", "sausage"]);
-		expect(mapped?.interpretedMeals[0].uncertainIngredients).toEqual(["onion", "chili"]);
-		expect(mapped?.interpretedMeals[0].possibleStarches).toEqual(["pasta", "potato", "rice"]);
+		expect(mapped?.interpretedMeals[0].label).toEqual("tomato-based beef dish with unknown starch");
 		expect(mapped?.interpretedMeals[0].alternatives).toEqual(["beef pasta", "beef stew", "meat sauce with rice"]);
 	});
 
-	it("defaults new arrays safely when model payload omits them", () => {
+	it("parses core fields safely when optional arrays are absent", () => {
 		const providerPayload = {
 			output: [
 				{
@@ -126,29 +121,29 @@ describe("interpretation schema + mapping", () => {
 
 		const mapped = __test.mapProviderStructuredToAppResponse(providerPayload);
 		expect(mapped).not.toBeNull();
-		expect(mapped?.interpretedMeals[0].visibleIngredients).toEqual([]);
-		expect(mapped?.interpretedMeals[0].uncertainIngredients).toEqual([]);
-		expect(mapped?.interpretedMeals[0].possibleStarches).toEqual([]);
+		expect(mapped?.interpretedMeals[0].label).toEqual("mixed meat and sauce dish");
+		expect(mapped?.interpretedMeals[0].alternatives).toEqual(["meat sauce with rice"]);
 	});
 
-	it("schema requires new uncertainty arrays in strict mode", () => {
+	it("schema keeps strict required list aligned with remaining fields", () => {
 		const schema = __test.TAI_MEAL_RESPONSE_JSON_SCHEMA as {
 			properties: {
 				interpretedMeals: { items: { required: string[] } };
 			};
 		};
 		const required = schema.properties.interpretedMeals.items.required;
-		expect(required).toContain("visibleIngredients");
-		expect(required).toContain("uncertainIngredients");
-		expect(required).toContain("possibleStarches");
+		expect(required).toContain("label");
+		expect(required).toContain("timing");
 		expect(required).toContain("alternatives");
+		expect(required).not.toContain("visibleIngredients");
+		expect(required).not.toContain("uncertainIngredients");
+		expect(required).not.toContain("possibleStarches");
 	});
 
 	it("prompt enforces cautious, observation-first behavior for uncertainty", () => {
 		const prompt = __test.buildSystemPrompt();
 		expect(prompt).toContain("Follow this order");
 		expect(prompt).toContain("Do not guess a specific dish");
-		expect(prompt).toContain("possibleStarches");
 		expect(prompt).toContain("diverse alternatives");
 		expect(prompt).toContain("Confidence must reflect uncertainty honestly");
 	});
