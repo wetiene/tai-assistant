@@ -181,6 +181,11 @@ struct OpenAIProxyAIService: AIService {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        #if DEBUG
+        if config.proxyBearerToken?.isEmpty != false {
+            print("AI proxy token missing from local config")
+        }
+        #endif
         if let token = config.proxyBearerToken, !token.isEmpty {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -203,6 +208,11 @@ struct OpenAIProxyAIService: AIService {
             throw AIServiceError.malformedResponse
         }
         guard (200...299).contains(httpResponse.statusCode) else {
+            #if DEBUG
+            if httpResponse.statusCode == 401, config.proxyBearerToken?.isEmpty != false {
+                print("AI proxy token missing from local config")
+            }
+            #endif
             throw AIServiceError.unexpectedStatusCode(httpResponse.statusCode, body: "<redacted>")
         }
 
