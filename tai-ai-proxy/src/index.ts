@@ -330,7 +330,7 @@ function mapMeal(raw: unknown): TaiInterpretedMeal | null {
 function mapProviderStructuredToAppResponse(providerJson: unknown): TaiInterpretMealResponse | null {
 	const refusal = extractFirstRefusal(providerJson);
 	if (refusal !== undefined) {
-		console.log("[interpret-meal] openai_refusal=", refusal.slice(0, 200));
+		console.log("[interpret-meal] openai_refusal");
 		return null;
 	}
 	const text = extractOutputText(providerJson);
@@ -339,7 +339,7 @@ function mapProviderStructuredToAppResponse(providerJson: unknown): TaiInterpret
 	try {
 		parsed = parseJsonFromModelText(text);
 	} catch {
-		console.log("[interpret-meal] json_parse_failed text_prefix=", text.slice(0, 240));
+		console.log("[interpret-meal] json_parse_failed");
 		return null;
 	}
 	const root = asRecord(parsed);
@@ -505,12 +505,7 @@ async function interpretWithOpenAIStructured(env: Env, body: TaiInterpretMealReq
 		if (!openAIResponse.ok) {
 			const errText = await openAIResponse.text();
 			const openAIDetail = summarizeOpenAITextError(errText);
-			console.log(
-				"[interpret-meal] openai_http_status=",
-				openAIResponse.status,
-				"openai_error=",
-				openAIDetail ?? errText.slice(0, 500)
-			);
+			console.log("[interpret-meal] openai_http_status=", openAIResponse.status);
 			return { kind: "http_error", status: openAIResponse.status, openAIDetail };
 		}
 

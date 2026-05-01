@@ -130,16 +130,12 @@ struct AIServiceCheckInInterpreter: CheckInInterpreting {
     }
 
     func interpret(input: String, photoData: Data?) async throws -> CheckInInterpretationResult {
-        print("USING AI SERVICE")
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageInput: AIInterpretMealImageInput?
         if let photoData, !photoData.isEmpty {
             guard let encoded = CheckInPhotoUploadPreprocessor.prepareMealUploadJPEGWithMetrics(fromOriginalJPEGData: photoData) else {
                 throw AIServiceError.invalidRequestPayload
             }
-            let origMB = Double(encoded.originalByteCount) / 1_000_000.0
-            let prepMB = Double(encoded.preparedByteCount) / 1_000_000.0
-            print("[CheckInPhoto] original_mb=\(String(format: "%.3f", origMB)) resized_mb=\(String(format: "%.3f", prepMB)) encode_s=\(String(format: "%.3f", encoded.encodeSeconds))")
             imageInput = AIInterpretMealImageInput(
                 base64Data: encoded.jpegData.base64EncodedString(),
                 mimeType: "image/jpeg",
@@ -150,12 +146,6 @@ struct AIServiceCheckInInterpreter: CheckInInterpreting {
         }
 
         do {
-            let requestStart = Date()
-            print("[CheckInPhoto] request_start_unix=\(requestStart.timeIntervalSince1970)")
-            defer {
-                let requestEnd = Date()
-                print("[CheckInPhoto] request_end_unix=\(requestEnd.timeIntervalSince1970) request_duration_s=\(String(format: "%.3f", requestEnd.timeIntervalSince(requestStart)))")
-            }
             let response = try await aiService.interpretMeal(
                 request: AIInterpretMealRequest(
                     text: trimmed.isEmpty ? nil : trimmed,
@@ -172,12 +162,6 @@ struct AIServiceCheckInInterpreter: CheckInInterpreting {
                 meals: response.interpretedMeals.map { CheckInMealDraft(aiMeal: $0) },
                 uiNotes: response.uiNotes
             )
-        } catch {
-            print("AIServiceCheckInInterpreter error: \(error)")
-            if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
-                print("AIServiceCheckInInterpreter localizedError: \(description)")
-            }
-            throw error
-        }
+        } catch { throw error }
     }
 }

@@ -195,7 +195,7 @@ async function interpretMealWithOpenAI(requestPayload) {
 
   const rawResponseText = await openAIResponse.text();
   maybeLogDev("[openai] status", openAIResponse.status);
-  maybeLogDev("[openai] raw", rawResponseText);
+  maybeLogDev("[openai] raw", "<redacted>");
 
   if (!openAIResponse.ok) {
     throw new Error(`OpenAI request failed with status ${openAIResponse.status}`);
