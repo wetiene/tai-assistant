@@ -9,7 +9,7 @@ const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 /** Stronger multimodal tier than nano; aligns with Phase 2 accuracy goals. */
 const OPENAI_MEAL_MODEL = "gpt-5.4-mini";
 
-type TaiInterpretMealRequest = {
+export type TaiInterpretMealRequest = {
 	text?: string;
 	/** Legacy / alternate shape */
 	imageBase64?: string;
@@ -341,21 +341,137 @@ function readContextString(ctx: Record<string, unknown> | undefined, key: string
 	return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
 }
 
+function readBoolean(v: unknown): boolean | undefined {
+	if (typeof v === "boolean") return v;
+	return undefined;
+}
+
+type MealRefinementLineItem = {
+	name: string;
+	amount: number;
+	unit: string;
+	calories: number;
+	proteinGrams: number;
+	carbsGrams: number;
+	fatGrams: number;
+	fiberGrams: number;
+};
+
+type MealRefinementMeal = {
+	label: string;
+	timing: string;
+	calories: number;
+	proteinGrams: number;
+	carbsGrams: number;
+	fatGrams: number;
+	confidence: number;
+	isUserConfirmedLabel: boolean;
+	items: MealRefinementLineItem[];
+};
+
+type MealRefinementPayload = {
+	meals: MealRefinementMeal[];
+	priorUserTextLines: string[];
+	hasPhotoAttachment: boolean;
+};
+
+function mapRefinementLineItem(raw: unknown): MealRefinementLineItem | null {
+	const o = asRecord(raw);
+	if (!o) return null;
+	const name = readString(o.name);
+	const unit = readString(o.unit);
+	if (name === undefined || unit === undefined) return null;
+	return {
+		name,
+		amount: readFiniteNumber(o.amount, 0),
+		unit,
+		calories: readInt(o.calories, 0),
+		proteinGrams: readFiniteNumber(o.proteinGrams, 0),
+		carbsGrams: readFiniteNumber(o.carbsGrams, 0),
+		fatGrams: readFiniteNumber(o.fatGrams, 0),
+		fiberGrams: readFiniteNumber(o.fiberGrams, 0),
+	};
+}
+
+function parseMealRefinementFromContext(ctx: Record<string, unknown> | undefined): MealRefinementPayload | null {
+	if (!ctx) return null;
+	const root = ctx["mealRefinement"];
+	if (root === undefined || root === null) return null;
+	const rec = asRecord(root);
+	if (!rec) return null;
+	const mealsRaw = rec["meals"];
+	if (!Array.isArray(mealsRaw) || mealsRaw.length === 0) return null;
+	const meals: MealRefinementMeal[] = [];
+	for (const m of mealsRaw) {
+		const mr = asRecord(m);
+		if (!mr) return null;
+		const label = readString(mr.label);
+		const timing = readString(mr.timing);
+		if (label === undefined || timing === undefined) return null;
+		const itemsRaw = mr["items"];
+		if (!Array.isArray(itemsRaw)) return null;
+		const items: MealRefinementLineItem[] = [];
+		for (const ir of itemsRaw) {
+			const li = mapRefinementLineItem(ir);
+			if (!li) return null;
+			items.push(li);
+		}
+		const isUserConfirmed = readBoolean(mr.isUserConfirmedLabel) ?? false;
+		meals.push({
+			label,
+			timing,
+			calories: readInt(mr.calories, 0),
+			proteinGrams: readFiniteNumber(mr.proteinGrams, 0),
+			carbsGrams: readFiniteNumber(mr.carbsGrams, 0),
+			fatGrams: readFiniteNumber(mr.fatGrams, 0),
+			confidence: readFiniteNumber(mr.confidence, 0),
+			isUserConfirmedLabel: isUserConfirmed,
+			items,
+		});
+	}
+	const priorRaw = rec["priorUserTextLines"];
+	const priorUserTextLines: string[] = [];
+	if (Array.isArray(priorRaw)) {
+		for (const line of priorRaw) {
+			if (typeof line !== "string") continue;
+			const t = line.trim();
+			if (t.length > 0) priorUserTextLines.push(t);
+		}
+	}
+	const hasPhotoAttachment = readBoolean(rec.hasPhotoAttachment) ?? false;
+	return { meals, priorUserTextLines, hasPhotoAttachment };
+}
+
 function buildSystemPrompt(): string {
 	return [
 		"You are Tai, a practical nutrition coach helping users log meals from photos and short notes.",
-		"Rules:",
-		"- Follow this order: (1) identify what is clearly visible, (2) acknowledge uncertainty, (3) infer a cautious meal label.",
-		"- Prioritise what is visually certain over stylistic dish-name guesses.",
-		"- Do not guess a specific dish if key components are unclear. Prefer generic descriptive labels.",
-		"- If key components are uncertain, reflect uncertainty using cautious label wording, lower confidence, meaningful alternatives, and uiNotes.",
-		"- If starch is not visually obvious, do not assume one starch in the primary label.",
-		"- If multiple meal interpretations are plausible, use a broad label and provide diverse alternatives (different meal families, not near-synonyms).",
-		"- Avoid narrow labels like 'beef stew'/'chili con carne'/'spaghetti bolognese' unless clearly supported by visible evidence.",
-		"- Confidence must reflect uncertainty honestly. When uncertain, lower confidence and use cautious label wording.",
-		"- Estimate calories and macros conservatively when uncertain; prefer lower confidence over overconfidence.",
-		"- alternatives must always be present as an array ([] if none).",
-		"- Output must follow the response JSON schema exactly (no prose outside JSON).",
+		"Tone: concise and outcome-focused. Avoid long reasoning, chain-of-thought, or internal-model narration. Prefer short confirmations and clear adjustment outcomes.",
+		"",
+		"A) Instruction priority (highest authority first — never invert):",
+		"1) Latest user message in the request `text` field when non-empty. Treat it as authoritative for corrections: dish type, ingredients, portions, exclusions, preparation, and quantities.",
+		"2) Earlier user lines from structured context `priorUserTextLines` when present.",
+		"3) Structured prior meal estimate in `mealRefinement` (labels, macros, items, flags). This is the current estimate to revise, not a substitute for new user instructions.",
+		"4) Image interpretation — informs composition and portions when the user has not contradicted it.",
+		"5) Free-floating prior AI guesses not reflected in structured state — lowest authority.",
+		"",
+		"When user text conflicts with the image, follow the user and update the estimate. Do not treat explicit corrections as weak optional notes.",
+		"",
+		"B) First pass (no `mealRefinement` and empty user `text`): use the image with cautious labeling, honest confidence, and alternatives when ambiguous.",
+		"",
+		"C) Generic correction rules (no food-specific shortcuts):",
+		"- Dish type: update `label` to align with the user's correction.",
+		"- If `isUserConfirmedLabel` is true for a meal row, keep that `label` exactly unless the user's latest text clearly renames or re-identifies the dish; still refresh `items` and macro totals for their corrections.",
+		"- Ingredients: add/remove items and adjust macros; honor removals and exclusions.",
+		"- Portion / quantity: when the user states a clear portion change, serving count, or scalar multiplier, scale calories and macros proportionally from the structured prior meal totals unless new details require a full re-estimate.",
+		"- Uncertainty: reflect in `confidence` and briefly in `uiNotes` without overriding user-stated facts.",
+		"",
+		"D) `uiNotes`: at most 1–2 short sentences. After a refinement, state the outcome plainly (what changed). Do not claim the result is mainly from the photo when the user corrected it. Do not repeat that the image is unclear after the user already clarified.",
+		"",
+		"E) `confidence`: reflect genuine limits of evidence. Never use low confidence to ignore explicit user corrections. If photo and user disagree, follow the user. When totals are driven mainly by user-stated corrections rather than new independent visual evidence, do not output very high confidence — obedience to instructions is not the same as visual certainty.",
+		"",
+		"F) If instructions are impossible or unsafe, refuse briefly in `uiNotes` and keep JSON schema-valid output.",
+		"",
+		"G) Output only JSON matching the schema (no markdown fences, no extra prose). `alternatives` must always be an array ([] when none).",
 	].join("\n");
 }
 
@@ -366,6 +482,14 @@ function buildUserContentParts(
 	isRetryHint: boolean
 ): Array<{ type: string; detail?: string; image_url?: string; text?: string }> {
 	const parts: Array<{ type: string; detail?: string; image_url?: string; text?: string }> = [];
+	const ctx = body.context !== undefined ? asRecord(body.context) ?? undefined : undefined;
+	const refinement = parseMealRefinementFromContext(ctx);
+
+	parts.push({
+		type: "input_text",
+		text: "Apply SYSTEM priority rules. Blocks below may include an image, the latest user message, and JSON `mealRefinement` prior state.",
+	});
+
 	if (imageB64) {
 		parts.push({
 			type: "input_image",
@@ -373,20 +497,27 @@ function buildUserContentParts(
 			image_url: `data:${mime};base64,${imageB64}`,
 		});
 	}
-	parts.push({
-		type: "input_text",
-		text: "Return observation-first meal interpretation with cautious labeling, confidence, alternatives, uiNotes, and full macro/item fields per schema.",
-	});
 
 	const trimmed = typeof body.text === "string" ? body.text.trim() : "";
 	if (trimmed.length > 0) {
 		parts.push({
 			type: "input_text",
-			text: `Optional user description:\n${trimmed}`,
+			text: `Latest user message (highest authority):\n${trimmed}`,
+		});
+	} else {
+		parts.push({
+			type: "input_text",
+			text: "Latest user message (highest authority): (empty — use structured prior and image per SYSTEM rules.)",
 		});
 	}
 
-	const ctx = body.context !== undefined ? asRecord(body.context) ?? undefined : undefined;
+	if (refinement !== null) {
+		parts.push({
+			type: "input_text",
+			text: `Structured prior meal state (JSON). Revise this estimate; photo attached this round: ${refinement.hasPhotoAttachment}.\n${JSON.stringify(refinement)}`,
+		});
+	}
+
 	const locale = readContextString(ctx, "localeIdentifier");
 	const tz = readContextString(ctx, "timeZoneIdentifier");
 	const lines: string[] = [];
@@ -403,6 +534,19 @@ function buildUserContentParts(
 		});
 	}
 	return parts;
+}
+
+/** Concatenates user `input_text` parts for unit tests (prompt wiring). */
+function collectUserTextBlocksForTests(
+	body: TaiInterpretMealRequest,
+	imageB64: string | undefined,
+	mime: string,
+	isRetryHint: boolean
+): string[] {
+	const parts = buildUserContentParts(body, imageB64, mime, isRetryHint);
+	return parts
+		.filter((p) => p.type === "input_text" && typeof p.text === "string")
+		.map((p) => p.text as string);
 }
 
 type OpenAIMealAttemptResult =
@@ -563,4 +707,6 @@ export const __test = {
 	TAI_MEAL_RESPONSE_JSON_SCHEMA,
 	buildSystemPrompt,
 	mapProviderStructuredToAppResponse,
+	parseMealRefinementFromContext,
+	collectUserTextBlocksForTests,
 };

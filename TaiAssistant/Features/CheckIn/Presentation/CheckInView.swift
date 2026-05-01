@@ -29,11 +29,11 @@ struct CheckInView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.xl) {
-                Text("Update your meal")
+                Text("Checkin with Tai")
                     .font(.title.weight(.bold))
                     .foregroundStyle(DSColor.textPrimary)
 
-                conversationHistorySection
+                contextSummarySection
                 composerCard
                 if !viewModel.session.interpretedMeals.isEmpty {
                     interpretedMealsSection
@@ -133,7 +133,7 @@ struct CheckInView: View {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Label("Update meal", systemImage: "sparkles")
+                        Label("", systemImage: "sparkles")
                     }
                 }
                 .buttonStyle(CoralGradientButtonStyle(isCompact: true))
@@ -215,35 +215,53 @@ struct CheckInView: View {
         }
     }
 
-    private var conversationHistorySection: some View {
-        Group {
-            if !viewModel.messages.isEmpty {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: DSSpacing.xs) {
-                        ForEach(viewModel.messages) { message in
-                            HStack {
-                                Text(message.text)
-                                    .font(.caption)
-                                    .foregroundStyle(message.role == .user ? DSColor.textPrimary : DSColor.textSecondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, DSSpacing.sm)
-                                    .padding(.vertical, DSSpacing.xs)
-                                    .background(message.role == .user ? DSColor.warmSurface : DSColor.surface)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    private var contextSummarySection: some View {
+        let rows = viewModel.contextRows
+        let contextSummaryMaxHeight: CGFloat = 100
+        let rowHeight: CGFloat = 36
+        let spacing = DSSpacing.xs
+        
+        return Group {
+            if !rows.isEmpty {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: spacing) {
+                            ForEach(rows) { row in
+                                contextSummaryRow(row.text)
+                                    .id(row.id)
                             }
                         }
                     }
+                    .onAppear {
+                        guard let lastID = rows.last?.id else { return }
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                    .onChange(of: rows.count) { _, _ in
+                        guard let lastID = rows.last?.id else { return }
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            proxy.scrollTo(lastID, anchor: .bottom)
+                        }
+                    }
                 }
-                .frame(maxHeight: 170)
+                .frame(maxHeight: contextSummaryMaxHeight)
             }
         }
+    }
+
+    private func contextSummaryRow(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(DSColor.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DSSpacing.sm)
+            .padding(.vertical, DSSpacing.xs)
+            .background(DSColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var interpretedMealsSection: some View {
         @Bindable var vm = viewModel
         return VStack(alignment: .leading, spacing: DSSpacing.lg) {
-            aiSummarySection
-
             if !vm.session.interpretedMeals.isEmpty {
                 Text("Inferred meals")
                     .font(.body.weight(.medium))
@@ -252,46 +270,6 @@ struct CheckInView: View {
             ForEach($vm.session.interpretedMeals) { $meal in
                 CheckInMealCard(draft: $meal, viewModel: viewModel)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var aiSummarySection: some View {
-        if !viewModel.session.interpretedMeals.isEmpty {
-            VStack(alignment: .leading, spacing: DSSpacing.xs) {
-                Text(understoodAsText)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(DSColor.textPrimary.opacity(0.88))
-                    .lineLimit(2)
-
-                HStack(alignment: .firstTextBaseline, spacing: DSSpacing.xs) {
-                    Image(systemName: "sparkles")
-                        .font(.caption)
-                        .foregroundStyle(DSColor.coralEnd)
-                    Text(taiNoteText)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(DSColor.textPrimary)
-                        .lineLimit(isTaiNoteExpanded ? nil : 3)
-                        .onTapGesture {
-                            if shouldShowTaiNoteExpansion {
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    isTaiNoteExpanded.toggle()
-                                }
-                            }
-                        }
-                }
-            }
-            .padding(.horizontal, DSSpacing.sm)
-            .padding(.vertical, DSSpacing.xs + 2)
-            .background(DSColor.warmSurface.opacity(0.55))
-            .overlay(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(DSColor.coralGradient.opacity(0.35))
-                    .frame(width: 3)
-                    .padding(.vertical, 6)
-                    .padding(.leading, 2)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 

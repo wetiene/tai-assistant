@@ -16,12 +16,21 @@ final class CheckInViewModel {
     private let onMealsSaved: (() -> Void)?
 
     var session = CheckInSessionDraft()
-    var messages: [CheckInMessage] = []
+    var contextRows: [CheckInContextRow] = []
     var isInterpreting = false
     var isSaving = false
     var errorMessage: String?
     private(set) var dayProgress = DayProgress()
-    private let maxMessages = 6
+    /// Row cap for scroll-back history (not the on-screen row count).
+    private let maxStoredContextRows = 24
+
+    private enum AutomatedInterpretationPrompt {
+        static let photoOnlyNewSession = "Interpret this meal from the attached image."
+        static let photoOnlyRefinement = "Update the meal estimate using structured meal context and the image if present."
+        static func reestimate(label: String) -> String {
+            "Re-estimate this meal based on current confirmed label: \(label)."
+        }
+    }
 
     init(
         mealRepository: MealRepository,
@@ -42,35 +51,56 @@ final class CheckInViewModel {
         if rawInput.isEmpty && !hasPhoto && session.interpretedMeals.isEmpty {
             return
         }
-        if !rawInput.isEmpty || hasPhoto {
-            appendMessage(role: .user, text: rawInput.isEmpty ? "Updated meal details from photo" : rawInput)
+        if hasPhoto {
+            ensurePhotoContextRow()
+        }
+        if !rawInput.isEmpty {
+            appendContextRow(kind: .user, text: rawInput)
         }
         session.userInput = ""
 
-        await runInterpretation(input: buildInterpretationInput(from: rawInput))
+        let activeMealIDForRefinement = (session.interpretedMeals.count == 1) ? session.interpretedMeals[0].id : nil
+        await runInterpretation(
+            input: buildInterpretationInput(from: rawInput),
+            rawUserMessageForRefinement: rawInput,
+            explicitReestimateMealID: activeMealIDForRefinement
+        )
     }
 
     func updateEstimate(for mealId: UUID) async {
         guard !isInterpreting else { return }
         guard let meal = session.interpretedMeals.first(where: { $0.id == mealId }) else { return }
-        let request = "Re-estimate this meal based on current confirmed label: \(meal.label)."
-        appendMessage(role: .user, text: "Update estimate: \(meal.label)")
-        await runInterpretation(input: buildInterpretationInput(from: request), explicitReestimateMealID: mealId)
+        let request = AutomatedInterpretationPrompt.reestimate(label: meal.label)
+        await runInterpretation(
+            input: buildInterpretationInput(from: request),
+            rawUserMessageForRefinement: request,
+            explicitReestimateMealID: mealId
+        )
     }
 
-    private func runInterpretation(input: String, explicitReestimateMealID: UUID? = nil) async {
+    private func runInterpretation(
+        input: String,
+        rawUserMessageForRefinement: String? = nil,
+        explicitReestimateMealID: UUID? = nil
+    ) async {
         guard !isInterpreting else { return }
         isInterpreting = true
         defer { isInterpreting = false }
         do {
+            let refinementPayload = buildMealRefinementPayload(
+                rawUserMessageToExcludeFromPrior: rawUserMessageForRefinement
+            )
             let interpretation = try await interpreter.interpret(
                 input: input,
-                photoData: session.selectedPhotoData
+                photoData: session.selectedPhotoData,
+                mealRefinement: refinementPayload
             )
+            let capConfidence = shouldApplyUserLedRefinementConfidenceCap(rawUserMessage: rawUserMessageForRefinement)
             let reconciliation = mergeAIResponseIntoDrafts(
                 existingDrafts: session.interpretedMeals,
                 aiMeals: interpretation.meals,
-                explicitReestimateMealID: explicitReestimateMealID
+                explicitReestimateMealID: explicitReestimateMealID,
+                applyUserLedRefinementConfidenceCap: capConfidence
             )
             session.interpretedMeals = reconciliation.drafts
             for idx in session.interpretedMeals.indices {
@@ -80,11 +110,10 @@ final class CheckInViewModel {
                 session.interpretedMeals[idx].lastMacroEstimateBasis = session.interpretedMeals[idx].label
             }
             session.interpretationNotes = interpretation.uiNotes
-            appendMessage(role: .tai, text: "Updated estimate")
+            appendContextRow(kind: .ai, text: aiSummaryText(from: interpretation))
             await refreshDayProgress()
         } catch {
             errorMessage = "Could not interpret this check in. Please try again."
-            appendMessage(role: .tai, text: "Couldn't update estimate. Please try again.")
         }
     }
 
@@ -116,6 +145,7 @@ final class CheckInViewModel {
                     try await mealRepository.createMealLog(mealLog)
                 }
                 session = CheckInSessionDraft()
+                contextRows = []
                 onMealsSaved?()
                 await refreshDayProgress()
             } catch {
@@ -174,14 +204,75 @@ final class CheckInViewModel {
 
     private func buildInterpretationInput(from userText: String) -> String {
         let cleaned = userText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let mealContext = session.interpretedMeals.enumerated().map { idx, meal in
-            "Meal \(idx + 1): \(meal.label)"
-        }
-        let contextLine = mealContext.isEmpty ? "" : "\nCurrent meal state:\n" + mealContext.joined(separator: "\n")
         if cleaned.isEmpty {
-            return "Update the meal estimate using the current meal state and photo context if present.\(contextLine)"
+            if session.interpretedMeals.isEmpty {
+                return AutomatedInterpretationPrompt.photoOnlyNewSession
+            }
+            return AutomatedInterpretationPrompt.photoOnlyRefinement
         }
-        return "\(cleaned)\(contextLine)"
+        return cleaned
+    }
+
+    private func shouldApplyUserLedRefinementConfidenceCap(rawUserMessage: String?) -> Bool {
+        guard let raw = rawUserMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return false
+        }
+        if isAutomatedProxyUserText(raw) { return false }
+        return true
+    }
+
+    private func isAutomatedProxyUserText(_ text: String) -> Bool {
+        if text == AutomatedInterpretationPrompt.photoOnlyNewSession { return true }
+        if text == AutomatedInterpretationPrompt.photoOnlyRefinement { return true }
+        if text.hasPrefix("Re-estimate this meal based on current confirmed label:") { return true }
+        return false
+    }
+
+    private func adjustedMergeConfidence(_ modelConfidence: Double, applyUserLedCap: Bool) -> Double {
+        let clamped = min(max(modelConfidence, 0), 1)
+        guard applyUserLedCap else { return clamped }
+        return min(clamped, CheckInAIConfidence.userRefinementConfidenceCeiling)
+    }
+
+    private func buildMealRefinementPayload(rawUserMessageToExcludeFromPrior: String?) -> AIProxyMealRefinementPayload? {
+        guard !session.interpretedMeals.isEmpty else { return nil }
+        let meals = session.interpretedMeals.map { draft in
+            AIProxyMealRefinementPayload.Meal(
+                label: draft.label,
+                timing: draft.timing.rawValue,
+                calories: draft.calories,
+                proteinGrams: Double(draft.proteinGrams),
+                carbsGrams: Double(draft.carbsGrams),
+                fatGrams: Double(draft.fatGrams),
+                confidence: draft.confidence,
+                isUserConfirmedLabel: draft.isUserConfirmed,
+                items: draft.items.map { item in
+                    AIProxyMealRefinementPayload.LineItem(
+                        name: item.name,
+                        amount: item.amount,
+                        unit: item.unit,
+                        calories: item.calories,
+                        proteinGrams: item.proteinGrams,
+                        carbsGrams: item.carbsGrams,
+                        fatGrams: item.fatGrams,
+                        fiberGrams: item.fiberGrams
+                    )
+                }
+            )
+        }
+        let userLines = contextRows.filter { $0.kind == .user }.map(\.text)
+        let latestTrimmed = rawUserMessageToExcludeFromPrior?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let priorUserTextLines: [String]
+        if !latestTrimmed.isEmpty, userLines.last == latestTrimmed {
+            priorUserTextLines = Array(userLines.dropLast())
+        } else {
+            priorUserTextLines = userLines
+        }
+        return AIProxyMealRefinementPayload(
+            meals: meals,
+            priorUserTextLines: priorUserTextLines,
+            hasPhotoAttachment: session.selectedPhotoData != nil
+        )
     }
 
     private struct MealReconciliationResult {
@@ -264,7 +355,8 @@ final class CheckInViewModel {
     private func mergeAIResponseIntoDrafts(
         existingDrafts: [CheckInMealDraft],
         aiMeals: [CheckInMealDraft],
-        explicitReestimateMealID: UUID?
+        explicitReestimateMealID: UUID?,
+        applyUserLedRefinementConfidenceCap: Bool
     ) -> MealReconciliationResult {
         var drafts = existingDrafts
         var availableIDs = Set(existingDrafts.map(\.id))
@@ -273,6 +365,30 @@ final class CheckInViewModel {
 
         if let explicitReestimateMealID,
            let targetIndex = drafts.firstIndex(where: { $0.id == explicitReestimateMealID }) {
+            if aiMeals.count == 1, let aiMeal = aiMeals.first {
+                let current = drafts[targetIndex]
+                var merged = current
+                merged.timing = aiMeal.timing
+                merged.eatenAt = aiMeal.eatenAt
+                merged.calories = aiMeal.calories
+                merged.proteinGrams = aiMeal.proteinGrams
+                merged.carbsGrams = aiMeal.carbsGrams
+                merged.fatGrams = aiMeal.fatGrams
+                merged.confidence = adjustedMergeConfidence(
+                    aiMeal.confidence,
+                    applyUserLedCap: applyUserLedRefinementConfidenceCap
+                )
+                merged.items = aiMeal.items
+                merged.alternatives = current.isUserConfirmed ? [] : aiMeal.alternatives
+                if !current.isUserConfirmed {
+                    merged.label = aiMeal.label
+                }
+                merged.originalAILabel = current.originalAILabel ?? aiMeal.originalAILabel
+                drafts[targetIndex] = merged
+                reestimatedDraftIDs.insert(explicitReestimateMealID)
+                return MealReconciliationResult(drafts: drafts, reestimatedDraftIDs: reestimatedDraftIDs)
+            }
+
             guard let aiMeal = bestAIResultForExplicitReestimate(target: drafts[targetIndex], aiMeals: aiMeals) else {
                 // Explicit re-estimate should fail safe: keep current draft and surface macro review state.
                 drafts[targetIndex].macrosNeedReview = true
@@ -287,7 +403,10 @@ final class CheckInViewModel {
             merged.proteinGrams = aiMeal.proteinGrams
             merged.carbsGrams = aiMeal.carbsGrams
             merged.fatGrams = aiMeal.fatGrams
-            merged.confidence = aiMeal.confidence
+            merged.confidence = adjustedMergeConfidence(
+                aiMeal.confidence,
+                applyUserLedCap: applyUserLedRefinementConfidenceCap
+            )
             merged.items = aiMeal.items
             merged.alternatives = current.isUserConfirmed ? [] : aiMeal.alternatives
             if !current.isUserConfirmed {
@@ -295,7 +414,52 @@ final class CheckInViewModel {
             }
             merged.originalAILabel = current.originalAILabel ?? aiMeal.originalAILabel
             drafts[targetIndex] = merged
+            availableIDs.remove(explicitReestimateMealID)
             reestimatedDraftIDs.insert(explicitReestimateMealID)
+
+            let matchedKey = normalizedMealKey(for: aiMeal)
+            let remainingAIMeals = aiMeals.filter { normalizedMealKey(for: $0) != matchedKey }
+            for extraAIMeal in remainingAIMeals {
+                guard let matchedID = bestMatchExistingDraft(
+                    for: extraAIMeal,
+                    existingDrafts: existingDrafts,
+                    availableIDs: availableIDs,
+                    explicitReestimateMealID: nil
+                ) else {
+                    var extra = extraAIMeal
+                    extra.confidence = adjustedMergeConfidence(
+                        extraAIMeal.confidence,
+                        applyUserLedCap: applyUserLedRefinementConfidenceCap
+                    )
+                    newDrafts.append(extra)
+                    reestimatedDraftIDs.insert(extra.id)
+                    continue
+                }
+                guard let idx = drafts.firstIndex(where: { $0.id == matchedID }) else { continue }
+                let currentExtra = drafts[idx]
+                var mergedExtra = currentExtra
+                mergedExtra.timing = extraAIMeal.timing
+                mergedExtra.eatenAt = extraAIMeal.eatenAt
+                mergedExtra.calories = extraAIMeal.calories
+                mergedExtra.proteinGrams = extraAIMeal.proteinGrams
+                mergedExtra.carbsGrams = extraAIMeal.carbsGrams
+                mergedExtra.fatGrams = extraAIMeal.fatGrams
+                mergedExtra.confidence = adjustedMergeConfidence(
+                    extraAIMeal.confidence,
+                    applyUserLedCap: applyUserLedRefinementConfidenceCap
+                )
+                mergedExtra.items = extraAIMeal.items
+                mergedExtra.alternatives = currentExtra.isUserConfirmed ? [] : extraAIMeal.alternatives
+                if !currentExtra.isUserConfirmed {
+                    mergedExtra.label = extraAIMeal.label
+                }
+                mergedExtra.originalAILabel = currentExtra.originalAILabel ?? extraAIMeal.originalAILabel
+                drafts[idx] = mergedExtra
+                availableIDs.remove(matchedID)
+                reestimatedDraftIDs.insert(matchedID)
+            }
+
+            drafts.append(contentsOf: newDrafts)
             return MealReconciliationResult(drafts: drafts, reestimatedDraftIDs: reestimatedDraftIDs)
         }
 
@@ -306,8 +470,13 @@ final class CheckInViewModel {
                 availableIDs: availableIDs,
                 explicitReestimateMealID: explicitReestimateMealID
             ) else {
-                newDrafts.append(aiMeal)
-                reestimatedDraftIDs.insert(aiMeal.id)
+                var added = aiMeal
+                added.confidence = adjustedMergeConfidence(
+                    aiMeal.confidence,
+                    applyUserLedCap: applyUserLedRefinementConfidenceCap
+                )
+                newDrafts.append(added)
+                reestimatedDraftIDs.insert(added.id)
                 continue
             }
 
@@ -321,7 +490,10 @@ final class CheckInViewModel {
             merged.proteinGrams = aiMeal.proteinGrams
             merged.carbsGrams = aiMeal.carbsGrams
             merged.fatGrams = aiMeal.fatGrams
-            merged.confidence = aiMeal.confidence
+            merged.confidence = adjustedMergeConfidence(
+                aiMeal.confidence,
+                applyUserLedCap: applyUserLedRefinementConfidenceCap
+            )
             merged.items = aiMeal.items
             merged.alternatives = current.isUserConfirmed ? [] : aiMeal.alternatives
             if !current.isUserConfirmed {
@@ -371,12 +543,39 @@ final class CheckInViewModel {
         return top.meal
     }
 
-    private func appendMessage(role: MessageRole, text: String) {
+    private func ensurePhotoContextRow() {
+        let alreadyHasPhoto = contextRows.contains { $0.kind == .photo }
+        guard !alreadyHasPhoto else { return }
+        appendContextRow(kind: .photo, text: "Photo attached")
+    }
+
+    private func appendContextRow(kind: CheckInContextRowKind, text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        messages.append(CheckInMessage(id: UUID(), role: role, text: trimmed))
-        if messages.count > maxMessages {
-            messages = Array(messages.suffix(maxMessages))
+        if contextRows.last?.kind == kind, contextRows.last?.text == trimmed {
+            return
+        }
+        contextRows.append(CheckInContextRow(id: UUID(), kind: kind, text: trimmed))
+        if contextRows.count > maxStoredContextRows {
+            contextRows = Array(contextRows.suffix(maxStoredContextRows))
         }
     }
+
+    private func aiSummaryText(from interpretation: CheckInInterpretationResult) -> String {
+        let notes = interpretation.uiNotes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !notes.isEmpty {
+            return Self.clipForContextSummary(notes)
+        }
+        return "Estimate updated."
+    }
+
+    private static let contextSummaryCharacterLimit = 160
+
+    private static func clipForContextSummary(_ text: String) -> String {
+        guard text.count > contextSummaryCharacterLimit else { return text }
+        let end = text.index(text.startIndex, offsetBy: contextSummaryCharacterLimit - 1)
+        let prefix = text[..<end].trimmingCharacters(in: .whitespacesAndNewlines)
+        return prefix + "…"
+    }
+
 }

@@ -17,10 +17,43 @@ struct AIInterpretMealImageInput: Codable {
     var uploadReference: String?
 }
 
+/// Structured prior state for refinement rounds; consumed by `tai-ai-proxy` (`context.mealRefinement`).
+struct AIProxyMealRefinementPayload: Codable, Sendable {
+    struct LineItem: Codable, Sendable {
+        var name: String
+        var amount: Double
+        var unit: String
+        var calories: Int
+        var proteinGrams: Double
+        var carbsGrams: Double
+        var fatGrams: Double
+        var fiberGrams: Double
+    }
+
+    struct Meal: Codable, Sendable {
+        var label: String
+        var timing: String
+        var calories: Int
+        var proteinGrams: Double
+        var carbsGrams: Double
+        var fatGrams: Double
+        var confidence: Double
+        /// When true, treat `label` as user-authoritative unless the latest user message clearly renames the dish.
+        var isUserConfirmedLabel: Bool
+        var items: [LineItem]
+    }
+
+    var meals: [Meal]
+    /// Older user-authored lines from the thread (excludes the message sent in `text` for this request).
+    var priorUserTextLines: [String]
+    var hasPhotoAttachment: Bool
+}
+
 struct AIInterpretMealContext: Codable {
     var ownerID: String?
     var localeIdentifier: String?
     var timeZoneIdentifier: String?
+    var mealRefinement: AIProxyMealRefinementPayload?
 }
 
 struct AIInterpretMealResponse: Codable {

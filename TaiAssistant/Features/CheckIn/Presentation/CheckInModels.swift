@@ -4,6 +4,27 @@ import Foundation
 enum CheckInAIConfidence {
     /// When model confidence is below this, nudge the user if there are no alternative labels.
     static let mealAmbiguityThreshold: Double = 0.72
+    /// After explicit user-authored refinement text, cap model confidence so it is not treated as fully observation-backed.
+    static let userRefinementConfidenceCeiling: Double = 0.88
+}
+
+extension Array where Element == CheckInContextRow {
+    /// Groups end at each Tai (`.ai`) row; any trailing rows without a following `.ai` form one open tail group.
+    func checkIn_interactionGroups() -> [[CheckInContextRow]] {
+        var groups: [[CheckInContextRow]] = []
+        var current: [CheckInContextRow] = []
+        for row in self {
+            current.append(row)
+            if row.kind == .ai {
+                groups.append(current)
+                current = []
+            }
+        }
+        if !current.isEmpty {
+            groups.append(current)
+        }
+        return groups
+    }
 }
 
 struct CheckInSessionDraft {
@@ -18,14 +39,15 @@ struct CheckInSessionDraft {
     }
 }
 
-enum MessageRole: Equatable {
+enum CheckInContextRowKind {
+    case photo
     case user
-    case tai
+    case ai
 }
 
-struct CheckInMessage: Identifiable {
+struct CheckInContextRow: Identifiable {
     let id: UUID
-    let role: MessageRole
+    let kind: CheckInContextRowKind
     let text: String
 }
 
@@ -72,7 +94,17 @@ struct CheckInMealItemDraft: Identifiable {
 }
 
 protocol CheckInInterpreting {
-    func interpret(input: String, photoData: Data?) async throws -> CheckInInterpretationResult
+    func interpret(
+        input: String,
+        photoData: Data?,
+        mealRefinement: AIProxyMealRefinementPayload?
+    ) async throws -> CheckInInterpretationResult
+}
+
+extension CheckInInterpreting {
+    func interpret(input: String, photoData: Data?) async throws -> CheckInInterpretationResult {
+        try await interpret(input: input, photoData: photoData, mealRefinement: nil)
+    }
 }
 
 struct CheckInInterpretationResult {

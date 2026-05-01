@@ -51,6 +51,13 @@
             ReferencedContainer = "container:TaiAssistant.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "TAI_AI_PROXY_BEARER_TOKEN"
+            value = "3f7c9e8a6b2d41c5f9a1e0d7c4b8a6e2f1c9d7b5a3e8c6f4d2b1a9e7c5f3d1a8"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

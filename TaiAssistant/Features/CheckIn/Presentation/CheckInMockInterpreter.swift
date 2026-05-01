@@ -1,7 +1,11 @@
 import Foundation
 
 struct MockCheckInInterpreter: CheckInInterpreting {
-    func interpret(input: String, photoData: Data?) async throws -> CheckInInterpretationResult {
+    func interpret(
+        input: String,
+        photoData: Data?,
+        mealRefinement: AIProxyMealRefinementPayload?
+    ) async throws -> CheckInInterpretationResult {
         try await Task.sleep(nanoseconds: 450_000_000)
 
         let normalized = input.lowercased()
@@ -129,7 +133,11 @@ struct AIServiceCheckInInterpreter: CheckInInterpreting {
         self.timeZoneIdentifier = timeZoneIdentifier
     }
 
-    func interpret(input: String, photoData: Data?) async throws -> CheckInInterpretationResult {
+    func interpret(
+        input: String,
+        photoData: Data?,
+        mealRefinement: AIProxyMealRefinementPayload?
+    ) async throws -> CheckInInterpretationResult {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageInput: AIInterpretMealImageInput?
         if let photoData, !photoData.isEmpty {
@@ -153,7 +161,8 @@ struct AIServiceCheckInInterpreter: CheckInInterpreting {
                     context: AIInterpretMealContext(
                         ownerID: ownerID,
                         localeIdentifier: localeIdentifier,
-                        timeZoneIdentifier: timeZoneIdentifier
+                        timeZoneIdentifier: timeZoneIdentifier,
+                        mealRefinement: mealRefinement
                     )
                 )
             )
