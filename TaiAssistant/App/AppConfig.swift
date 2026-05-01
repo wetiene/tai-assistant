@@ -23,8 +23,8 @@ struct RuntimeAppConfig {
         isIPhoneOnlyV1: true,
         localOwnerID: "preview.user",
         mealInterpretationProvider: .openAIProxy,
-        aiProxyBaseURL: URL(string: "http://192.168.86.42:8080"),
-        aiProxyBearerToken: nil,
+        aiProxyBaseURL: URL(string: "https://tai-ai-proxy.taiassistant.workers.dev"),
+        aiProxyBearerToken: "3f7c9e8a6b2d41c5f9a1e0d7c4b8a6e2f1c9d7b5a3e8c6f4d2b1a9e7c5f3d1a8",
         aiInterpretMealPath: "/ai/interpret-meal"
     )
 }
