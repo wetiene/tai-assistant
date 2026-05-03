@@ -9,6 +9,7 @@ struct GoalsView: View {
     @State private var isSaving = false
     @State private var saveMessage: String?
     @State private var saveError: String?
+    @FocusState private var isGoalPromptFocused: Bool
 
     private let samplePrompts = GoalPreset.defaultPresets
 
@@ -45,8 +46,23 @@ struct GoalsView: View {
             }
             .padding(DSSpacing.lg)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .onTapGesture {
+            isGoalPromptFocused = false
+        }
         .background(DSColor.background.ignoresSafeArea())
         .navigationTitle("Goals")
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button {
+                    isGoalPromptFocused = false
+                } label: {
+                    Label("Done", systemImage: "keyboard.chevron.compact.down")
+                        .font(.subheadline.weight(.semibold))
+                }
+            }
+        }
     }
 
     private var inputStep: some View {
@@ -71,22 +87,44 @@ struct GoalsView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(DSColor.textSecondary)
 
-                TextEditor(text: $goalPrompt)
-                    .font(.body)
-                    .frame(minHeight: 98)
-                    .padding(DSSpacing.sm)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.white.opacity(0.65))
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(DSColor.coralStart.opacity(0.2), lineWidth: 1)
-                    )
-            }
+                ZStack(alignment: .bottomTrailing) {
+                    TextEditor(text: $goalPrompt)
+                        .font(.body)
+                        .frame(minHeight: 98)
+                        .focused($isGoalPromptFocused)
+                        .padding(.leading, DSSpacing.sm)
+                        .padding(.vertical, DSSpacing.sm)
+                        .padding(.trailing, 56)
+                        .scrollContentBackground(.hidden)
 
-            Button("Preview extracted targets", action: previewDraft)
-                .buttonStyle(CoralGradientButtonStyle())
-                .disabled(goalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(action: previewDraft) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(
+                                LinearGradient(
+                                    colors: [DSColor.coralStart, DSColor.coralEnd],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .clipShape(Circle())
+                            .shadow(color: DSColor.coralEnd.opacity(0.28), radius: 10, x: 0, y: 5)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, DSSpacing.xs)
+                    .padding(.bottom, 4)
+                    .disabled(goalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .frame(minHeight: 98)
+                .background(DSColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(DSColor.coralStart.opacity(0.24), lineWidth: 1)
+                )
+            }
         }
     }
 
