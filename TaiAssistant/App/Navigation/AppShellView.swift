@@ -69,7 +69,13 @@ struct AppShellView: View {
             .tag(Tab.checkIn)
 
             NavigationStack {
-                GoalsView(goalRepository: dependencies.goalRepository, ownerID: config.localOwnerID)
+                GoalsView(
+                    goalRepository: dependencies.goalRepository,
+                    aiService: dependencies.aiService,
+                    ownerID: config.localOwnerID,
+                    localeIdentifier: Locale.current.identifier,
+                    timeZoneIdentifier: TimeZone.current.identifier
+                )
             }
             .tabItem { Label("Goals", systemImage: "target") }
             .tag(Tab.goals)

@@ -21,6 +21,15 @@ describe("worker routing", () => {
 		expect(await response.json()).toEqual({ error: "not_found" });
 	});
 
+	it("returns method_not_allowed for GET on interpret-goal (unit style)", async () => {
+		const request = new IncomingRequest("http://example.com/ai/interpret-goal", { method: "GET" });
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(request, env, ctx);
+		await waitOnExecutionContext(ctx);
+		expect(response.status).toBe(405);
+		expect(await response.json()).toEqual({ error: "method_not_allowed" });
+	});
+
 	it("returns not_found for unknown paths (integration style)", async () => {
 		const response = await SELF.fetch("https://example.com/");
 		expect(response.status).toBe(404);
@@ -234,5 +243,53 @@ describe("interpretation schema + mapping", () => {
 		expect(joined).toContain("portion multiplier");
 		expect(joined).toContain("Structured prior meal state");
 		expect(joined).toContain("Prior estimate label");
+	});
+});
+
+describe("goal interpretation schema + mapping", () => {
+	it("parses goal structured output from provider payload", () => {
+		const providerPayload = {
+			output: [
+				{
+					content: [
+						{
+							type: "output_text",
+							text: JSON.stringify({
+								originalPrompt: "Lose 5kg by September",
+								goalType: "fat_loss",
+								title: "Fat loss with strength focus",
+								calorieTarget: 1800,
+								proteinTarget: 150,
+								carbsTarget: 160,
+								fatTarget: 60,
+								fiberTarget: 25,
+								waterTarget: 2500,
+								activityIntent: "Keep lifting 3x weekly",
+								uiNotes: "Moderate deficit; protein protects muscle.",
+								confidence: 0.82,
+							}),
+						},
+					],
+				},
+			],
+		};
+
+		const mapped = __test.mapProviderStructuredToGoalResponse(providerPayload);
+		expect(mapped).not.toBeNull();
+		expect(mapped?.goalType).toBe("fat_loss");
+		expect(mapped?.calorieTarget).toBe(1800);
+		expect(mapped?.proteinTarget).toBe(150);
+		expect(mapped?.uiNotes).toContain("Moderate deficit");
+	});
+
+	it("goal schema strict required includes every property key", () => {
+		const schema = __test.TAI_GOAL_RESPONSE_JSON_SCHEMA as {
+			properties: Record<string, unknown>;
+			required: string[];
+		};
+		const keys = Object.keys(schema.properties);
+		for (const k of keys) {
+			expect(schema.required).toContain(k);
+		}
 	});
 });

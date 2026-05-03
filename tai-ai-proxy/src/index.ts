@@ -17,6 +17,27 @@ export type TaiInterpretMealRequest = {
 	context?: Record<string, unknown>;
 };
 
+export type TaiInterpretGoalRequest = {
+	prompt: string;
+	context?: Record<string, unknown>;
+};
+
+/** Matches iOS `AIInterpretGoalResponse` camelCase keys. */
+export type TaiInterpretGoalResponse = {
+	originalPrompt: string;
+	goalType: string;
+	title: string;
+	calorieTarget: number;
+	proteinTarget: number;
+	carbsTarget: number;
+	fatTarget: number;
+	fiberTarget: number;
+	waterTarget: number;
+	activityIntent: string;
+	uiNotes: string;
+	confidence: number;
+};
+
 /** Matches iOS `AIInterpretMealResponse` / nested meal types (Codable keys). */
 type TaiInterpretMealItem = {
 	name: string;
@@ -130,6 +151,46 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 		},
 	},
 	required: ["interpretedMeals", "uiNotes", "confidence"],
+} satisfies Record<string, unknown>;
+
+/** JSON Schema for goal interpretation (`POST /ai/interpret-goal`). Every property is required for `strict: true`. */
+const TAI_GOAL_RESPONSE_JSON_SCHEMA = {
+	type: "object",
+	additionalProperties: false,
+	properties: {
+		originalPrompt: { type: "string", description: "Echo the user's goal text verbatim" },
+		goalType: {
+			type: "string",
+			description: "Short machine tag e.g. fat_loss, maintenance, muscle_gain, performance, other",
+		},
+		title: { type: "string", description: "Human-readable goal title" },
+		calorieTarget: { type: "integer", description: "Daily calorie target (kcal)" },
+		proteinTarget: { type: "number", description: "Daily protein grams" },
+		carbsTarget: { type: "number", description: "Daily carbohydrate grams" },
+		fatTarget: { type: "number", description: "Daily fat grams" },
+		fiberTarget: { type: "integer", description: "Daily fiber grams target; use 0 if unknown" },
+		waterTarget: { type: "integer", description: "Daily water milliliters; use 0 if unknown" },
+		activityIntent: { type: "string", description: "Training or lifestyle intent; empty string if none" },
+		uiNotes: {
+			type: "string",
+			description: "1–2 short sentences for the user; empty string if none",
+		},
+		confidence: { type: "number", description: "0–1 confidence in the macro targets" },
+	},
+	required: [
+		"originalPrompt",
+		"goalType",
+		"title",
+		"calorieTarget",
+		"proteinTarget",
+		"carbsTarget",
+		"fatTarget",
+		"fiberTarget",
+		"waterTarget",
+		"activityIntent",
+		"uiNotes",
+		"confidence",
+	],
 } satisfies Record<string, unknown>;
 
 function json(data: unknown, status = 200): Response {
@@ -332,6 +393,44 @@ function mapProviderStructuredToAppResponse(providerJson: unknown): TaiInterpret
 		const sum = interpretedMeals.reduce((a, m) => a + m.confidence, 0);
 		out.confidence = sum / interpretedMeals.length;
 	}
+	return out;
+}
+
+function mapProviderStructuredToGoalResponse(providerJson: unknown): TaiInterpretGoalResponse | null {
+	const refusal = extractFirstRefusal(providerJson);
+	if (refusal !== undefined) {
+		console.log("[interpret-goal] openai_refusal");
+		return null;
+	}
+	const text = extractOutputText(providerJson);
+	if (text === undefined) return null;
+	let parsed: unknown;
+	try {
+		parsed = parseJsonFromModelText(text);
+	} catch {
+		console.log("[interpret-goal] json_parse_failed");
+		return null;
+	}
+	const root = asRecord(parsed);
+	if (!root) return null;
+	const originalPrompt = readString(root.originalPrompt);
+	const goalType = readString(root.goalType);
+	const title = readString(root.title);
+	if (originalPrompt === undefined || goalType === undefined || title === undefined) return null;
+	const out: TaiInterpretGoalResponse = {
+		originalPrompt,
+		goalType,
+		title,
+		calorieTarget: readInt(root.calorieTarget, 0),
+		proteinTarget: readFiniteNumber(root.proteinTarget, 0),
+		carbsTarget: readFiniteNumber(root.carbsTarget, 0),
+		fatTarget: readFiniteNumber(root.fatTarget, 0),
+		fiberTarget: readInt(root.fiberTarget, 0),
+		waterTarget: readInt(root.waterTarget, 0),
+		activityIntent: readString(root.activityIntent) ?? "",
+		uiNotes: readString(root.uiNotes) ?? "",
+		confidence: readFiniteNumber(root.confidence, 0),
+	};
 	return out;
 }
 
@@ -648,6 +747,213 @@ async function interpretWithOpenAIStructured(env: Env, body: TaiInterpretMealReq
 	return { status: "malformed_ai_response" };
 }
 
+function buildGoalSystemPrompt(): string {
+	return [
+		"You are Tai, a practical nutrition coach.",
+		"Convert the user's natural-language nutrition goal into safe, realistic daily macro targets for a healthy adult.",
+		"Prefer moderate deficits for fat loss; avoid extreme restriction. If details are missing, choose sensible defaults and reflect uncertainty in confidence.",
+		"Output only JSON matching the schema (no markdown fences, no extra prose).",
+		"Use empty string \"\" only where the schema allows a string field you truly have no content for.",
+	].join("\n");
+}
+
+function buildGoalUserContentParts(prompt: string, ctx: Record<string, unknown> | undefined): Array<{ type: string; text?: string }> {
+	const parts: Array<{ type: string; text?: string }> = [];
+	parts.push({
+		type: "input_text",
+		text: `User goal (verbatim):\n${prompt}`,
+	});
+	const locale = readContextString(ctx, "localeIdentifier");
+	const tz = readContextString(ctx, "timeZoneIdentifier");
+	const lines: string[] = [];
+	if (locale) lines.push(`User locale: ${locale}`);
+	if (tz) lines.push(`Local time zone: ${tz}`);
+	if (lines.length > 0) {
+		parts.push({ type: "input_text", text: lines.join("\n") });
+	}
+	return parts;
+}
+
+type OpenAIGoalAttemptResult =
+	| { kind: "ok"; payload: TaiInterpretGoalResponse }
+	| { kind: "http_error"; status: number; openAIDetail?: string }
+	| { kind: "structured_output_failed" };
+
+type InterpretGoalOutcome =
+	| { status: "success"; payload: TaiInterpretGoalResponse }
+	| { status: "ai_provider_error"; openaiHttpStatus: number; openAIDetail?: string }
+	| { status: "malformed_ai_response" };
+
+async function interpretWithOpenAIStructuredGoal(
+	env: Env,
+	prompt: string,
+	ctx: Record<string, unknown> | undefined
+): Promise<InterpretGoalOutcome> {
+	const attempt = async (isRetryHint: boolean): Promise<OpenAIGoalAttemptResult> => {
+		const userParts = buildGoalUserContentParts(prompt, ctx);
+		if (isRetryHint) {
+			userParts.push({
+				type: "input_text",
+				text: "Return valid JSON matching the schema exactly. No explanation or markdown.",
+			});
+		}
+		const requestBody = {
+			model: OPENAI_MEAL_MODEL,
+			input: [
+				{
+					role: "system",
+					content: [{ type: "input_text", text: buildGoalSystemPrompt() }],
+				},
+				{
+					role: "user",
+					content: userParts,
+				},
+			],
+			text: {
+				format: {
+					type: "json_schema",
+					name: "tai_goal_interpretation",
+					strict: true,
+					schema: TAI_GOAL_RESPONSE_JSON_SCHEMA,
+				},
+			},
+		};
+
+		const openAIT0 = Date.now();
+		const openAIResponse = await fetch(OPENAI_RESPONSES_URL, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(requestBody),
+		});
+		console.log("[interpret-goal] openai_fetch_ms=", Date.now() - openAIT0, "retry_hint=", isRetryHint);
+
+		if (!openAIResponse.ok) {
+			const errText = await openAIResponse.text();
+			const openAIDetail = summarizeOpenAITextError(errText);
+			console.log("[interpret-goal] openai_http_status=", openAIResponse.status);
+			return { kind: "http_error", status: openAIResponse.status, openAIDetail };
+		}
+
+		let providerJson: unknown;
+		try {
+			providerJson = await openAIResponse.json();
+		} catch {
+			return { kind: "structured_output_failed" };
+		}
+
+		const payload = mapProviderStructuredToGoalResponse(providerJson);
+		if (payload) return { kind: "ok", payload };
+		return { kind: "structured_output_failed" };
+	};
+
+	let first = await attempt(false);
+	if (first.kind === "ok") return { status: "success", payload: first.payload };
+	if (first.kind === "http_error")
+		return { status: "ai_provider_error", openaiHttpStatus: first.status, openAIDetail: first.openAIDetail };
+
+	console.log("[interpret-goal] retrying_structured_output");
+	let second = await attempt(true);
+	if (second.kind === "ok") return { status: "success", payload: second.payload };
+	if (second.kind === "http_error")
+		return { status: "ai_provider_error", openaiHttpStatus: second.status, openAIDetail: second.openAIDetail };
+	return { status: "malformed_ai_response" };
+}
+
+function requireProxyAuth(request: Request, env: Env): Response | null {
+	const auth = request.headers.get("Authorization");
+	if (auth !== `Bearer ${env.TAI_PROXY_TOKEN}`) {
+		return json({ error: "unauthorized" }, 401);
+	}
+	return null;
+}
+
+async function handleInterpretMeal(request: Request, env: Env): Promise<Response> {
+	if (request.method !== "POST") {
+		return json({ error: "method_not_allowed" }, 405);
+	}
+	const unauthorized = requireProxyAuth(request, env);
+	if (unauthorized) return unauthorized;
+
+	const contentLength = Number(request.headers.get("Content-Length") ?? "0");
+	if (contentLength > MAX_BODY_BYTES) {
+		return json({ error: "payload_too_large" }, 413);
+	}
+
+	let body: TaiInterpretMealRequest;
+	try {
+		body = (await request.json()) as TaiInterpretMealRequest;
+	} catch {
+		return json({ error: "invalid_json" }, 400);
+	}
+
+	const approximateJsonBytes = new TextEncoder().encode(JSON.stringify(body)).length;
+	console.log("[interpret-meal] content_length_header=", contentLength, "approx_parsed_body_bytes=", approximateJsonBytes);
+
+	const imageB64 = body.imageBase64 ?? body.image?.base64Data;
+	if (!body.text && !imageB64) {
+		return json({ error: "text_or_image_required" }, 400);
+	}
+
+	const outcome = await interpretWithOpenAIStructured(env, body, imageB64);
+	if (outcome.status === "success") return json(outcome.payload, 200);
+	if (outcome.status === "ai_provider_error") {
+		const payload: Record<string, unknown> = {
+			error: "ai_provider_error",
+			status: outcome.openaiHttpStatus,
+		};
+		if (outcome.openAIDetail) payload.openai_detail = outcome.openAIDetail;
+		return json(payload, 502);
+	}
+	return json({ error: "malformed_ai_response" }, 502);
+}
+
+async function handleInterpretGoal(request: Request, env: Env): Promise<Response> {
+	if (request.method !== "POST") {
+		return json({ error: "method_not_allowed" }, 405);
+	}
+	const unauthorized = requireProxyAuth(request, env);
+	if (unauthorized) return unauthorized;
+
+	const contentLength = Number(request.headers.get("Content-Length") ?? "0");
+	if (contentLength > MAX_BODY_BYTES) {
+		return json({ error: "payload_too_large" }, 413);
+	}
+
+	let body: TaiInterpretGoalRequest;
+	try {
+		body = (await request.json()) as TaiInterpretGoalRequest;
+	} catch {
+		return json({ error: "invalid_json" }, 400);
+	}
+
+	const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+	if (prompt.length === 0) {
+		return json({ error: "prompt_required" }, 400);
+	}
+
+	const ctx = body.context !== undefined ? asRecord(body.context) ?? undefined : undefined;
+	const approximateJsonBytes = new TextEncoder().encode(JSON.stringify(body)).length;
+	console.log("[interpret-goal] content_length_header=", contentLength, "approx_parsed_body_bytes=", approximateJsonBytes);
+
+	const outcome = await interpretWithOpenAIStructuredGoal(env, prompt, ctx);
+	if (outcome.status === "success") {
+		const payload = { ...outcome.payload, originalPrompt: prompt };
+		return json(payload, 200);
+	}
+	if (outcome.status === "ai_provider_error") {
+		const payload: Record<string, unknown> = {
+			error: "ai_provider_error",
+			status: outcome.openaiHttpStatus,
+		};
+		if (outcome.openAIDetail) payload.openai_detail = outcome.openAIDetail;
+		return json(payload, 502);
+	}
+	return json({ error: "malformed_ai_response" }, 502);
+}
+
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		if (request.method === "OPTIONS") {
@@ -656,57 +962,24 @@ export default {
 
 		const url = new URL(request.url);
 
-		if (url.pathname !== "/ai/interpret-meal") {
-			return json({ error: "not_found" }, 404);
+		if (url.pathname === "/ai/interpret-meal") {
+			return handleInterpretMeal(request, env);
+		}
+		if (url.pathname === "/ai/interpret-goal") {
+			return handleInterpretGoal(request, env);
 		}
 
-		if (request.method !== "POST") {
-			return json({ error: "method_not_allowed" }, 405);
-		}
-
-		const auth = request.headers.get("Authorization");
-		if (auth !== `Bearer ${env.TAI_PROXY_TOKEN}`) {
-			return json({ error: "unauthorized" }, 401);
-		}
-
-		const contentLength = Number(request.headers.get("Content-Length") ?? "0");
-		if (contentLength > MAX_BODY_BYTES) {
-			return json({ error: "payload_too_large" }, 413);
-		}
-
-		let body: TaiInterpretMealRequest;
-		try {
-			body = (await request.json()) as TaiInterpretMealRequest;
-		} catch {
-			return json({ error: "invalid_json" }, 400);
-		}
-
-		const approximateJsonBytes = new TextEncoder().encode(JSON.stringify(body)).length;
-		console.log("[interpret-meal] content_length_header=", contentLength, "approx_parsed_body_bytes=", approximateJsonBytes);
-
-		const imageB64 = body.imageBase64 ?? body.image?.base64Data;
-		if (!body.text && !imageB64) {
-			return json({ error: "text_or_image_required" }, 400);
-		}
-
-		const outcome = await interpretWithOpenAIStructured(env, body, imageB64);
-		if (outcome.status === "success") return json(outcome.payload, 200);
-		if (outcome.status === "ai_provider_error") {
-			const payload: Record<string, unknown> = {
-				error: "ai_provider_error",
-				status: outcome.openaiHttpStatus,
-			};
-			if (outcome.openAIDetail) payload.openai_detail = outcome.openAIDetail;
-			return json(payload, 502);
-		}
-		return json({ error: "malformed_ai_response" }, 502);
+		return json({ error: "not_found" }, 404);
 	},
 };
 
 export const __test = {
 	TAI_MEAL_RESPONSE_JSON_SCHEMA,
+	TAI_GOAL_RESPONSE_JSON_SCHEMA,
 	buildSystemPrompt,
+	buildGoalSystemPrompt,
 	mapProviderStructuredToAppResponse,
+	mapProviderStructuredToGoalResponse,
 	parseMealRefinementFromContext,
 	collectUserTextBlocksForTests,
 };

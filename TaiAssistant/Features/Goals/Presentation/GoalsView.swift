@@ -2,7 +2,10 @@ import SwiftUI
 
 struct GoalsView: View {
     let goalRepository: GoalRepository
+    let aiService: AIService
     let ownerID: String
+    let localeIdentifier: String
+    let timeZoneIdentifier: String
 
     @State private var goalPrompt = ""
     @State private var draft: GoalDraft?
@@ -12,6 +15,7 @@ struct GoalsView: View {
     @State private var isSaving = false
     @State private var saveMessage: String?
     @State private var saveError: String?
+    @State private var isInterpreting = false
     @FocusState private var isGoalPromptFocused: Bool
 
     private let contextSummaryMaxHeight: CGFloat = 100
@@ -132,25 +136,37 @@ struct GoalsView: View {
                         .padding(.trailing, 56)
                         .scrollContentBackground(.hidden)
 
-                    Button(action: submitComposerPrompt) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 38, height: 38)
-                            .background(
-                                LinearGradient(
-                                    colors: [DSColor.coralStart, DSColor.coralEnd],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
+                    Button {
+                        Task { await submitComposerPrompt() }
+                    } label: {
+                        Group {
+                            if isInterpreting {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                        }
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(
+                            LinearGradient(
+                                colors: [DSColor.coralStart, DSColor.coralEnd],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             )
-                            .clipShape(Circle())
-                            .shadow(color: DSColor.coralEnd.opacity(0.28), radius: 10, x: 0, y: 5)
+                        )
+                        .clipShape(Circle())
+                        .shadow(color: DSColor.coralEnd.opacity(0.28), radius: 10, x: 0, y: 5)
                     }
                     .buttonStyle(.plain)
                     .padding(.trailing, DSSpacing.xs)
                     .padding(.bottom, 4)
-                    .disabled(goalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        isInterpreting ||
+                        goalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
                 }
                 .frame(minHeight: 98)
                 .background(DSColor.surface)
@@ -167,6 +183,11 @@ struct GoalsView: View {
             DashboardCard(title: "Extracted targets ready", icon: "checkmark.seal.fill", tint: .green) {
                 Text(draft.title)
                     .font(.headline)
+                if !draft.taiUiNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(draft.taiUiNotes)
+                        .font(.subheadline)
+                        .foregroundStyle(DSColor.textPrimary)
+                }
                 Text(draft.summary)
                     .font(.subheadline)
                     .foregroundStyle(DSColor.textSecondary)
@@ -189,36 +210,52 @@ struct GoalsView: View {
         }
     }
 
-    private func submitComposerPrompt() {
+    private func submitComposerPrompt() async {
         let trimmed = goalPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !isInterpreting else { return }
 
         saveError = nil
         saveMessage = nil
+        isInterpreting = true
+        defer { isInterpreting = false }
 
-        let newDraft = GoalDraft.fromPrompt(trimmed)
-        draft = newDraft
+        do {
+            let response = try await aiService.interpretGoal(
+                request: AIInterpretGoalRequest(
+                    prompt: trimmed,
+                    context: AIInterpretGoalContext(
+                        ownerID: ownerID,
+                        localeIdentifier: localeIdentifier,
+                        timeZoneIdentifier: timeZoneIdentifier
+                    )
+                )
+            )
+            let newDraft = GoalDraft.fromAIResponse(response)
+            draft = newDraft
 
-        conversationRows.append(GoalsContextRow(role: .user, body: trimmed))
-        conversationRows.append(GoalsContextRow(role: .tai, body: Self.taiReplyText(from: newDraft)))
+            conversationRows.append(GoalsContextRow(role: .user, body: trimmed))
+            conversationRows.append(GoalsContextRow(role: .tai, body: Self.taiContextFromAI(response)))
 
-        if accumulatedUserNotes.isEmpty {
-            accumulatedUserNotes = trimmed
-        } else {
-            accumulatedUserNotes += "\n\n" + trimmed
+            if accumulatedUserNotes.isEmpty {
+                accumulatedUserNotes = trimmed
+            } else {
+                accumulatedUserNotes += "\n\n" + trimmed
+            }
+
+            goalPrompt = ""
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            saveError = message
         }
-
-        goalPrompt = ""
     }
 
-    /// Narration for the context strip (does not replace `GoalDraft` fields used for save/tiles).
-    private static func taiReplyText(from draft: GoalDraft) -> String {
-        [
-            "Here's what I understood:",
-            "- Phase: \(draft.title)",
-            "- Focus: \(draft.summary)",
-            "- Daily targets: \(draft.calories) kcal · \(draft.proteinGrams)g protein · \(draft.carbsGrams)g carbs · \(draft.fatGrams)g fat",
-        ].joined(separator: "\n")
+    private static func taiContextFromAI(_ response: AIInterpretGoalResponse) -> String {
+        let macro = "\(response.calorieTarget) kcal · P\(Int(response.proteinTarget.rounded()))g · C\(Int(response.carbsTarget.rounded()))g · F\(Int(response.fatTarget.rounded()))g"
+        let note = response.uiNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if note.isEmpty {
+            return macro
+        }
+        return "\(note)\n\n\(macro)"
     }
 
     private func saveDraft(_ draft: GoalDraft) async {
@@ -228,9 +265,10 @@ struct GoalsView: View {
 
         do {
             let existing = try await goalRepository.fetchGoalProfiles(ownerID: ownerID)
-            let profile = existing.first ?? GoalProfile(ownerID: ownerID, title: draft.title, notes: accumulatedUserNotes)
+            let notesWithMeta = accumulatedUserNotes + "\n\n[Tai goalType=\(draft.goalType); confidence=\(String(format: "%.3f", draft.confidence))]"
+            let profile = existing.first ?? GoalProfile(ownerID: ownerID, title: draft.title, notes: notesWithMeta)
             profile.title = draft.title
-            profile.notes = accumulatedUserNotes
+            profile.notes = notesWithMeta
             profile.updatedAt = .now
             try await goalRepository.upsertGoalProfile(profile)
 
@@ -239,8 +277,8 @@ struct GoalsView: View {
                 proteinGrams: Double(draft.proteinGrams),
                 carbsGrams: Double(draft.carbsGrams),
                 fatGrams: Double(draft.fatGrams),
-                fiberGrams: 30,
-                waterMilliliters: 2600
+                fiberGrams: draft.fiberGrams,
+                waterMilliliters: draft.waterMilliliters
             )
             try await goalRepository.saveDailyTargets(targets, goalProfileID: profile.id)
 
@@ -274,71 +312,6 @@ private struct GoalsContextRow: Identifiable {
     }
 }
 
-private struct GoalPreset: Identifiable {
-    let id: String
-    let title: String
-    let caption: String
-    let icon: String
-    let prompt: String
-
-    static let defaultPresets: [GoalPreset] = [
-        GoalPreset(
-            id: "lean-cut",
-            title: "Lean Cut",
-            caption: "High protein, social guardrails",
-            icon: "flame.fill",
-            prompt: "Help me run a lean cut while keeping strength. Keep protein high and alcohol to weekends only."
-        ),
-        GoalPreset(
-            id: "maintenance",
-            title: "Maintenance",
-            caption: "Predictable weekdays, light dinners",
-            icon: "bolt.heart.fill",
-            prompt: "I want a maintenance plan for busy weekdays with predictable breakfasts and lighter dinners."
-        ),
-        GoalPreset(
-            id: "recomp",
-            title: "Recomp",
-            caption: "Fuel lifting 4x per week",
-            icon: "figure.strengthtraining.traditional",
-            prompt: "Build a recomposition target with enough carbs for lifting 4x per week."
-        )
-    ]
-}
-
-private struct GoalPresetChip: View {
-    let preset: GoalPreset
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: DSSpacing.xs) {
-                Label(preset.title, systemImage: preset.icon)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isSelected ? .white : DSColor.textPrimary)
-                Text(preset.caption)
-                    .font(.caption)
-                    .foregroundStyle(isSelected ? .white.opacity(0.85) : DSColor.textSecondary)
-                    .lineLimit(2)
-            }
-            .padding(DSSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Group {
-                    if isSelected {
-                        DSColor.coralGradient
-                    } else {
-                        LinearGradient(colors: [DSColor.surface], startPoint: .top, endPoint: .bottom)
-                    }
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 private struct GoalMetricTile: View {
     let label: String
     let value: String
@@ -365,43 +338,31 @@ private struct GoalMetricTile: View {
 
 private struct GoalDraft {
     let title: String
+    /// Training / lifestyle line from the model (`activityIntent`).
     let summary: String
+    let taiUiNotes: String
     let calories: Int
     let proteinGrams: Int
     let carbsGrams: Int
     let fatGrams: Int
+    let fiberGrams: Double
+    let waterMilliliters: Int
+    let goalType: String
+    let confidence: Double
 
-    static func fromPrompt(_ prompt: String) -> GoalDraft {
-        let normalized = prompt.lowercased()
-        if normalized.contains("cut") || normalized.contains("lean") {
-            return GoalDraft(
-                title: "Lean cut with high protein",
-                summary: "Fat loss focus with higher protein and controlled social alcohol.",
-                calories: 1900,
-                proteinGrams: 170,
-                carbsGrams: 150,
-                fatGrams: 60
-            )
-        }
-
-        if normalized.contains("maintenance") {
-            return GoalDraft(
-                title: "Balanced maintenance",
-                summary: "Steady energy with predictable weekday structure and moderate dinner load.",
-                calories: 2200,
-                proteinGrams: 150,
-                carbsGrams: 230,
-                fatGrams: 75
-            )
-        }
-
-        return GoalDraft(
-            title: "Performance-focused recomposition",
-            summary: "Support training performance while gradually improving body composition.",
-            calories: 2300,
-            proteinGrams: 165,
-            carbsGrams: 245,
-            fatGrams: 70
+    static func fromAIResponse(_ response: AIInterpretGoalResponse) -> GoalDraft {
+        GoalDraft(
+            title: response.title,
+            summary: response.activityIntent.trimmingCharacters(in: .whitespacesAndNewlines),
+            taiUiNotes: response.uiNotes,
+            calories: max(0, response.calorieTarget),
+            proteinGrams: max(0, Int(response.proteinTarget.rounded())),
+            carbsGrams: max(0, Int(response.carbsTarget.rounded())),
+            fatGrams: max(0, Int(response.fatTarget.rounded())),
+            fiberGrams: max(0, Double(response.fiberTarget)),
+            waterMilliliters: max(0, response.waterTarget),
+            goalType: response.goalType,
+            confidence: response.confidence
         )
     }
 }

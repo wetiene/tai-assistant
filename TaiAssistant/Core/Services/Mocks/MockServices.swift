@@ -100,6 +100,57 @@ struct MockAIService: AIService {
             uiNotes: "Mock AI interpretation from generic meal template."
         )
     }
+
+    func interpretGoal(request: AIInterpretGoalRequest) async throws -> AIInterpretGoalResponse {
+        try await Task.sleep(nanoseconds: 250_000_000)
+        let trimmed = request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.lowercased()
+
+        let goalType: String
+        let title: String
+        let calories: Int
+        let protein: Double
+        let carbs: Double
+        let fat: Double
+
+        if normalized.contains("cut") || normalized.contains("lose") || normalized.contains("lean") {
+            goalType = "fat_loss"
+            title = "Fat loss while keeping strength"
+            calories = 1850
+            protein = 165
+            carbs = 155
+            fat = 62
+        } else if normalized.contains("maintain") {
+            goalType = "maintenance"
+            title = "Balanced maintenance"
+            calories = 2200
+            protein = 150
+            carbs = 230
+            fat = 75
+        } else {
+            goalType = "performance"
+            title = "Training-focused nutrition"
+            calories = 2300
+            protein = 160
+            carbs = 250
+            fat = 72
+        }
+
+        return AIInterpretGoalResponse(
+            originalPrompt: trimmed,
+            goalType: goalType,
+            title: title,
+            calorieTarget: calories,
+            proteinTarget: protein,
+            carbsTarget: carbs,
+            fatTarget: fat,
+            fiberTarget: 28,
+            waterTarget: 2600,
+            activityIntent: "Mock interpretation: align protein with training days and keep changes gradual.",
+            uiNotes: "Mock goal interpretation — connect a real proxy for personalized targets.",
+            confidence: 0.72
+        )
+    }
 }
 
 struct MockHealthService: HealthService {

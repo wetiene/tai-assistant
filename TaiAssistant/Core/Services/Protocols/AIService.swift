@@ -3,6 +3,36 @@ import Foundation
 protocol AIService {
     func send(message: String, context: [String: String]) async throws -> String
     func interpretMeal(request: AIInterpretMealRequest) async throws -> AIInterpretMealResponse
+    func interpretGoal(request: AIInterpretGoalRequest) async throws -> AIInterpretGoalResponse
+}
+
+// MARK: - Goal interpretation (`POST /ai/interpret-goal`)
+
+struct AIInterpretGoalRequest: Codable, Sendable {
+    var prompt: String
+    var context: AIInterpretGoalContext?
+}
+
+struct AIInterpretGoalContext: Codable, Sendable {
+    var ownerID: String?
+    var localeIdentifier: String?
+    var timeZoneIdentifier: String?
+}
+
+/// Mirrors the tai-ai-proxy strict JSON schema for goal interpretation.
+struct AIInterpretGoalResponse: Codable, Sendable {
+    var originalPrompt: String
+    var goalType: String
+    var title: String
+    var calorieTarget: Int
+    var proteinTarget: Double
+    var carbsTarget: Double
+    var fatTarget: Double
+    var fiberTarget: Int
+    var waterTarget: Int
+    var activityIntent: String
+    var uiNotes: String
+    var confidence: Double
 }
 
 struct AIInterpretMealRequest: Codable {
@@ -169,12 +199,14 @@ enum AIServiceError: LocalizedError {
 struct OpenAIProxyServiceConfig {
     var baseURL: URL
     var interpretMealPath: String
+    var interpretGoalPath: String
     /// Optional proxy credential. This is for the app -> backend proxy hop only.
     var proxyBearerToken: String?
 
     static let `default` = OpenAIProxyServiceConfig(
         baseURL: URL(string: "http://localhost:8080")!,
         interpretMealPath: "/ai/interpret-meal",
+        interpretGoalPath: "/ai/interpret-goal",
         proxyBearerToken: nil
     )
 }
@@ -210,7 +242,19 @@ struct OpenAIProxyAIService: AIService {
     }
 
     func interpretMeal(request: AIInterpretMealRequest) async throws -> AIInterpretMealResponse {
-        let endpoint = try resolvedInterpretMealURL()
+        try await postJSON(path: config.interpretMealPath, body: request, decode: AIInterpretMealResponse.self)
+    }
+
+    func interpretGoal(request: AIInterpretGoalRequest) async throws -> AIInterpretGoalResponse {
+        try await postJSON(path: config.interpretGoalPath, body: request, decode: AIInterpretGoalResponse.self)
+    }
+
+    private func postJSON<Body: Encodable, Response: Decodable>(
+        path: String,
+        body: Body,
+        decode responseType: Response.Type
+    ) async throws -> Response {
+        let endpoint = try Self.resolvedURL(path: path, baseURL: config.baseURL)
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -225,7 +269,7 @@ struct OpenAIProxyAIService: AIService {
         }
 
         do {
-            urlRequest.httpBody = try jsonEncoder.encode(request)
+            urlRequest.httpBody = try jsonEncoder.encode(body)
         } catch {
             throw AIServiceError.invalidRequestPayload
         }
@@ -257,7 +301,7 @@ struct OpenAIProxyAIService: AIService {
         }
 
         do {
-            return try jsonDecoder.decode(AIInterpretMealResponse.self, from: responsePayload)
+            return try jsonDecoder.decode(Response.self, from: responsePayload)
         } catch {
             #if DEBUG
             throw AIServiceError.malformedResponse(bodyPreview: Self.responseBodySnippet(from: responsePayload))
@@ -267,12 +311,12 @@ struct OpenAIProxyAIService: AIService {
         }
     }
 
-    private func resolvedInterpretMealURL() throws -> URL {
-        if let absoluteURL = URL(string: config.interpretMealPath), absoluteURL.scheme != nil {
+    private static func resolvedURL(path: String, baseURL: URL) throws -> URL {
+        if let absoluteURL = URL(string: path), absoluteURL.scheme != nil {
             return absoluteURL
         }
-        guard let combined = URL(string: config.interpretMealPath, relativeTo: config.baseURL)?.absoluteURL else {
-            throw AIServiceError.invalidURL(config.interpretMealPath)
+        guard let combined = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
+            throw AIServiceError.invalidURL(path)
         }
         return combined
     }

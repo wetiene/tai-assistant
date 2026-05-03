@@ -60,6 +60,7 @@ struct AppDependencies {
                 config: OpenAIProxyServiceConfig(
                     baseURL: baseURL,
                     interpretMealPath: config.aiInterpretMealPath,
+                    interpretGoalPath: config.aiInterpretGoalPath,
                     proxyBearerToken: config.aiProxyBearerToken
                 )
             )

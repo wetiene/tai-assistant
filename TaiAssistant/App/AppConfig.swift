@@ -15,6 +15,7 @@ struct RuntimeAppConfig {
     let aiProxyBaseURL: URL?
     let aiProxyBearerToken: String?
     let aiInterpretMealPath: String
+    let aiInterpretGoalPath: String
 
     private enum LocalProxyAuth {
         static let envTokenKey = "TAI_AI_PROXY_BEARER_TOKEN"
@@ -47,6 +48,7 @@ struct RuntimeAppConfig {
         mealInterpretationProvider: .openAIProxy,
         aiProxyBaseURL: URL(string: "https://tai-ai-proxy.taiassistant.workers.dev"),
         aiProxyBearerToken: LocalProxyAuth.resolveBearerToken(),
-        aiInterpretMealPath: "/ai/interpret-meal"
+        aiInterpretMealPath: "/ai/interpret-meal",
+        aiInterpretGoalPath: "/ai/interpret-goal"
     )
 }
