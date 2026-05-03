@@ -20,6 +20,10 @@ final class CheckInViewModel {
     var isInterpreting = false
     var isSaving = false
     var errorMessage: String?
+    #if DEBUG
+    /// Dev-only: full AI interpret failure detail for screenshot / triage (not used for meal save errors).
+    var aiInterpretFailureDebugText: String?
+    #endif
     private(set) var dayProgress = DayProgress()
     /// Row cap for scroll-back history (not the on-screen row count).
     private let maxStoredContextRows = 24
@@ -84,8 +88,12 @@ final class CheckInViewModel {
         explicitReestimateMealID: UUID? = nil
     ) async {
         guard !isInterpreting else { return }
+        #if DEBUG
+        aiInterpretFailureDebugText = nil
+        #endif
         isInterpreting = true
         defer { isInterpreting = false }
+        let interpretRequestStarted = Date()
         do {
             let refinementPayload = buildMealRefinementPayload(
                 rawUserMessageToExcludeFromPrior: rawUserMessageForRefinement
@@ -113,7 +121,12 @@ final class CheckInViewModel {
             appendContextRow(kind: .ai, text: aiSummaryText(from: interpretation))
             await refreshDayProgress()
         } catch {
+            #if DEBUG
+            let elapsed = Date().timeIntervalSince(interpretRequestStarted)
+            aiInterpretFailureDebugText = Self.formatInterpretFailureForDebug(error: error, requestDuration: elapsed)
+            #else
             errorMessage = "Could not interpret this check in. Please try again."
+            #endif
         }
     }
 
@@ -579,3 +592,100 @@ final class CheckInViewModel {
     }
 
 }
+
+#if DEBUG
+extension CheckInViewModel {
+    fileprivate static func formatInterpretFailureForDebug(error: Error, requestDuration: TimeInterval) -> String {
+        let swiftLine = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+
+        if let ai = error as? AIServiceError {
+            switch ai {
+            case .invalidURL:
+                return debugErrorBlock(
+                    statusLine: "—",
+                    backendLine: "—",
+                    bodyLine: "—",
+                    swiftLine: swiftLine,
+                    requestDuration: requestDuration
+                )
+            case .invalidRequestPayload:
+                return debugErrorBlock(
+                    statusLine: "—",
+                    backendLine: "—",
+                    bodyLine: "—",
+                    swiftLine: swiftLine,
+                    requestDuration: requestDuration
+                )
+            case .transport:
+                return debugErrorBlock(
+                    statusLine: "—",
+                    backendLine: "—",
+                    bodyLine: "—",
+                    swiftLine: swiftLine,
+                    requestDuration: requestDuration
+                )
+            case .unexpectedStatusCode(let code, let body):
+                let backend = extractBackendErrorCode(fromJSONBody: body) ?? "—"
+                let bodyDisplay = body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "—" : body
+                return debugErrorBlock(
+                    statusLine: "\(code)",
+                    backendLine: backend,
+                    bodyLine: bodyDisplay,
+                    swiftLine: swiftLine,
+                    requestDuration: requestDuration
+                )
+            case .malformedResponse(let preview):
+                let raw = preview?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let backend = raw.isEmpty ? "—" : (extractBackendErrorCode(fromJSONBody: raw) ?? "—")
+                let bodyDisplay = raw.isEmpty ? "—" : raw
+                return debugErrorBlock(
+                    statusLine: "200 (decode failed)",
+                    backendLine: backend,
+                    bodyLine: bodyDisplay,
+                    swiftLine: swiftLine,
+                    requestDuration: requestDuration
+                )
+            }
+        }
+
+        return debugErrorBlock(
+            statusLine: "—",
+            backendLine: "—",
+            bodyLine: "—",
+            swiftLine: swiftLine,
+            requestDuration: requestDuration
+        )
+    }
+
+    fileprivate static func extractBackendErrorCode(fromJSONBody body: String) -> String? {
+        guard let data = body.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        if let err = obj["error"] as? String { return err }
+        if let code = obj["code"] as? String { return code }
+        if let code = obj["code"] as? Int { return String(code) }
+        return nil
+    }
+
+    private static func debugErrorBlock(
+        statusLine: String,
+        backendLine: String,
+        bodyLine: String,
+        swiftLine: String,
+        requestDuration: TimeInterval
+    ) -> String {
+        let durationText = String(format: "%.2fs", requestDuration)
+        return [
+            "Status: \(statusLine)",
+            "Backend: \(backendLine)",
+            "Body: \(bodyLine)",
+            "",
+            "Swift error:",
+            swiftLine,
+            "",
+            "Duration: \(durationText)",
+        ].joined(separator: "\n")
+    }
+}
+#endif

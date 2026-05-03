@@ -73,6 +73,21 @@ struct CheckInView: View {
         .sheet(isPresented: $isPhotoPreviewPresented) {
             selectedPhotoPreview
         }
+        #if DEBUG
+        .sheet(isPresented: Binding(
+            get: { viewModel.aiInterpretFailureDebugText != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.aiInterpretFailureDebugText = nil
+                }
+            }
+        )) {
+            CheckInAIDebugErrorSheet(
+                text: viewModel.aiInterpretFailureDebugText ?? "",
+                onDismiss: { viewModel.aiInterpretFailureDebugText = nil }
+            )
+        }
+        #endif
         .alert("Check In", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
             set: { isPresented in
@@ -95,16 +110,56 @@ struct CheckInView: View {
     private var composerCard: some View {
         @Bindable var vm = viewModel
         return PrimaryCard(cornerRadius: 24) {
-            TextField("Add details or photo...", text: $vm.session.userInput, axis: .vertical)
-                .lineLimit(1...3)
-                .focused($isComposerFocused)
-                .padding(DSSpacing.sm)
-                .background(DSColor.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(DSColor.coralStart.opacity(0.24), lineWidth: 1)
+            ZStack(alignment: .bottomTrailing) {
+                TextField("Add details or photo...", text: $vm.session.userInput, axis: .vertical)
+                    .lineLimit(1...4)
+                    .focused($isComposerFocused)
+                    .padding(.leading, DSSpacing.sm)
+                    .padding(.vertical, DSSpacing.sm)
+                    .padding(.trailing, 56)
+
+                Button {
+                    Task {
+                        isTaiNoteExpanded = false
+                        await viewModel.onUpdateMealTapped()
+                    }
+                } label: {
+                    Group {
+                        if viewModel.isInterpreting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(
+                        LinearGradient(
+                            colors: [DSColor.coralStart, DSColor.coralEnd],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Circle())
+                    .shadow(color: DSColor.coralEnd.opacity(0.28), radius: 10, x: 0, y: 5)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, DSSpacing.xs)
+                .padding(.bottom, 4)
+                .disabled(
+                    viewModel.isInterpreting ||
+                    (vm.session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && vm.session.selectedPhotoData == nil && vm.session.interpretedMeals.isEmpty)
                 )
+            }
+            .frame(minHeight: 46)
+            .background(DSColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(DSColor.coralStart.opacity(0.24), lineWidth: 1)
+            )
 
             HStack(spacing: DSSpacing.sm) {
                 Button {
@@ -119,28 +174,6 @@ struct CheckInView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-
-                Spacer()
-
-                Button {
-                    isComposerFocused = false
-                    Task {
-                        isTaiNoteExpanded = false
-                        await viewModel.onUpdateMealTapped()
-                    }
-                } label: {
-                    if viewModel.isInterpreting {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Label("", systemImage: "sparkles")
-                    }
-                }
-                .buttonStyle(CoralGradientButtonStyle(isCompact: true))
-                .disabled(
-                    viewModel.isInterpreting ||
-                    (vm.session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && vm.session.selectedPhotoData == nil && vm.session.interpretedMeals.isEmpty)
-                )
             }
 
             selectedPhotoThumbnail
@@ -427,6 +460,32 @@ struct CheckInView: View {
         viewModel.session.selectedPhotoData = data
     }
 }
+
+#if DEBUG
+private struct CheckInAIDebugErrorSheet: View {
+    let text: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(DSSpacing.md)
+            }
+            .navigationTitle("AI check-in failed")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { onDismiss() }
+                }
+            }
+        }
+    }
+}
+#endif
 
 private struct CheckInMealCard: View {
     @Binding var draft: CheckInMealDraft

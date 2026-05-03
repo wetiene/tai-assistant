@@ -147,7 +147,8 @@ enum AIServiceError: LocalizedError {
     case invalidRequestPayload
     case transport(underlying: Error)
     case unexpectedStatusCode(Int, body: String)
-    case malformedResponse
+    /// `bodyPreview` is populated in debug builds when the proxy returns non-JSON or a schema mismatch; always `nil` in release.
+    case malformedResponse(bodyPreview: String?)
 
     var errorDescription: String? {
         switch self {
@@ -238,7 +239,7 @@ struct OpenAIProxyAIService: AIService {
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw AIServiceError.malformedResponse
+            throw AIServiceError.malformedResponse(bodyPreview: nil)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             #if DEBUG
@@ -246,13 +247,23 @@ struct OpenAIProxyAIService: AIService {
                 print("AI proxy token missing from local config")
             }
             #endif
-            throw AIServiceError.unexpectedStatusCode(httpResponse.statusCode, body: "<redacted>")
+            let errorBody: String
+            #if DEBUG
+            errorBody = Self.responseBodySnippet(from: responsePayload)
+            #else
+            errorBody = "<redacted>"
+            #endif
+            throw AIServiceError.unexpectedStatusCode(httpResponse.statusCode, body: errorBody)
         }
 
         do {
             return try jsonDecoder.decode(AIInterpretMealResponse.self, from: responsePayload)
         } catch {
-            throw AIServiceError.malformedResponse
+            #if DEBUG
+            throw AIServiceError.malformedResponse(bodyPreview: Self.responseBodySnippet(from: responsePayload))
+            #else
+            throw AIServiceError.malformedResponse(bodyPreview: nil)
+            #endif
         }
     }
 
@@ -264,5 +275,13 @@ struct OpenAIProxyAIService: AIService {
             throw AIServiceError.invalidURL(config.interpretMealPath)
         }
         return combined
+    }
+
+    /// UTF-8 decode with truncation for debug-only error surfaces (never shown in release UI).
+    private static func responseBodySnippet(from data: Data, maxCharacters: Int = 8192) -> String {
+        let raw = String(data: data, encoding: .utf8) ?? "(binary body, \(data.count) bytes)"
+        guard raw.count > maxCharacters else { return raw }
+        let end = raw.index(raw.startIndex, offsetBy: maxCharacters)
+        return String(raw[..<end]) + "…"
     }
 }
