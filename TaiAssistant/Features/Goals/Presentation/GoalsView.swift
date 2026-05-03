@@ -6,12 +6,15 @@ struct GoalsView: View {
 
     @State private var goalPrompt = ""
     @State private var draft: GoalDraft?
+    @State private var conversationRows: [GoalsContextRow] = []
+    /// User-authored lines sent via the composer, joined for `GoalProfile.notes` on save (same intent as prior single `goalPrompt` field).
+    @State private var accumulatedUserNotes: String = ""
     @State private var isSaving = false
     @State private var saveMessage: String?
     @State private var saveError: String?
     @FocusState private var isGoalPromptFocused: Bool
 
-    private let samplePrompts = GoalPreset.defaultPresets
+    private let contextSummaryMaxHeight: CGFloat = 100
 
     var body: some View {
         ScrollView {
@@ -23,15 +26,17 @@ struct GoalsView: View {
                     Text("Set one clear phase")
                         .font(.title3.weight(.bold))
                         .foregroundStyle(DSColor.textPrimary)
-                    Text("Choose a preset or type your own strategy.")
+                    Text("Describe your strategy in your own words.")
                         .font(.caption)
                         .foregroundStyle(DSColor.textSecondary)
                 }
 
-                if draft == nil {
-                    inputStep
-                } else if let draft {
-                    confirmationStep(draft)
+                goalsContextSection
+
+                goalsInputSection
+
+                if let draft {
+                    extractedTargetsSection(draft)
                 }
 
                 if let saveMessage {
@@ -65,24 +70,54 @@ struct GoalsView: View {
         }
     }
 
-    private var inputStep: some View {
-        VStack(alignment: .leading, spacing: DSSpacing.lg) {
-            PrimaryCard(cornerRadius: 20) {
-                Label("Goal presets", systemImage: "square.grid.2x2.fill")
-                    .font(.headline.weight(.semibold))
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: DSSpacing.sm)], spacing: DSSpacing.sm) {
-                    ForEach(samplePrompts) { preset in
-                        GoalPresetChip(
-                            preset: preset,
-                            isSelected: goalPrompt == preset.prompt,
-                            action: { goalPrompt = preset.prompt }
-                        )
+    @ViewBuilder
+    private var goalsContextSection: some View {
+        let rows = conversationRows
+        Group {
+            if !rows.isEmpty {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                            ForEach(rows) { row in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(row.role == .user ? "You" : "Tai")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(DSColor.textSecondary)
+                                    goalsContextBubble(row.body)
+                                        .id(row.id)
+                                }
+                            }
+                        }
+                    }
+                    .onAppear {
+                        guard let lastID = rows.last?.id else { return }
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                    .onChange(of: rows.count) { _, _ in
+                        guard let lastID = rows.last?.id else { return }
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            proxy.scrollTo(lastID, anchor: .bottom)
+                        }
                     }
                 }
+                .frame(maxHeight: contextSummaryMaxHeight)
             }
+        }
+    }
 
-            PrimaryCard(cornerRadius: 20) {
+    private func goalsContextBubble(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(DSColor.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DSSpacing.sm)
+            .padding(.vertical, DSSpacing.xs)
+            .background(DSColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var goalsInputSection: some View {
+        PrimaryCard(cornerRadius: 20) {
                 Label("Custom strategy", systemImage: "square.and.pencil")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(DSColor.textSecondary)
@@ -97,7 +132,7 @@ struct GoalsView: View {
                         .padding(.trailing, 56)
                         .scrollContentBackground(.hidden)
 
-                    Button(action: previewDraft) {
+                    Button(action: submitComposerPrompt) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
@@ -124,11 +159,10 @@ struct GoalsView: View {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(DSColor.coralStart.opacity(0.24), lineWidth: 1)
                 )
-            }
         }
     }
 
-    private func confirmationStep(_ draft: GoalDraft) -> some View {
+    private func extractedTargetsSection(_ draft: GoalDraft) -> some View {
         VStack(alignment: .leading, spacing: DSSpacing.lg) {
             DashboardCard(title: "Extracted targets ready", icon: "checkmark.seal.fill", tint: .green) {
                 Text(draft.title)
@@ -145,27 +179,46 @@ struct GoalsView: View {
                 GoalMetricTile(label: "Fat", value: "\(draft.fatGrams)", unit: "g", tint: .yellow, icon: "drop.fill")
             }
 
-            VStack(spacing: DSSpacing.sm) {
-                Button(isSaving ? "Saving..." : "Save goal") {
-                    Task {
-                        await saveDraft(draft)
-                    }
+            Button(isSaving ? "Saving..." : "Save goal") {
+                Task {
+                    await saveDraft(draft)
                 }
-                .buttonStyle(CoralGradientButtonStyle())
-                .disabled(isSaving)
-
-                Button("Edit prompt") {
-                    self.draft = nil
-                }
-                .buttonStyle(.bordered)
             }
+            .buttonStyle(CoralGradientButtonStyle())
+            .disabled(isSaving)
         }
     }
 
-    private func previewDraft() {
+    private func submitComposerPrompt() {
+        let trimmed = goalPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
         saveError = nil
         saveMessage = nil
-        draft = GoalDraft.fromPrompt(goalPrompt)
+
+        let newDraft = GoalDraft.fromPrompt(trimmed)
+        draft = newDraft
+
+        conversationRows.append(GoalsContextRow(role: .user, body: trimmed))
+        conversationRows.append(GoalsContextRow(role: .tai, body: Self.taiReplyText(from: newDraft)))
+
+        if accumulatedUserNotes.isEmpty {
+            accumulatedUserNotes = trimmed
+        } else {
+            accumulatedUserNotes += "\n\n" + trimmed
+        }
+
+        goalPrompt = ""
+    }
+
+    /// Narration for the context strip (does not replace `GoalDraft` fields used for save/tiles).
+    private static func taiReplyText(from draft: GoalDraft) -> String {
+        [
+            "Here's what I understood:",
+            "- Phase: \(draft.title)",
+            "- Focus: \(draft.summary)",
+            "- Daily targets: \(draft.calories) kcal · \(draft.proteinGrams)g protein · \(draft.carbsGrams)g carbs · \(draft.fatGrams)g fat",
+        ].joined(separator: "\n")
     }
 
     private func saveDraft(_ draft: GoalDraft) async {
@@ -175,9 +228,9 @@ struct GoalsView: View {
 
         do {
             let existing = try await goalRepository.fetchGoalProfiles(ownerID: ownerID)
-            let profile = existing.first ?? GoalProfile(ownerID: ownerID, title: draft.title, notes: goalPrompt)
+            let profile = existing.first ?? GoalProfile(ownerID: ownerID, title: draft.title, notes: accumulatedUserNotes)
             profile.title = draft.title
-            profile.notes = goalPrompt
+            profile.notes = accumulatedUserNotes
             profile.updatedAt = .now
             try await goalRepository.upsertGoalProfile(profile)
 
@@ -194,9 +247,30 @@ struct GoalsView: View {
             saveMessage = "Goal saved. Dashboard guidance now uses these targets."
             goalPrompt = ""
             self.draft = nil
+            conversationRows = []
+            accumulatedUserNotes = ""
         } catch {
             saveError = "Could not save goal in scaffold mode. Please try again."
         }
+    }
+}
+
+// MARK: - Conversation context (Check In–style rows)
+
+private struct GoalsContextRow: Identifiable {
+    enum Role {
+        case user
+        case tai
+    }
+
+    let id: UUID
+    let role: Role
+    let body: String
+
+    init(role: Role, body: String) {
+        self.id = UUID()
+        self.role = role
+        self.body = body
     }
 }
 
