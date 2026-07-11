@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FloatingAskTaiButton: View {
     let assistantName: String
+    var isPreview: Bool = false
     var isDeemphasized: Bool = false
     let action: () -> Void
 
@@ -10,8 +11,11 @@ struct FloatingAskTaiButton: View {
             HStack(spacing: DSSpacing.sm) {
                 Image(systemName: "sparkles")
                     .font(.subheadline.weight(.semibold))
-                Text("Ask \(assistantName)")
+                Text(isPreview ? "Ask \(assistantName) Preview" : "Ask \(assistantName)")
                     .font(.headline.weight(.semibold))
+                if isPreview {
+                    PreviewFeatureBadge()
+                }
             }
             .foregroundStyle(DSColor.coralEnd.opacity(1.0))
             .padding(.horizontal, DSSpacing.md + 2)
@@ -42,7 +46,7 @@ struct FloatingAskTaiButton: View {
         .scaleEffect(isDeemphasized ? 0.96 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isDeemphasized)
         .contentShape(Capsule())
-        .accessibilityLabel("Ask \(assistantName)")
+        .accessibilityLabel(isPreview ? "Ask \(assistantName) Preview" : "Ask \(assistantName)")
         .accessibilityIdentifier("floatingAskTaiButton")
     }
 }

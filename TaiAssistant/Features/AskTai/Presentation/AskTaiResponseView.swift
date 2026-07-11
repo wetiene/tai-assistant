@@ -2,11 +2,18 @@ import SwiftUI
 
 struct AskTaiResponseView: View {
     let assistantName: String
+    let isPreview: Bool
     private let guidance: any AskTaiGuidanceService
     @State private var response: AskTaiResponse
 
-    init(assistantName: String, prompt: String, guidance: any AskTaiGuidanceService) {
+    init(
+        assistantName: String,
+        prompt: String,
+        guidance: any AskTaiGuidanceService,
+        isPreview: Bool = false
+    ) {
         self.assistantName = assistantName
+        self.isPreview = isPreview
         self.guidance = guidance
         _response = State(initialValue: guidance.response(for: prompt))
     }
@@ -14,6 +21,10 @@ struct AskTaiResponseView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.xl) {
+                if isPreview {
+                    previewNotice
+                }
+
                 summaryCard
 
                 VStack(alignment: .leading, spacing: DSSpacing.md) {
@@ -34,8 +45,18 @@ struct AskTaiResponseView: View {
             .padding(.vertical, DSSpacing.lg)
         }
         .background(DSColor.background.ignoresSafeArea())
-        .navigationTitle("\(assistantName) Strategy")
+        .navigationTitle(isPreview ? "\(assistantName) Preview" : "\(assistantName) Strategy")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var previewNotice: some View {
+        HStack(alignment: .top, spacing: DSSpacing.sm) {
+            PreviewFeatureBadge()
+            Text("Sample responses for testing. Live AI guidance is not available yet. Not medical advice.")
+                .font(.caption)
+                .foregroundStyle(DSColor.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var summaryCard: some View {

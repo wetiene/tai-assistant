@@ -12,6 +12,12 @@ struct AppDependencies {
     let alcoholPlanRepository: AlcoholPlanRepository
     let weightLogRepository: WeightLogRepository
     let appConfigRepository: AppConfigRepository
+    let analytics: any AnalyticsClient
+
+    /// True while Ask Tai uses local mock guidance instead of live AI.
+    var isAskTaiPreview: Bool {
+        askTaiGuidance is MockAskTaiGuidanceService
+    }
 
     /// Production wiring: all repositories read/write the same `ModelContainer` injected into the SwiftUI tree.
     static func live(modelContainer: ModelContainer, config: RuntimeAppConfig = .default) -> AppDependencies {
@@ -27,7 +33,8 @@ struct AppDependencies {
             recurringMealRepository: persistence.makeRecurringMealRepository(),
             alcoholPlanRepository: persistence.makeAlcoholPlanRepository(),
             weightLogRepository: persistence.makeWeightLogRepository(),
-            appConfigRepository: persistence.makeAppConfigRepository()
+            appConfigRepository: persistence.makeAppConfigRepository(),
+            analytics: makeAnalyticsClient()
         )
     }
 
@@ -43,8 +50,17 @@ struct AppDependencies {
             recurringMealRepository: MockRecurringMealRepository(),
             alcoholPlanRepository: MockAlcoholPlanRepository(),
             weightLogRepository: MockWeightLogRepository(),
-            appConfigRepository: MockAppConfigRepository()
+            appConfigRepository: MockAppConfigRepository(),
+            analytics: NoOpAnalyticsClient()
         )
+    }
+
+    private static func makeAnalyticsClient() -> any AnalyticsClient {
+        #if DEBUG
+        LoggingAnalyticsClient()
+        #else
+        NoOpAnalyticsClient()
+        #endif
     }
 
     private static func makeAIService(config: RuntimeAppConfig) -> AIService {

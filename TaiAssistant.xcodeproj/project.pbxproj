@@ -43,6 +43,35 @@
 		A10000000000000000000021 /* CheckInCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* CheckInCameraView.swift */; };
 		A10000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift */; };
 		A10000000000000000000031 /* CheckInViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* CheckInViewModel.swift */; };
+		A10000000000000000000032 /* AppLegalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* AppLegalLinks.swift */; };
+		A10000000000000000000033 /* AIDataProcessingConsent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* AIDataProcessingConsent.swift */; };
+		A10000000000000000000034 /* NutritionEstimateDisclaimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000034 /* NutritionEstimateDisclaimer.swift */; };
+		A10000000000000000000035 /* PreviewFeatureBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000035 /* PreviewFeatureBadge.swift */; };
+		A10000000000000000000036 /* AIDisclosureFootnote.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000038 /* AIDisclosureFootnote.swift */; };
+
+		A10000000000000000000040 /* CoachBriefingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000040 /* CoachBriefingModels.swift */; };
+		A10000000000000000000041 /* DailyCoachBriefingBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* DailyCoachBriefingBuilder.swift */; };
+		A10000000000000000000042 /* CoachBriefingInputFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* CoachBriefingInputFactory.swift */; };
+		A10000000000000000000043 /* HomeBriefingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* HomeBriefingView.swift */; };
+		A10000000000000000000044 /* RecommendationWhySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* RecommendationWhySheet.swift */; };
+		A10000000000000000000045 /* CoachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* CoachView.swift */; };
+		A10000000000000000000046 /* CheckInChooserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000046 /* CheckInChooserView.swift */; };
+		A10000000000000000000047 /* AnalyticsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000047 /* AnalyticsClient.swift */; };
+		A10000000000000000000048 /* DailyCoachBriefingBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000048 /* DailyCoachBriefingBuilderTests.swift */; };
+		A10000000000000000000049 /* NavigationShellContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000049 /* NavigationShellContractTests.swift */; };
+		A10000000000000000000050 /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000050 /* ConversationModels.swift */; };
+		A10000000000000000000051 /* ConversationSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000051 /* ConversationSessionStore.swift */; };
+		A10000000000000000000052 /* MealCapabilityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000052 /* MealCapabilityModels.swift */; };
+		A10000000000000000000053 /* MealCapabilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000053 /* MealCapabilityController.swift */; };
+		A10000000000000000000054 /* MealEstimateCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000054 /* MealEstimateCardView.swift */; };
+		A10000000000000000000055 /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000055 /* ConversationViewModel.swift */; };
+		A10000000000000000000056 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000056 /* ConversationView.swift */; };
+		A10000000000000000000057 /* ConversationComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000057 /* ConversationComposerView.swift */; };
+		A10000000000000000000058 /* ConversationMessageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000058 /* ConversationMessageRenderer.swift */; };
+		A10000000000000000000059 /* TaiConversationContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000059 /* TaiConversationContainerView.swift */; };
+		A1000000000000000000005A /* ConversationStateTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005A /* ConversationStateTransitionTests.swift */; };
+		A1000000000000000000005B /* MealCapabilityConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005B /* MealCapabilityConfirmationTests.swift */; };
+		A1000000000000000000005C /* ConversationQuickActionLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005C /* ConversationQuickActionLifecycleTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -82,11 +111,51 @@
 		A20000000000000000000021 /* CheckInCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInCameraView.swift; sourceTree = "<group>"; };
 		A20000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInPhotoUploadPreprocessor.swift; sourceTree = "<group>"; };
 		A20000000000000000000031 /* CheckInViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInViewModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000032 /* AppLegalLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLegalLinks.swift; sourceTree = "<group>"; };
+		A20000000000000000000033 /* AIDataProcessingConsent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIDataProcessingConsent.swift; sourceTree = "<group>"; };
+		A20000000000000000000034 /* NutritionEstimateDisclaimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionEstimateDisclaimer.swift; sourceTree = "<group>"; };
+		A20000000000000000000035 /* PreviewFeatureBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFeatureBadge.swift; sourceTree = "<group>"; };
+		A20000000000000000000036 /* TaiAssistant.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = TaiAssistant.xcconfig; sourceTree = "<group>"; };
+		A20000000000000000000037 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
+		A20000000000000000000038 /* AIDisclosureFootnote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIDisclosureFootnote.swift; sourceTree = "<group>"; };
+		A20000000000000000000039 /* SecretsInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = SecretsInfo.plist; sourceTree = "<group>"; };
 		A20000000000000000000030 /* TaiAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = TaiAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000040 /* CoachBriefingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachBriefingModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000041 /* DailyCoachBriefingBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyCoachBriefingBuilder.swift; sourceTree = "<group>"; };
+		A20000000000000000000042 /* CoachBriefingInputFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachBriefingInputFactory.swift; sourceTree = "<group>"; };
+		A20000000000000000000043 /* HomeBriefingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeBriefingView.swift; sourceTree = "<group>"; };
+		A20000000000000000000044 /* RecommendationWhySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendationWhySheet.swift; sourceTree = "<group>"; };
+		A20000000000000000000045 /* CoachView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachView.swift; sourceTree = "<group>"; };
+		A20000000000000000000046 /* CheckInChooserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInChooserView.swift; sourceTree = "<group>"; };
+		A20000000000000000000047 /* AnalyticsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsClient.swift; sourceTree = "<group>"; };
+		A20000000000000000000048 /* DailyCoachBriefingBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyCoachBriefingBuilderTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000049 /* NavigationShellContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationShellContractTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000004A /* TaiAssistantTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TaiAssistantTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000050 /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000051 /* ConversationSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSessionStore.swift; sourceTree = "<group>"; };
+		A20000000000000000000052 /* MealCapabilityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCapabilityModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000053 /* MealCapabilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCapabilityController.swift; sourceTree = "<group>"; };
+		A20000000000000000000054 /* MealEstimateCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEstimateCardView.swift; sourceTree = "<group>"; };
+		A20000000000000000000055 /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000056 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
+		A20000000000000000000057 /* ConversationComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationComposerView.swift; sourceTree = "<group>"; };
+		A20000000000000000000058 /* ConversationMessageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMessageRenderer.swift; sourceTree = "<group>"; };
+		A20000000000000000000059 /* TaiConversationContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaiConversationContainerView.swift; sourceTree = "<group>"; };
+		A2000000000000000000005A /* ConversationStateTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStateTransitionTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000005B /* MealCapabilityConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCapabilityConfirmationTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000005C /* ConversationQuickActionLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationQuickActionLifecycleTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A00000000000000000000028 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
+		A00000000000000000000067 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -101,8 +170,10 @@
 			children = (
 				3D0938432F8E6EB300371EAE /* Assets.xcassets */,
 				A00000000000000000000004 /* TaiAssistant/App */,
+				A0000000000000000000001E /* TaiAssistant/Config */,
 				A00000000000000000000005 /* TaiAssistant/Core */,
 				A00000000000000000000006 /* TaiAssistant/Features */,
+				A00000000000000000000060 /* TaiAssistantTests */,
 				A00000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -111,6 +182,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000030 /* TaiAssistant.app */,
+				A2000000000000000000004A /* TaiAssistantTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -129,11 +201,33 @@
 		A00000000000000000000005 /* TaiAssistant/Core */ = {
 			isa = PBXGroup;
 			children = (
+				A00000000000000000000061 /* Analytics */,
 				A00000000000000000000009 /* DesignSystem */,
+				A0000000000000000000001F /* Legal */,
 				A00000000000000000000010 /* Persistence */,
 				A00000000000000000000011 /* Services */,
 			);
 			path = TaiAssistant/Core;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000001E /* TaiAssistant/Config */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000036 /* TaiAssistant.xcconfig */,
+				A20000000000000000000037 /* Secrets.xcconfig.example */,
+				A20000000000000000000039 /* SecretsInfo.plist */,
+			);
+			path = TaiAssistant/Config;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000001F /* Legal */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000032 /* AppLegalLinks.swift */,
+				A20000000000000000000033 /* AIDataProcessingConsent.swift */,
+				A20000000000000000000038 /* AIDisclosureFootnote.swift */,
+			);
+			path = Legal;
 			sourceTree = "<group>";
 		};
 		A00000000000000000000006 /* TaiAssistant/Features */ = {
@@ -141,8 +235,11 @@
 			children = (
 				A0000000000000000000001A /* AskTai/Presentation */,
 				A0000000000000000000001D /* CheckIn/Presentation */,
+				A00000000000000000000062 /* Coach */,
+				A00000000000000000000070 /* Conversation */,
 				A00000000000000000000018 /* Dashboard/Presentation */,
 				A00000000000000000000019 /* Goals/Presentation */,
+				A00000000000000000000063 /* Home */,
 				A0000000000000000000001B /* MealCapture/Presentation */,
 			);
 			path = TaiAssistant/Features;
@@ -200,7 +297,9 @@
 				A20000000000000000000005 /* AskTaiEntrySheet.swift */,
 				A20000000000000000000006 /* DashboardCard.swift */,
 				A20000000000000000000007 /* FloatingAskTaiButton.swift */,
+				A20000000000000000000034 /* NutritionEstimateDisclaimer.swift */,
 				A20000000000000000000008 /* PrimaryCard.swift */,
+				A20000000000000000000035 /* PreviewFeatureBadge.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -288,6 +387,7 @@
 		A0000000000000000000001D /* CheckIn/Presentation */ = {
 			isa = PBXGroup;
 			children = (
+				A20000000000000000000046 /* CheckInChooserView.swift */,
 				A2000000000000000000001D /* CheckInModels.swift */,
 				A2000000000000000000001E /* CheckInMockInterpreter.swift */,
 				A2000000000000000000001F /* CheckInView.swift */,
@@ -297,6 +397,120 @@
 				A20000000000000000000031 /* CheckInViewModel.swift */,
 			);
 			path = CheckIn/Presentation;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000060 /* TaiAssistantTests */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000048 /* DailyCoachBriefingBuilderTests.swift */,
+				A20000000000000000000049 /* NavigationShellContractTests.swift */,
+				A2000000000000000000005A /* ConversationStateTransitionTests.swift */,
+				A2000000000000000000005B /* MealCapabilityConfirmationTests.swift */,
+				A2000000000000000000005C /* ConversationQuickActionLifecycleTests.swift */,
+			);
+			path = TaiAssistantTests;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000061 /* Analytics */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000047 /* AnalyticsClient.swift */,
+			);
+			path = Analytics;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000062 /* Coach */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000064 /* Coach/Presentation */,
+			);
+			path = Coach;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000063 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000065 /* Home/Domain */,
+				A00000000000000000000066 /* Home/Presentation */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000064 /* Coach/Presentation */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000045 /* CoachView.swift */,
+			);
+			path = Presentation;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000065 /* Home/Domain */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000040 /* CoachBriefingModels.swift */,
+				A20000000000000000000042 /* CoachBriefingInputFactory.swift */,
+				A20000000000000000000041 /* DailyCoachBriefingBuilder.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000066 /* Home/Presentation */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000043 /* HomeBriefingView.swift */,
+				A20000000000000000000044 /* RecommendationWhySheet.swift */,
+			);
+			path = Presentation;
+			sourceTree = "<group>";
+		};
+
+		A00000000000000000000070 /* Conversation */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000071 /* Conversation/Domain */,
+				A00000000000000000000072 /* Conversation/Presentation */,
+				A00000000000000000000073 /* Conversation/Capabilities */,
+			);
+			path = Conversation;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000071 /* Conversation/Domain */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000050 /* ConversationModels.swift */,
+				A20000000000000000000051 /* ConversationSessionStore.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000072 /* Conversation/Presentation */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000055 /* ConversationViewModel.swift */,
+				A20000000000000000000056 /* ConversationView.swift */,
+				A20000000000000000000057 /* ConversationComposerView.swift */,
+				A20000000000000000000058 /* ConversationMessageRenderer.swift */,
+				A20000000000000000000059 /* TaiConversationContainerView.swift */,
+			);
+			path = Presentation;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000073 /* Conversation/Capabilities */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000074 /* Meal */,
+			);
+			path = Capabilities;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000074 /* Meal */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000052 /* MealCapabilityModels.swift */,
+				A20000000000000000000053 /* MealCapabilityController.swift */,
+				A20000000000000000000054 /* MealEstimateCardView.swift */,
+			);
+			path = Meal;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -319,6 +533,24 @@
 			productReference = A20000000000000000000030 /* TaiAssistant.app */;
 			productType = "com.apple.product-type.application";
 		};
+
+		A00000000000000000000050 /* TaiAssistantTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A00000000000000000000056 /* Build configuration list for PBXNativeTarget "TaiAssistantTests" */;
+			buildPhases = (
+				A00000000000000000000051 /* Sources */,
+				A00000000000000000000067 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A00000000000000000000054 /* PBXTargetDependency */,
+			);
+			name = TaiAssistantTests;
+			productName = TaiAssistantTests;
+			productReference = A2000000000000000000004A /* TaiAssistantTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -331,6 +563,10 @@
 				TargetAttributes = {
 					A00000000000000000000020 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					A00000000000000000000050 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A00000000000000000000020;
 					};
 				};
 			};
@@ -348,9 +584,29 @@
 			projectRoot = "";
 			targets = (
 				A00000000000000000000020 /* TaiAssistant */,
+				A00000000000000000000050 /* TaiAssistantTests */,
 			);
 		};
 /* End PBXProject section */
+
+
+/* Begin PBXContainerItemProxy section */
+		A00000000000000000000055 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A00000000000000000000020;
+			remoteInfo = TaiAssistant;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		A00000000000000000000054 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A00000000000000000000020 /* TaiAssistant */;
+			targetProxy = A00000000000000000000055 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A00000000000000000000029 /* Resources */ = {
@@ -403,6 +659,41 @@
 				A10000000000000000000021 /* CheckInCameraView.swift in Sources */,
 				A10000000000000000000022 /* CheckInPhotoUploadPreprocessor.swift in Sources */,
 				A10000000000000000000031 /* CheckInViewModel.swift in Sources */,
+				A10000000000000000000032 /* AppLegalLinks.swift in Sources */,
+				A10000000000000000000033 /* AIDataProcessingConsent.swift in Sources */,
+				A10000000000000000000034 /* NutritionEstimateDisclaimer.swift in Sources */,
+				A10000000000000000000035 /* PreviewFeatureBadge.swift in Sources */,
+				A10000000000000000000036 /* AIDisclosureFootnote.swift in Sources */,
+				A10000000000000000000040 /* CoachBriefingModels.swift in Sources */,
+				A10000000000000000000041 /* DailyCoachBriefingBuilder.swift in Sources */,
+				A10000000000000000000042 /* CoachBriefingInputFactory.swift in Sources */,
+				A10000000000000000000043 /* HomeBriefingView.swift in Sources */,
+				A10000000000000000000044 /* RecommendationWhySheet.swift in Sources */,
+				A10000000000000000000045 /* CoachView.swift in Sources */,
+				A10000000000000000000046 /* CheckInChooserView.swift in Sources */,
+				A10000000000000000000047 /* AnalyticsClient.swift in Sources */,
+				A10000000000000000000050 /* ConversationModels.swift in Sources */,
+				A10000000000000000000051 /* ConversationSessionStore.swift in Sources */,
+				A10000000000000000000052 /* MealCapabilityModels.swift in Sources */,
+				A10000000000000000000053 /* MealCapabilityController.swift in Sources */,
+				A10000000000000000000054 /* MealEstimateCardView.swift in Sources */,
+				A10000000000000000000055 /* ConversationViewModel.swift in Sources */,
+				A10000000000000000000056 /* ConversationView.swift in Sources */,
+				A10000000000000000000057 /* ConversationComposerView.swift in Sources */,
+				A10000000000000000000058 /* ConversationMessageRenderer.swift in Sources */,
+				A10000000000000000000059 /* TaiConversationContainerView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00000000000000000000051 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000048 /* DailyCoachBriefingBuilderTests.swift in Sources */,
+				A10000000000000000000049 /* NavigationShellContractTests.swift in Sources */,
+				A1000000000000000000005A /* ConversationStateTransitionTests.swift in Sources */,
+				A1000000000000000000005B /* MealCapabilityConfirmationTests.swift in Sources */,
+				A1000000000000000000005C /* ConversationQuickActionLifecycleTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -411,6 +702,7 @@
 /* Begin XCBuildConfiguration section */
 		A00000000000000000000023 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A20000000000000000000036 /* TaiAssistant.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -475,6 +767,7 @@
 		};
 		A00000000000000000000024 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A20000000000000000000036 /* TaiAssistant.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -538,10 +831,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TaiAssistant/Config/SecretsInfo.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Capture meal photos for nutrition estimation.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose meal photos from your library for nutrition estimation.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Capture meal photos so Tai can use AI to estimate nutrition.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose meal photos from your library so Tai can use AI to estimate nutrition.";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -569,10 +863,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TaiAssistant/Config/SecretsInfo.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Capture meal photos for nutrition estimation.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose meal photos from your library for nutrition estimation.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Capture meal photos so Tai can use AI to estimate nutrition.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose meal photos from your library so Tai can use AI to estimate nutrition.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -588,6 +883,49 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+
+		A00000000000000000000057 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZSQ3Z4VS4N;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.william.taiassistant.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TaiAssistant.app/TaiAssistant";
+			};
+			name = Debug;
+		};
+		A00000000000000000000058 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZSQ3Z4VS4N;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.william.taiassistant.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TaiAssistant.app/TaiAssistant";
 			};
 			name = Release;
 		};
@@ -608,6 +946,15 @@
 			buildConfigurations = (
 				A00000000000000000000025 /* Debug */,
 				A00000000000000000000026 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00000000000000000000056 /* Build configuration list for PBXNativeTarget "TaiAssistantTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00000000000000000000057 /* Debug */,
+				A00000000000000000000058 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -21,7 +21,8 @@ struct CheckInCameraView: View {
             if cameraController.isPermissionDenied {
                 cameraBlockedOverlay(
                     title: "Camera access is off",
-                    detail: "Enable camera access in Settings to capture a check-in photo."
+                    detail: "Enable camera access in Settings to capture a check-in photo.",
+                    showsOpenSettings: true
                 )
             } else if cameraController.isUnavailable {
                 cameraBlockedOverlay(
@@ -122,8 +123,8 @@ struct CheckInCameraView: View {
     }
 
     @ViewBuilder
-    private func cameraBlockedOverlay(title: String, detail: String) -> some View {
-        VStack(spacing: DSSpacing.sm) {
+    private func cameraBlockedOverlay(title: String, detail: String, showsOpenSettings: Bool = false) -> some View {
+        VStack(spacing: DSSpacing.md) {
             Text(title)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.white)
@@ -131,6 +132,18 @@ struct CheckInCameraView: View {
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
+            if showsOpenSettings {
+                Button("Open Settings") {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    UIApplication.shared.open(url)
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, DSSpacing.lg)
+                .padding(.vertical, DSSpacing.sm)
+                .background(DSColor.coralGradient)
+                .clipShape(Capsule())
+            }
         }
         .padding(DSSpacing.lg)
         .background(Color.black.opacity(0.62))

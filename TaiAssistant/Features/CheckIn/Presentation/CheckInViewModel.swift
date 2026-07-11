@@ -121,22 +121,29 @@ final class CheckInViewModel {
             appendContextRow(kind: .ai, text: aiSummaryText(from: interpretation))
             await refreshDayProgress()
         } catch {
+            if let raw = rawUserMessageForRefinement?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !raw.isEmpty,
+               !isAutomatedProxyUserText(raw),
+               session.userInput.isEmpty {
+                session.userInput = raw
+            }
+            errorMessage = "Could not interpret this check in. Please try again."
             #if DEBUG
             let elapsed = Date().timeIntervalSince(interpretRequestStarted)
             aiInterpretFailureDebugText = Self.formatInterpretFailureForDebug(error: error, requestDuration: elapsed)
-            #else
-            errorMessage = "Could not interpret this check in. Please try again."
             #endif
         }
     }
 
     func saveInterpretedMeals() {
-        guard !isSaving else { return }
+        guard !isSaving, !isInterpreting else { return }
+        isSaving = true
+        let draftsToSave = session.interpretedMeals
         Task {
-            isSaving = true
             defer { isSaving = false }
+            var savedCount = 0
             do {
-                for draft in session.interpretedMeals {
+                for draft in draftsToSave {
                     let mealLog = MealLog(
                         ownerID: ownerID,
                         eatenAt: draft.eatenAt,
@@ -156,13 +163,22 @@ final class CheckInViewModel {
                         )
                     }
                     try await mealRepository.createMealLog(mealLog)
+                    savedCount += 1
                 }
                 session = CheckInSessionDraft()
                 contextRows = []
                 onMealsSaved?()
                 await refreshDayProgress()
             } catch {
-                errorMessage = "Could not save check in meals. Please retry."
+                if savedCount > 0 {
+                    session.interpretedMeals = Array(draftsToSave.dropFirst(savedCount))
+                    onMealsSaved?()
+                    await refreshDayProgress()
+                    let remaining = draftsToSave.count - savedCount
+                    errorMessage = "Saved \(savedCount) meal\(savedCount == 1 ? "" : "s"). \(remaining) still need saving — tap Add to today to retry."
+                } else {
+                    errorMessage = "Could not save check in meals. Please retry."
+                }
             }
         }
     }

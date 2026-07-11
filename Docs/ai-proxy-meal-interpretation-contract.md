@@ -1,5 +1,7 @@
 # Tai AI Proxy Contract (Meal Interpretation)
 
+> Implementation contract — not part of the constitutional layer. Start with [`Docs/README.md`](README.md). Must not contradict `PRODUCT_DECISIONS.md` or `AI_ARCHITECTURE.md`.
+
 This app lane intentionally does **not** call OpenAI from iOS.
 All OpenAI traffic must be server-side through a backend proxy.
 

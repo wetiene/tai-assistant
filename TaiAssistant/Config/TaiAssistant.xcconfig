@@ -1,0 +1,2 @@
+// Shared build settings. Optional local secrets are merged from Secrets.xcconfig (gitignored).
+#include? "Secrets.xcconfig"

@@ -15,3 +15,13 @@ xcuserdata/
 xcuserdata/
 .cursor/
 .deriveddata/
+
+# Local proxy auth for dev/TestFlight archives (copy from Secrets.xcconfig.example)
+TaiAssistant/Config/Secrets.xcconfig
+
+# Agent / compliance local DerivedData
+.deriveddata-slice0/
+.deriveddata-compliance/
+
+.deriveddata-release/
+.deriveddata-secrets/

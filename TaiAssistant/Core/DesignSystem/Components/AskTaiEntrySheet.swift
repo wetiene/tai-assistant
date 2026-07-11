@@ -3,6 +3,7 @@ import SwiftUI
 struct AskTaiEntrySheet: View {
     let assistantName: String
     let askTaiGuidance: any AskTaiGuidanceService
+    var isPreview: Bool = false
     let initialPrompt: String?
     let dismiss: () -> Void
     @State private var draftPrompt = ""
@@ -16,12 +17,23 @@ struct AskTaiEntrySheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: DSSpacing.xxl) {
                     VStack(alignment: .leading, spacing: DSSpacing.xs) {
-                        Text("Ask \(assistantName)")
-                            .font(.largeTitle.weight(.bold))
-                            .foregroundStyle(DSColor.textPrimary)
-                        Text("Choose your next decision")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(DSColor.textSecondary)
+                        HStack(alignment: .firstTextBaseline, spacing: DSSpacing.sm) {
+                            Text(isPreview ? "Ask \(assistantName) Preview" : "Ask \(assistantName)")
+                                .font(.largeTitle.weight(.bold))
+                                .foregroundStyle(DSColor.textPrimary)
+                            if isPreview {
+                                PreviewFeatureBadge()
+                            }
+                        }
+                        if isPreview {
+                            Text("Preview coaching — sample responses, not live AI yet. Not medical advice.")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(DSColor.textSecondary)
+                        } else {
+                            Text("Choose your next decision")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(DSColor.textSecondary)
+                        }
                     }
 
                     BestAskCard(
@@ -52,33 +64,19 @@ struct AskTaiEntrySheet: View {
             }
             .background(DSColor.background.ignoresSafeArea())
             .safeAreaInset(edge: .bottom) {
-                HStack(spacing: DSSpacing.sm) {
-                    Button {
-                        // Voice-ready affordance only for now.
-                    } label: {
-                        Image(systemName: "mic.fill")
-                            .font(.headline)
-                            .foregroundStyle(DSColor.coralEnd)
-                            .frame(width: 42, height: 42)
-                            .background(DSColor.warmSurface)
-                            .clipShape(Circle())
+                Button {
+                    let prompt = draftPrompt.isEmpty ? featuredPrompt : draftPrompt
+                    openResponse(with: prompt)
+                } label: {
+                    HStack(spacing: DSSpacing.sm) {
+                        Text(draftPrompt.isEmpty ? "Try the featured ask" : draftPrompt)
+                            .lineLimit(1)
+                        Spacer()
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title3)
                     }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        let prompt = draftPrompt.isEmpty ? featuredPrompt : draftPrompt
-                        openResponse(with: prompt)
-                    } label: {
-                        HStack(spacing: DSSpacing.sm) {
-                            Text(draftPrompt.isEmpty ? "Start strategy response" : draftPrompt)
-                                .lineLimit(1)
-                            Spacer()
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.title3)
-                        }
-                    }
-                    .buttonStyle(CoralGradientButtonStyle())
                 }
+                .buttonStyle(CoralGradientButtonStyle())
                 .padding(.horizontal, DSSpacing.lg)
                 .padding(.vertical, DSSpacing.md)
                 .background(.ultraThinMaterial)
@@ -89,7 +87,12 @@ struct AskTaiEntrySheet: View {
                 }
             }
             .navigationDestination(item: $responseRoute) { route in
-                AskTaiResponseView(assistantName: assistantName, prompt: route.prompt, guidance: askTaiGuidance)
+                AskTaiResponseView(
+                    assistantName: assistantName,
+                    prompt: route.prompt,
+                    guidance: askTaiGuidance,
+                    isPreview: isPreview
+                )
             }
             .onAppear {
                 if draftPrompt.isEmpty, let initialPrompt {

@@ -1,0 +1,134 @@
+import Foundation
+
+// MARK: - Domain-agnostic conversation primitives
+//
+// The conversation layer understands only messages, cards, composer, attachments,
+// quick actions, and conversation state. Domain behaviour lives in capabilities.
+
+enum ConversationActor: Equatable, Sendable {
+    case assistant
+    case user
+    case system
+}
+
+struct ConversationAttachment: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let kind: Kind
+
+    enum Kind: Equatable, Sendable {
+        case photoJPEG(Data)
+    }
+
+    init(id: UUID = UUID(), kind: Kind) {
+        self.id = id
+        self.kind = kind
+    }
+}
+
+/// Opaque card payload. Capabilities register typed content; the renderer switches on `typeID`.
+struct ConversationCard: Identifiable, Equatable, Sendable {
+    let id: UUID
+    /// Stable capability-scoped type, e.g. `meal.estimate`.
+    let typeID: String
+    let payload: Data
+    /// When false, historical cards stay visible but non-interactive.
+    let isInteractive: Bool
+
+    init(id: UUID = UUID(), typeID: String, payload: Data, isInteractive: Bool = true) {
+        self.id = id
+        self.typeID = typeID
+        self.payload = payload
+        self.isInteractive = isInteractive
+    }
+}
+
+struct ConversationMessage: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let actor: ConversationActor
+    let createdAt: Date
+    let text: String?
+    let attachment: ConversationAttachment?
+    let card: ConversationCard?
+    let quickActions: [ConversationQuickAction]?
+
+    init(
+        id: UUID = UUID(),
+        actor: ConversationActor,
+        createdAt: Date = .now,
+        text: String? = nil,
+        attachment: ConversationAttachment? = nil,
+        card: ConversationCard? = nil,
+        quickActions: [ConversationQuickAction]? = nil
+    ) {
+        self.id = id
+        self.actor = actor
+        self.createdAt = createdAt
+        self.text = text
+        self.attachment = attachment
+        self.card = card
+        self.quickActions = quickActions
+    }
+}
+
+struct ConversationQuickAction: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let systemImage: String?
+    let accessibilityHint: String?
+
+    init(
+        id: String,
+        title: String,
+        systemImage: String? = nil,
+        accessibilityHint: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.systemImage = systemImage
+        self.accessibilityHint = accessibilityHint
+    }
+}
+
+struct ConversationComposerState: Equatable, Sendable {
+    var text: String = ""
+    var pendingPhotoJPEG: Data? = nil
+    var isSendEnabled: Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty || pendingPhotoJPEG != nil
+    }
+}
+
+/// Extensible conversation activity — avoid boolean flag soup.
+/// Future capabilities add cases or nest under `.capability` without rewriting the core.
+enum ConversationActivity: Equatable, Sendable {
+    case idle
+    case awaitingUser
+    case processing(reason: String)
+    /// Opaque capability phase encoded as capabilityID + phaseID (+ optional JSON).
+    case capability(capabilityID: String, phaseID: String, payload: Data?)
+}
+
+struct ActiveConversation: Identifiable, Equatable, Sendable {
+    let id: UUID
+    var messages: [ConversationMessage]
+    var composer: ConversationComposerState
+    var activity: ConversationActivity
+    var activeQuickActions: [ConversationQuickAction]
+    let createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        messages: [ConversationMessage] = [],
+        composer: ConversationComposerState = ConversationComposerState(),
+        activity: ConversationActivity = .idle,
+        activeQuickActions: [ConversationQuickAction] = [],
+        createdAt: Date = .now
+    ) {
+        self.id = id
+        self.messages = messages
+        self.composer = composer
+        self.activity = activity
+        self.activeQuickActions = activeQuickActions
+        self.createdAt = createdAt
+    }
+}

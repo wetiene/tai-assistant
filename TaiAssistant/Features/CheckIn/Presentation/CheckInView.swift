@@ -8,6 +8,8 @@ struct CheckInView: View {
     @State private var isPhotoPreviewPresented = false
     @State private var isConfirmPressed = false
     @State private var isTaiNoteExpanded = false
+    @State private var isAIConsentPresented = false
+    @State private var pendingAIAction: (() -> Void)?
     @FocusState private var isComposerFocused: Bool
 
     init(
@@ -29,18 +31,22 @@ struct CheckInView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.xl) {
-                Text("Checkin with Tai")
+                Text("Check in with Tai")
                     .font(.title.weight(.bold))
                     .foregroundStyle(DSColor.textPrimary)
 
                 contextSummarySection
                 composerCard
+                AIDisclosureFootnote()
                 if !viewModel.session.interpretedMeals.isEmpty {
+                    taiInterpretationSummarySection
                     interpretedMealsSection
                 }
                 if !viewModel.session.interpretedMeals.isEmpty {
                     inlineConfirmSection
                 }
+
+                NutritionEstimateDisclaimer()
             }
             .padding(.horizontal, DSSpacing.lg)
             .padding(.top, DSSpacing.lg)
@@ -63,6 +69,19 @@ struct CheckInView: View {
                         .font(.subheadline.weight(.semibold))
                 }
             }
+        }
+        .sheet(isPresented: $isAIConsentPresented) {
+            AIDataProcessingConsentSheet(
+                onAccept: {
+                    isAIConsentPresented = false
+                    pendingAIAction?()
+                    pendingAIAction = nil
+                },
+                onDecline: {
+                    isAIConsentPresented = false
+                    pendingAIAction = nil
+                }
+            )
         }
         .fullScreenCover(isPresented: $isCameraPresented) {
             CheckInCameraView { image in
@@ -119,9 +138,11 @@ struct CheckInView: View {
                     .padding(.trailing, 56)
 
                 Button {
-                    Task {
-                        isTaiNoteExpanded = false
-                        await viewModel.onUpdateMealTapped()
+                    requestAIProcessingConsent {
+                        Task {
+                            isTaiNoteExpanded = false
+                            await viewModel.onUpdateMealTapped()
+                        }
                     }
                 } label: {
                     Group {
@@ -152,6 +173,12 @@ struct CheckInView: View {
                     viewModel.isInterpreting ||
                     (vm.session.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && vm.session.selectedPhotoData == nil && vm.session.interpretedMeals.isEmpty)
                 )
+                .accessibilityLabel("Analyze meal with Tai")
+                .accessibilityHint(
+                    vm.session.selectedPhotoData != nil
+                        ? "Analyzes your attached photo and any notes"
+                        : "Interprets your meal description"
+                )
             }
             .frame(minHeight: 46)
             .background(DSColor.surface)
@@ -163,7 +190,9 @@ struct CheckInView: View {
 
             HStack(spacing: DSSpacing.sm) {
                 Button {
-                    isCameraPresented = true
+                    requestAIProcessingConsent {
+                        isCameraPresented = true
+                    }
                 } label: {
                     Label(vm.session.selectedPhotoData == nil ? "Take Photo" : "Retake Photo", systemImage: "camera.fill")
                         .font(.subheadline.weight(.semibold))
@@ -177,7 +206,47 @@ struct CheckInView: View {
             }
 
             selectedPhotoThumbnail
+
+            if vm.session.selectedPhotoData != nil, viewModel.session.interpretedMeals.isEmpty, !viewModel.isInterpreting {
+                Text("Tap the sparkle button to analyze your photo.")
+                    .font(.caption)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+    }
+
+    @ViewBuilder
+    private var taiInterpretationSummarySection: some View {
+        PrimaryCard(cornerRadius: 18, useWarmBackground: true) {
+            Label("Tai read this as \(understoodAsText)", systemImage: "sparkles")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DSColor.coralEnd)
+
+            Text(displayedTaiNoteText)
+                .font(.caption)
+                .foregroundStyle(DSColor.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if shouldShowTaiNoteExpansion {
+                Button(isTaiNoteExpanded ? "Show less" : "Show more") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isTaiNoteExpanded.toggle()
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DSColor.coralEnd)
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var displayedTaiNoteText: String {
+        if isTaiNoteExpanded || !shouldShowTaiNoteExpansion {
+            return taiNoteText
+        }
+        let prefix = String(taiNoteText.prefix(130)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return prefix + "…"
     }
 
     @ViewBuilder
@@ -296,7 +365,7 @@ struct CheckInView: View {
         @Bindable var vm = viewModel
         return VStack(alignment: .leading, spacing: DSSpacing.lg) {
             if !vm.session.interpretedMeals.isEmpty {
-                Text("Inferred meals")
+                Text("Review your meal")
                     .font(.body.weight(.medium))
                     .foregroundStyle(DSColor.textPrimary)
             }
@@ -441,6 +510,7 @@ struct CheckInView: View {
             }
             .buttonStyle(CoralGradientButtonStyle())
             .frame(maxWidth: .infinity)
+            .disabled(viewModel.isSaving || viewModel.isInterpreting)
             .scaleEffect(isConfirmPressed ? 0.98 : 1.0)
             .opacity(isConfirmPressed ? 0.94 : 1.0)
             .animation(.easeOut(duration: 0.12), value: isConfirmPressed)
@@ -449,6 +519,15 @@ struct CheckInView: View {
                     .onChanged { _ in isConfirmPressed = true }
                     .onEnded { _ in isConfirmPressed = false }
             )
+        }
+    }
+
+    private func requestAIProcessingConsent(then action: @escaping () -> Void) {
+        if AIDataProcessingConsentStore.hasAccepted {
+            action()
+        } else {
+            pendingAIAction = action
+            isAIConsentPresented = true
         }
     }
 
@@ -501,9 +580,14 @@ private struct CheckInMealCard: View {
             HStack {
                 TimingChip(timing: $draft.timing)
                 Spacer()
-                DatePicker("", selection: $draft.eatenAt, displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                    .font(.caption)
+                DatePicker(
+                    "Meal time",
+                    selection: $draft.eatenAt,
+                    displayedComponents: .hourAndMinute
+                )
+                .labelsHidden()
+                .font(.caption)
+                .accessibilityLabel("Meal time")
             }
 
             TextField("Meal label", text: $draft.label)
@@ -554,7 +638,7 @@ private struct CheckInMealCard: View {
                 StatPill(title: "F", value: "\(draft.fatGrams)g")
             }
 
-            Text("Confidence \(Int((draft.confidence * 100).rounded()))%")
+            Text("Estimate confidence: \(Int((draft.confidence * 100).rounded()))%")
                 .font(.caption2)
                 .foregroundStyle(DSColor.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)

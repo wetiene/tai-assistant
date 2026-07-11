@@ -15,9 +15,9 @@ struct PrimaryCard<Content: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                .stroke(DSColor.cardStroke, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.08), radius: 14, y: 8)
+        .shadow(color: DSColor.cardShadow, radius: 14, y: 8)
     }
 }
 

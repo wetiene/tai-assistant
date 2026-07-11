@@ -8,6 +8,7 @@ struct DashboardView: View {
     let alcoholPlanRepository: AlcoholPlanRepository
     let ownerID: String
     let assistantName: String
+    var isAskTaiPreview: Bool = false
     var mealAddedFeedbackTrigger: Int = 0
     var onCheckInRequested: (() -> Void)? = nil
     var onAskTaiRequested: ((String) -> Void)? = nil
@@ -22,11 +23,27 @@ struct DashboardView: View {
     @State private var addFeedbackDismissTask: Task<Void, Never>?
     @State private var lastScrollMinY: CGFloat = 0
     @State private var isScrollingDown = false
+    @State private var loadError: String?
+    @State private var actionError: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.xl) {
                 header
+
+                if let loadError {
+                    DashboardInlineFeedback(
+                        message: loadError,
+                        icon: "exclamationmark.triangle.fill",
+                        tint: DSColor.destructiveCoral
+                    )
+                    Button("Try again") {
+                        Task { await loadDashboard() }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(DSColor.coralEnd)
+                    .buttonStyle(.plain)
+                }
 
                 if showsMealAddedFeedback {
                     DashboardInlineFeedback(
@@ -37,7 +54,12 @@ struct DashboardView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
-                TodayStatusHero(state: state)
+                TodayStatusHero(
+                    state: state,
+                    assistantName: assistantName,
+                    isAskTaiPreview: isAskTaiPreview,
+                    onAskTaiRequested: onAskTaiRequested
+                )
 
                 NextBestMealCard(state: state)
 
@@ -70,12 +92,16 @@ struct DashboardView: View {
                     pendingUndoMeal: pendingUndoMeal,
                     pendingUndoOriginalIndex: pendingUndoOriginalIndex,
                     onDeleteMeal: deleteMeal,
-                    onUndoDelete: { Task { await undoDeleteMeal() } }
+                    onUndoDelete: { Task { await undoDeleteMeal() } },
+                    onCheckInRequested: onCheckInRequested
                 )
 
                 SmartPatternsCard(state: state)
 
                 AlcoholBudgetCard(state: state)
+
+                NutritionEstimateDisclaimer()
+                    .padding(.top, DSSpacing.xs)
 
                 Color.clear
                     .frame(height: DSSpacing.customBottomNavHeight + 48 + 30)
@@ -107,9 +133,20 @@ struct DashboardView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
+        .alert("Dashboard", isPresented: Binding(
+            get: { actionError != nil },
+            set: { isPresented in
+                if !isPresented { actionError = nil }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "")
+        }
         .onChange(of: mealAddedFeedbackTrigger) { _, newValue in
             guard newValue > 0 else { return }
             showMealAddedFeedback()
+            Task { await loadDashboard() }
         }
         .onPreferenceChange(DashboardScrollMinYPreferenceKey.self) { newMinY in
             let delta = newMinY - lastScrollMinY
@@ -147,6 +184,7 @@ struct DashboardView: View {
         defer { isLoading = false }
 
         do {
+            loadError = nil
             async let goalProfilesTask = goalRepository.fetchGoalProfiles(ownerID: ownerID)
             async let recurringMealsTask = recurringMealRepository.fetchRecurringMeals(ownerID: ownerID, activeOnly: true)
             async let alcoholPlanTask = alcoholPlanRepository.fetchAlcoholPlan(ownerID: ownerID)
@@ -176,6 +214,7 @@ struct DashboardView: View {
             )
         } catch {
             state = DashboardState.placeholder
+            loadError = "Could not load today's dashboard. Pull to refresh or tap Try again."
         }
     }
 
@@ -191,7 +230,7 @@ struct DashboardView: View {
                 scheduleUndoDismiss()
                 await loadDashboard()
             } catch {
-                // Keep current UI state if delete fails.
+                actionError = "Could not delete that meal. Please try again."
             }
         }
     }
@@ -208,7 +247,7 @@ struct DashboardView: View {
             }
             await loadDashboard()
         } catch {
-            // Keep toast visible if restore fails so user can retry.
+            actionError = "Could not restore that meal. Tap Undo to try again."
         }
     }
 
@@ -251,6 +290,9 @@ private struct DashboardScrollMinYPreferenceKey: PreferenceKey {
 
 private struct TodayStatusHero: View {
     let state: DashboardState
+    let assistantName: String
+    var isAskTaiPreview: Bool = false
+    var onAskTaiRequested: ((String) -> Void)? = nil
 
     var body: some View {
         PrimaryCard(cornerRadius: 26) {
@@ -275,11 +317,26 @@ private struct TodayStatusHero: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 22)
 
-                Text("Need specifics? Ask Tai for your best next move.")
-                    .font(.footnote)
-                    .foregroundStyle(DSColor.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 6)
+                Group {
+                    if let onAskTaiRequested {
+                        Button {
+                            onAskTaiRequested("Plan a high-protein dinner from my remaining macros")
+                        } label: {
+                            Text(isAskTaiPreview ? "Need specifics? Ask \(assistantName) Preview for your best next move." : "Need specifics? Ask \(assistantName) for your best next move.")
+                                .font(.footnote)
+                                .foregroundStyle(DSColor.coralEnd)
+                                .multilineTextAlignment(.center)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens Ask Tai")
+                    } else {
+                        Text(isAskTaiPreview ? "Need specifics? Ask \(assistantName) Preview for your best next move." : "Need specifics? Ask \(assistantName) for your best next move.")
+                            .font(.footnote)
+                            .foregroundStyle(DSColor.textSecondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 6)
 
                 Text(state.heroDetailLine)
                     .font(.caption2)
@@ -341,17 +398,26 @@ private struct TodaysMealsCard: View {
     let pendingUndoOriginalIndex: Int?
     let onDeleteMeal: (DashboardState.TodayMealSummary) -> Void
     let onUndoDelete: () -> Void
+    var onCheckInRequested: (() -> Void)? = nil
 
     var body: some View {
         DashboardCard(title: "Today's meals", icon: "list.bullet.rectangle.portrait", tint: .pink) {
             let rows = displayRows
 
             if rows.isEmpty {
-                VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                VStack(alignment: .leading, spacing: DSSpacing.sm) {
                     Text("No meals yet today")
                         .dashboardPrimaryText(.body)
-                    Text("Start by checking in your first meal")
+                    Text("Check in your first meal to start tracking today.")
                         .dashboardSecondaryText()
+                    if let onCheckInRequested {
+                        Button(action: onCheckInRequested) {
+                            Label("Check in a meal", systemImage: "plus.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .buttonStyle(CoralGradientButtonStyle(isCompact: true))
+                        .padding(.top, DSSpacing.xs)
+                    }
                 }
             } else {
                 ForEach(rows) { row in
@@ -785,7 +851,7 @@ private struct DashboardState {
         fatConsumed: 0,
         fatTarget: 70,
         fatRemaining: 70,
-        nextBestMealTitle: "Load your first meal",
+        nextBestMealTitle: "Log your first meal",
         nextBestMealBody: "After your first meal log, Tai can suggest the best macro-balancing next meal.",
         alcoholHeadline: "No plan set",
         alcoholGuidance: "Set an alcohol plan to keep meals and social events aligned with your weekly goal.",

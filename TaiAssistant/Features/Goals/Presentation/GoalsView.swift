@@ -16,9 +16,11 @@ struct GoalsView: View {
     @State private var saveMessage: String?
     @State private var saveError: String?
     @State private var isInterpreting = false
+    @State private var isAIConsentPresented = false
+    @State private var pendingAIAction: (() -> Void)?
     @FocusState private var isGoalPromptFocused: Bool
 
-    private let contextSummaryMaxHeight: CGFloat = 100
+    private let contextSummaryMaxHeight: CGFloat = 180
 
     var body: some View {
         ScrollView {
@@ -38,20 +40,25 @@ struct GoalsView: View {
                 goalsContextSection
 
                 goalsInputSection
+                AIDisclosureFootnote()
 
                 if let draft {
                     extractedTargetsSection(draft)
                 }
 
                 if let saveMessage {
-                    Text(saveMessage)
-                        .foregroundStyle(.green)
+                    Label(saveMessage, systemImage: "checkmark.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(DSColor.coralEnd)
                 }
 
                 if let saveError {
-                    Text(saveError)
-                        .foregroundStyle(.red)
+                    Label(saveError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(DSColor.destructiveCoral)
                 }
+
+                NutritionEstimateDisclaimer()
             }
             .padding(DSSpacing.lg)
         }
@@ -71,6 +78,19 @@ struct GoalsView: View {
                         .font(.subheadline.weight(.semibold))
                 }
             }
+        }
+        .sheet(isPresented: $isAIConsentPresented) {
+            AIDataProcessingConsentSheet(
+                onAccept: {
+                    isAIConsentPresented = false
+                    pendingAIAction?()
+                    pendingAIAction = nil
+                },
+                onDecline: {
+                    isAIConsentPresented = false
+                    pendingAIAction = nil
+                }
+            )
         }
     }
 
@@ -122,10 +142,7 @@ struct GoalsView: View {
 
     private var goalsInputSection: some View {
         PrimaryCard(cornerRadius: 20) {
-                Label("Custom strategy", systemImage: "square.and.pencil")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(DSColor.textSecondary)
-
+                
                 ZStack(alignment: .bottomTrailing) {
                     TextEditor(text: $goalPrompt)
                         .font(.body)
@@ -137,7 +154,9 @@ struct GoalsView: View {
                         .scrollContentBackground(.hidden)
 
                     Button {
-                        Task { await submitComposerPrompt() }
+                        requestAIProcessingConsent {
+                            Task { await submitComposerPrompt() }
+                        }
                     } label: {
                         Group {
                             if isInterpreting {
@@ -200,6 +219,8 @@ struct GoalsView: View {
                 GoalMetricTile(label: "Fat", value: "\(draft.fatGrams)", unit: "g", tint: .yellow, icon: "drop.fill")
             }
 
+            NutritionEstimateDisclaimer()
+
             Button(isSaving ? "Saving..." : "Save goal") {
                 Task {
                     await saveDraft(draft)
@@ -207,6 +228,15 @@ struct GoalsView: View {
             }
             .buttonStyle(CoralGradientButtonStyle())
             .disabled(isSaving)
+        }
+    }
+
+    private func requestAIProcessingConsent(then action: @escaping () -> Void) {
+        if AIDataProcessingConsentStore.hasAccepted {
+            action()
+        } else {
+            pendingAIAction = action
+            isAIConsentPresented = true
         }
     }
 
@@ -282,13 +312,13 @@ struct GoalsView: View {
             )
             try await goalRepository.saveDailyTargets(targets, goalProfileID: profile.id)
 
-            saveMessage = "Goal saved. Dashboard guidance now uses these targets."
+            saveMessage = "Goal saved. Home and Coach guidance now use these targets."
             goalPrompt = ""
             self.draft = nil
             conversationRows = []
             accumulatedUserNotes = ""
         } catch {
-            saveError = "Could not save goal in scaffold mode. Please try again."
+            saveError = "Could not save your goal. Please try again."
         }
     }
 }
