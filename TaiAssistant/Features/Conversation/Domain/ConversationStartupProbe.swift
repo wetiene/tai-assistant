@@ -7,6 +7,7 @@ enum ConversationStartupProbe {
     private(set) static var loadOrCreateCount = 0
     private(set) static var snapshotDecodeCount = 0
     private(set) static var persistCallbackCount = 0
+    private(set) static var composerPersistCount = 0
     private(set) static var persistDuringBootstrapCount = 0
     private(set) static var lastLoadMilliseconds: Double = 0
     private(set) static var lastDecodeMilliseconds: Double = 0
@@ -16,6 +17,7 @@ enum ConversationStartupProbe {
         loadOrCreateCount = 0
         snapshotDecodeCount = 0
         persistCallbackCount = 0
+        composerPersistCount = 0
         persistDuringBootstrapCount = 0
         lastLoadMilliseconds = 0
         lastDecodeMilliseconds = 0
@@ -42,6 +44,10 @@ enum ConversationStartupProbe {
         }
     }
 
+    static func recordComposerPersist() {
+        composerPersistCount += 1
+    }
+
     private static func format(_ ms: Double) -> String {
         String(format: "%.1f", ms)
     }
@@ -51,5 +57,6 @@ enum ConversationStartupProbe {
     static func recordLoadOrCreate(durationMilliseconds: Double) {}
     static func recordSnapshotDecode(durationMilliseconds: Double) {}
     static func recordPersist() {}
+    static func recordComposerPersist() {}
     #endif
 }

@@ -98,7 +98,7 @@ struct ConversationMessageRenderer: View {
     private func attachmentView(_ attachment: ConversationAttachment) -> some View {
         switch attachment.kind {
         case .photoJPEG(let data):
-            if let image = UIImage(data: data) {
+            if let image = ConversationImageCache.image(id: attachment.id, data: data) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()

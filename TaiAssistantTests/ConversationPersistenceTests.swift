@@ -264,6 +264,30 @@ final class ConversationPersistenceTests: XCTestCase {
 
     // MARK: - Regression
 
+    func testComposerDraftSaveDoesNotRewriteMessagesJSON() throws {
+        let container = AppModelContainerFactory.makeContainer(inMemory: true)
+        let repo = LocalSwiftDataActiveConversationRepository(container: container)
+        let conversation = makeConversationWithPhoto()
+        try repo.saveActive(conversation, ownerID: ownerID)
+
+        let before = try fetchActiveRow(container: container)
+        let beforeMessages = before.messagesJSON
+
+        try repo.saveComposerDraft(
+            ConversationComposerState(text: "only-draft", pendingPhotoJPEG: nil),
+            ownerID: ownerID
+        )
+
+        let after = try fetchActiveRow(container: container)
+        XCTAssertEqual(after.messagesJSON, beforeMessages, "Composer-only save must not rewrite messagesJSON")
+        XCTAssertEqual(after.composerText, "only-draft")
+        XCTAssertNil(after.composerPendingPhotoJPEG)
+
+        let loaded = try repo.loadOrCreateActive(ownerID: ownerID)
+        XCTAssertEqual(loaded.composer.text, "only-draft")
+        XCTAssertEqual(loaded.messages.count, conversation.messages.count)
+    }
+
     func testPersistedGreetingStartIfNeededDoesNotReseed() throws {
         let repo = InMemoryActiveConversationRepository()
         let store = ConversationSessionStore()
@@ -323,6 +347,26 @@ final class ConversationPersistenceTests: XCTestCase {
     private func makeSwiftDataRepository() -> LocalSwiftDataActiveConversationRepository {
         let container = AppModelContainerFactory.makeContainer(inMemory: true)
         return LocalSwiftDataActiveConversationRepository(container: container)
+    }
+
+    private func makeConversationWithPhoto() -> ActiveConversation {
+        ActiveConversation(
+            messages: [
+                ConversationMessage(actor: .assistant, text: "Hi"),
+                ConversationMessage(
+                    actor: .user,
+                    attachment: ConversationAttachment(kind: .photoJPEG(Data(repeating: 0xFF, count: 2048)))
+                ),
+            ],
+            activity: .awaitingUser
+        )
+    }
+
+    private func fetchActiveRow(container: ModelContainer) throws -> PersistedConversation {
+        let context = ModelContext(container)
+        let rows = try context.fetch(FetchDescriptor<PersistedConversation>())
+            .filter { $0.ownerID == ownerID && $0.status == .active }
+        return try XCTUnwrap(rows.first)
     }
 
     private func sampleSnapshot(label: String) -> MealEstimateSnapshot {

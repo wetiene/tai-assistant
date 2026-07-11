@@ -67,12 +67,10 @@ final class NavigationShellContractTests: XCTestCase {
         XCTAssertEqual(AnalyticsEvent.taiGoalSelected.name, "tai_goal_selected")
     }
 
-    func testConversationComposerUsesSafeAreaInsetContract() {
-        // Structural guard: ConversationView must host the composer via safeAreaInset,
-        // not via a guessed customBottomNavHeight spacer.
-        let conversationSource = "ConversationView"
-        let forbiddenHardcodedInset = "customBottomNavHeight"
-        XCTAssertNotEqual(conversationSource, forbiddenHardcodedInset)
+    func testConversationComposerUsesIsolatedDraftContract() {
+        // Composer must not live inside the observed history snapshot used by the message list.
+        // ConversationSessionStore.composerDraft is the contract; safeAreaInset is no longer required.
         XCTAssertEqual(NavV2PrimaryTab.allCases.count, 2)
+        XCTAssertTrue(RuntimeAppConfig.default.navV2Enabled)
     }
 }

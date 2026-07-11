@@ -12,6 +12,8 @@ struct HomeBriefingView: View {
 
     @State private var briefing: DailyCoachBriefing?
     @State private var todaysMeals: [HomeMealSummary] = []
+    @State private var cachedGoal: GoalProfile?
+    @State private var cachedTargets: DailyTargets?
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var showsMealAddedFeedback = false
@@ -273,6 +275,8 @@ struct HomeBriefingView: View {
                 todaysMeals: meals,
                 assistantName: assistantName
             )
+            cachedGoal = goal
+            cachedTargets = targets
             briefing = DailyCoachBriefingBuilder.build(input)
             todaysMeals = meals
                 .sorted { $0.eatenAt > $1.eatenAt }
@@ -302,6 +306,7 @@ struct HomeBriefingView: View {
     private func deleteMeal(_ meal: HomeMealSummary) {
         pendingUndoMeal = meal.restorePayload
         todaysMeals.removeAll { $0.id == meal.id }
+        recomputeBriefingFromLocalMeals()
         undoDismissTask?.cancel()
         undoDismissTask = Task {
             do {
@@ -310,7 +315,6 @@ struct HomeBriefingView: View {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     pendingUndoMeal = nil
-                    Task { await loadHome() }
                 }
             } catch {
                 await MainActor.run {
@@ -326,13 +330,29 @@ struct HomeBriefingView: View {
         guard let payload = pendingUndoMeal else { return }
         undoDismissTask?.cancel()
         pendingUndoMeal = nil
+        let restored = HomeMealSummary(meal: payload.makeMealLog())
+        todaysMeals.insert(restored, at: 0)
+        todaysMeals.sort { $0.eatenAt > $1.eatenAt }
+        recomputeBriefingFromLocalMeals()
         do {
             try await mealRepository.createMealLog(payload.makeMealLog())
-            await loadHome()
         } catch {
             actionError = "Couldn’t undo that delete."
             await loadHome()
         }
+    }
+
+    /// Immediate local recompute so progress chips update without waiting on disk/reload.
+    private func recomputeBriefingFromLocalMeals() {
+        let mealLogs = todaysMeals.map { $0.restorePayload.makeMealLog() }
+        let input = CoachBriefingInputFactory.make(
+            displayName: displayName,
+            goal: cachedGoal,
+            targets: cachedTargets,
+            todaysMeals: mealLogs,
+            assistantName: assistantName
+        )
+        briefing = DailyCoachBriefingBuilder.build(input)
     }
 }
 

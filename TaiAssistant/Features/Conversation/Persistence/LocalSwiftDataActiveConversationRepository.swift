@@ -31,6 +31,23 @@ final class LocalSwiftDataActiveConversationRepository: ActiveConversationReposi
         try write(conversation, ownerID: ownerID, context: context)
     }
 
+    func saveComposerDraft(_ composer: ConversationComposerState, ownerID: String) throws {
+        let context = ModelContext(container)
+        guard let existing = try fetchActive(ownerID: ownerID, context: context) else {
+            // No row yet — create a minimal active conversation with this draft.
+            try write(
+                ActiveConversation(composer: composer),
+                ownerID: ownerID,
+                context: context
+            )
+            return
+        }
+        existing.composerText = composer.text
+        existing.composerPendingPhotoJPEG = composer.pendingPhotoJPEG
+        existing.updatedAt = .now
+        try context.save()
+    }
+
     func beginArchiveTransition(ownerID: String) throws -> ActiveConversation {
         let context = ModelContext(container)
         if let existing = try fetchActive(ownerID: ownerID, context: context) {
@@ -45,13 +62,14 @@ final class LocalSwiftDataActiveConversationRepository: ActiveConversationReposi
     // MARK: - Private
 
     private func fetchActive(ownerID: String, context: ModelContext) throws -> PersistedConversation? {
+        let activeRaw = PersistedConversationStatus.active.rawValue
         let descriptor = FetchDescriptor<PersistedConversation>(
+            predicate: #Predicate<PersistedConversation> { row in
+                row.ownerID == ownerID && row.statusRaw == activeRaw
+            },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        let all = try context.fetch(descriptor)
-        let actives = all.filter {
-            $0.ownerID == ownerID && $0.status == .active
-        }
+        let actives = try context.fetch(descriptor)
         // Exactly one active: if duplicates exist (corruption), keep newest and archive the rest.
         if actives.count > 1 {
             for stale in actives.dropFirst() {
@@ -163,6 +181,12 @@ final class InMemoryActiveConversationRepository: ActiveConversationRepository {
 
     func saveActive(_ conversation: ActiveConversation, ownerID: String) throws {
         activeByOwner[ownerID] = conversation
+    }
+
+    func saveComposerDraft(_ composer: ConversationComposerState, ownerID: String) throws {
+        var current = activeByOwner[ownerID] ?? ActiveConversation()
+        current.composer = composer
+        activeByOwner[ownerID] = current
     }
 
     func beginArchiveTransition(ownerID: String) throws -> ActiveConversation {

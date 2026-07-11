@@ -73,18 +73,23 @@ final class LocalSwiftDataMealRepository: MealRepository {
 
     func fetchMealLogs(ownerID: String, from startDate: Date, to endDate: Date) async throws -> [MealLog] {
         let context = ModelContext(container)
+        let predicate = #Predicate<MealLog> { meal in
+            meal.ownerID == ownerID && meal.eatenAt >= startDate && meal.eatenAt < endDate
+        }
         let descriptor = FetchDescriptor<MealLog>(
+            predicate: predicate,
             sortBy: [SortDescriptor(\.eatenAt, order: .reverse)]
         )
-        return try context.fetch(descriptor).filter {
-            $0.ownerID == ownerID && $0.eatenAt >= startDate && $0.eatenAt < endDate
-        }
+        return try context.fetch(descriptor)
     }
 
     func createMealLog(_ meal: MealLog) async throws {
         let context = ModelContext(container)
-        let clash = try context.fetch(FetchDescriptor<MealLog>()).contains { $0.id == meal.id }
-        if clash {
+        let mealID = meal.id
+        let clashDescriptor = FetchDescriptor<MealLog>(
+            predicate: #Predicate<MealLog> { $0.id == mealID }
+        )
+        if try context.fetch(clashDescriptor).first != nil {
             throw MealRepositoryError.mealLogAlreadyExists(id: meal.id)
         }
         meal.updatedAt = .now
@@ -94,8 +99,11 @@ final class LocalSwiftDataMealRepository: MealRepository {
 
     func updateMealLog(_ meal: MealLog) async throws {
         let context = ModelContext(container)
-        guard let existing = try context.fetch(FetchDescriptor<MealLog>())
-            .first(where: { $0.id == meal.id }) else {
+        let mealID = meal.id
+        let descriptor = FetchDescriptor<MealLog>(
+            predicate: #Predicate<MealLog> { $0.id == mealID }
+        )
+        guard let existing = try context.fetch(descriptor).first else {
             throw MealRepositoryError.mealLogNotFound(id: meal.id)
         }
 
@@ -154,8 +162,10 @@ final class LocalSwiftDataMealRepository: MealRepository {
 
     func deleteMealLog(id: UUID) async throws {
         let context = ModelContext(container)
-        guard let existing = try context.fetch(FetchDescriptor<MealLog>())
-            .first(where: { $0.id == id }) else { return }
+        let descriptor = FetchDescriptor<MealLog>(
+            predicate: #Predicate<MealLog> { $0.id == id }
+        )
+        guard let existing = try context.fetch(descriptor).first else { return }
         context.delete(existing)
         try context.save()
     }

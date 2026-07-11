@@ -19,6 +19,7 @@ struct AppShellView: View {
     @State private var mealAddedFeedbackTrigger = 0
     @State private var isAskTaiDeemphasized = false
     @State private var pendingTaiIntent: TaiLaunchIntent?
+    @State private var hasOpenedTai = false
 
     init(dependencies: AppDependencies, config: RuntimeAppConfig) {
         self.dependencies = dependencies
@@ -76,23 +77,32 @@ struct AppShellView: View {
             .tag(NavV2PrimaryTab.home)
 
             NavigationStack {
-                TaiConversationContainerView(
-                    conversationSession: dependencies.conversationSession,
-                    goalRepository: dependencies.goalRepository,
-                    aiService: dependencies.aiService,
-                    ownerID: config.localOwnerID,
-                    assistantName: config.assistantName,
-                    analytics: dependencies.analytics,
-                    launchIntent: pendingTaiIntent,
-                    onLaunchIntentConsumed: {
-                        pendingTaiIntent = nil
-                    }
-                )
+                if hasOpenedTai || navV2Tab == .tai {
+                    TaiConversationContainerView(
+                        conversationSession: dependencies.conversationSession,
+                        goalRepository: dependencies.goalRepository,
+                        aiService: dependencies.aiService,
+                        ownerID: config.localOwnerID,
+                        assistantName: config.assistantName,
+                        analytics: dependencies.analytics,
+                        launchIntent: pendingTaiIntent,
+                        onLaunchIntentConsumed: {
+                            pendingTaiIntent = nil
+                        }
+                    )
+                } else {
+                    DSColor.background.ignoresSafeArea()
+                }
             }
             .tabItem {
                 Label(NavV2PrimaryTab.tai.title, systemImage: "bubble.left.and.bubble.right.fill")
             }
             .tag(NavV2PrimaryTab.tai)
+        }
+        .onChange(of: navV2Tab) { _, tab in
+            if tab == .tai {
+                hasOpenedTai = true
+            }
         }
         .task {
             dependencies.conversationSession.updateOnMealSaved {
@@ -201,6 +211,7 @@ struct AppShellView: View {
 
     private func handleHomePrimaryAction(_ destination: RecommendationActionDestination) {
         pendingTaiIntent = TaiLaunchIntent.fromHomeDestination(destination)
+        hasOpenedTai = true
         navV2Tab = .tai
     }
 }

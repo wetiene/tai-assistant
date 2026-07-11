@@ -88,6 +88,10 @@ final class ActiveConversationSessionController {
                 ConversationStartupProbe.recordPersist()
                 try? conversationRepository.saveActive(conversation, ownerID: ownerID)
             }
+            store.onPersistComposer = { [conversationRepository, ownerID] draft in
+                ConversationStartupProbe.recordComposerPersist()
+                try? conversationRepository.saveComposerDraft(draft, ownerID: ownerID)
+            }
 
             let meal = MealCapabilityController(
                 mealRepository: mealRepository,
@@ -111,7 +115,7 @@ final class ActiveConversationSessionController {
             ConversationStartupProbe.isBootstrapping = false
             store.suppressPersistence = false
             if seededGreeting {
-                try conversationRepository.saveActive(store.active, ownerID: ownerID)
+                try conversationRepository.saveActive(store.snapshotIncludingComposer, ownerID: ownerID)
             }
 
             viewModel = vm

@@ -9,67 +9,18 @@ struct ConversationView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: DSSpacing.md) {
-                    ForEach(viewModel.conversation.messages) { message in
-                        ConversationMessageRenderer(
-                            message: message,
-                            onQuickAction: { viewModel.handleQuickAction($0) },
-                            onMealCardAction: { action, cardID in
-                                viewModel.handleMealCardAction(action, cardID: cardID)
-                            }
-                        )
-                        .id(message.id)
-                    }
-
-                    if viewModel.isProcessing {
-                        HStack(spacing: DSSpacing.sm) {
-                            ProgressView()
-                            Text("Tai is thinking…")
-                                .font(.subheadline)
-                                .foregroundStyle(DSColor.textSecondary)
-                        }
-                        .padding(.horizontal, DSSpacing.lg)
-                        .accessibilityLabel("Tai is thinking")
-                        .id("thinking")
-                    }
-
-                    if !viewModel.conversation.activeQuickActions.isEmpty,
-                       viewModel.conversation.messages.last?.quickActions == nil {
-                        ConversationQuickActionsRow(
-                            actions: viewModel.conversation.activeQuickActions,
-                            isEnabled: !viewModel.isProcessing
-                        ) { action in
-                            viewModel.handleQuickAction(action)
-                        }
-                        .id("quick-actions")
-                    }
+        VStack(spacing: 0) {
+            ConversationMessageListView(
+                store: viewModel.store,
+                isProcessing: viewModel.isProcessing,
+                reduceMotion: reduceMotion,
+                onQuickAction: { viewModel.handleQuickAction($0) },
+                onMealCardAction: { action, cardID in
+                    viewModel.handleMealCardAction(action, cardID: cardID)
                 }
-                .padding(.horizontal, DSSpacing.lg)
-                .padding(.top, DSSpacing.md)
-                .padding(.bottom, DSSpacing.lg)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .onAppear {
-                restoreScrollPosition(proxy: proxy)
-            }
-            .onChange(of: viewModel.conversation.messages.count) { _, _ in
-                scrollToBottom(proxy: proxy)
-            }
-            .onChange(of: viewModel.isProcessing) { _, _ in
-                scrollToBottom(proxy: proxy)
-            }
-        }
-        .background(DSColor.background.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ConversationComposerView(
-                text: Binding(
-                    get: { viewModel.conversation.composer.text },
-                    set: { viewModel.updateComposerText($0) }
-                ),
-                pendingPhoto: viewModel.conversation.composer.pendingPhotoJPEG,
-                isSendEnabled: viewModel.conversation.composer.isSendEnabled,
+            )
+            ConversationComposerHost(
+                store: viewModel.store,
                 isBusy: viewModel.isProcessing,
                 onCamera: {
                     viewModel.handleQuickAction(
@@ -83,9 +34,11 @@ struct ConversationView: View {
                 onClearPhoto: { viewModel.clearPendingPhoto() },
                 onSend: {
                     Task { await viewModel.sendComposer() }
-                }
+                },
+                onTextChange: { viewModel.updateComposerText($0) }
             )
         }
+        .background(DSColor.background.ignoresSafeArea())
         .onAppear {
             viewModel.startIfNeeded()
         }
@@ -133,10 +86,73 @@ struct ConversationView: View {
             Text(viewModel.errorMessage ?? "")
         }
     }
+}
 
-    private func restoreScrollPosition(proxy: ScrollViewProxy) {
-        let target = viewModel.conversation.scrollAnchorMessageID
-            ?? viewModel.conversation.messages.last?.id
+/// Observes message/history state only — composer keystrokes must not rebuild this tree.
+private struct ConversationMessageListView: View {
+    @Bindable var store: ConversationSessionStore
+    var isProcessing: Bool
+    var reduceMotion: Bool
+    var onQuickAction: (ConversationQuickAction) -> Void
+    var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
+
+    var body: some View {
+        let messages = store.active.messages
+        let quickActions = store.active.activeQuickActions
+
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: DSSpacing.md) {
+                    ForEach(messages) { message in
+                        ConversationMessageRenderer(
+                            message: message,
+                            onQuickAction: onQuickAction,
+                            onMealCardAction: onMealCardAction
+                        )
+                        .id(message.id)
+                    }
+
+                    if isProcessing {
+                        HStack(spacing: DSSpacing.sm) {
+                            ProgressView()
+                            Text("Tai is thinking…")
+                                .font(.subheadline)
+                                .foregroundStyle(DSColor.textSecondary)
+                        }
+                        .padding(.horizontal, DSSpacing.lg)
+                        .accessibilityLabel("Tai is thinking")
+                        .id("thinking")
+                    }
+
+                    if !quickActions.isEmpty,
+                       messages.last?.quickActions == nil {
+                        ConversationQuickActionsRow(
+                            actions: quickActions,
+                            isEnabled: !isProcessing,
+                            onSelect: onQuickAction
+                        )
+                        .id("quick-actions")
+                    }
+                }
+                .padding(.horizontal, DSSpacing.lg)
+                .padding(.top, DSSpacing.md)
+                .padding(.bottom, DSSpacing.lg)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onAppear {
+                restoreScrollPosition(proxy: proxy, messages: messages)
+            }
+            .onChange(of: messages.count) { _, _ in
+                scrollToBottom(proxy: proxy, messages: messages, isProcessing: isProcessing)
+            }
+            .onChange(of: isProcessing) { _, _ in
+                scrollToBottom(proxy: proxy, messages: messages, isProcessing: isProcessing)
+            }
+        }
+    }
+
+    private func restoreScrollPosition(proxy: ScrollViewProxy, messages: [ConversationMessage]) {
+        let target = store.active.scrollAnchorMessageID ?? messages.last?.id
         guard let target else { return }
         if reduceMotion {
             proxy.scrollTo(target, anchor: .bottom)
@@ -147,11 +163,15 @@ struct ConversationView: View {
         }
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy) {
+    private func scrollToBottom(
+        proxy: ScrollViewProxy,
+        messages: [ConversationMessage],
+        isProcessing: Bool
+    ) {
         let scroll = {
-            if viewModel.isProcessing {
+            if isProcessing {
                 proxy.scrollTo("thinking", anchor: .bottom)
-            } else if let last = viewModel.conversation.messages.last {
+            } else if let last = messages.last {
                 proxy.scrollTo(last.id, anchor: .bottom)
             }
         }
@@ -163,5 +183,30 @@ struct ConversationView: View {
                 scroll()
             }
         }
+    }
+}
+
+/// Observes composer draft only.
+private struct ConversationComposerHost: View {
+    @Bindable var store: ConversationSessionStore
+    var isBusy: Bool
+    var onCamera: () -> Void
+    var onClearPhoto: () -> Void
+    var onSend: () -> Void
+    var onTextChange: (String) -> Void
+
+    var body: some View {
+        ConversationComposerView(
+            text: Binding(
+                get: { store.composerDraft.text },
+                set: onTextChange
+            ),
+            pendingPhoto: store.composerDraft.pendingPhotoJPEG,
+            isSendEnabled: store.composerDraft.isSendEnabled,
+            isBusy: isBusy,
+            onCamera: onCamera,
+            onClearPhoto: onClearPhoto,
+            onSend: onSend
+        )
     }
 }

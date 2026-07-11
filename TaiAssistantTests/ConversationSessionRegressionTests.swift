@@ -95,15 +95,35 @@ final class ConversationSessionRegressionTests: XCTestCase {
     func testComposerUpdateDoesNotSynchronouslyPersistEveryKeystroke() {
         let repo = InMemoryActiveConversationRepository()
         var persistCount = 0
+        var composerPersistCount = 0
         let store = ConversationSessionStore()
         store.onPersist = { conversation in
             persistCount += 1
             try? repo.saveActive(conversation, ownerID: "test.session")
         }
+        store.onPersistComposer = { draft in
+            composerPersistCount += 1
+            try? repo.saveComposerDraft(draft, ownerID: "test.session")
+        }
         store.updateComposer { $0.text = "a" }
         store.updateComposer { $0.text = "ab" }
         store.updateComposer { $0.text = "abc" }
-        XCTAssertEqual(persistCount, 0, "Composer should debounce disk writes")
-        XCTAssertEqual(store.active.composer.text, "abc")
+        XCTAssertEqual(persistCount, 0, "Composer should not trigger full snapshot writes")
+        XCTAssertEqual(composerPersistCount, 0, "Composer should debounce disk writes")
+        XCTAssertEqual(store.composerDraft.text, "abc")
+        XCTAssertEqual(store.active.composer.text, "", "Keystrokes must not mutate active history snapshot")
+    }
+
+    func testComposerKeystrokesDoNotMutateActiveMessagesReference() {
+        let store = ConversationSessionStore(
+            seed: ActiveConversation(
+                messages: [ConversationMessage(actor: .assistant, text: "Hi")],
+                activity: .awaitingUser
+            )
+        )
+        let beforeIDs = store.active.messages.map(\.id)
+        store.updateComposer { $0.text = "typing" }
+        XCTAssertEqual(store.active.messages.map(\.id), beforeIDs)
+        XCTAssertEqual(store.composerDraft.text, "typing")
     }
 }

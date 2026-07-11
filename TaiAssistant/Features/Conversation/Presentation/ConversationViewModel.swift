@@ -13,10 +13,11 @@ final class ConversationViewModel {
     private(set) var needsAIConsent = false
     private var pendingAfterConsent: (() -> Void)?
 
-    var conversation: ActiveConversation { store.active }
+    var conversation: ActiveConversation { store.snapshotIncludingComposer }
+    var composer: ConversationComposerState { store.composerDraft }
     var errorMessage: String?
     var isProcessing: Bool {
-        if case .processing = conversation.activity { return true }
+        if case .processing = store.active.activity { return true }
         return meal.isBusy
     }
 
@@ -35,7 +36,7 @@ final class ConversationViewModel {
     }
 
     func startIfNeeded() {
-        guard conversation.messages.isEmpty else { return }
+        guard store.active.messages.isEmpty else { return }
         seedGreeting()
     }
 
@@ -120,8 +121,8 @@ final class ConversationViewModel {
     }
 
     func sendComposer() async {
-        let text = conversation.composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let photo = conversation.composer.pendingPhotoJPEG
+        let text = store.composerDraft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let photo = store.composerDraft.pendingPhotoJPEG
         guard !text.isEmpty || photo != nil else { return }
 
         requestConsentThen {
@@ -132,7 +133,7 @@ final class ConversationViewModel {
     }
 
     func handleMealCardAction(_ action: MealCapabilityID.CardAction, cardID: UUID) {
-        guard let message = conversation.messages.first(where: { $0.card?.id == cardID }),
+        guard let message = store.active.messages.first(where: { $0.card?.id == cardID }),
               let card = message.card,
               card.isInteractive,
               var payload = MealCardCodec.decode(card.payload),

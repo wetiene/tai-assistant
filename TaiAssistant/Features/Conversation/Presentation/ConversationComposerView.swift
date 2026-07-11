@@ -91,7 +91,7 @@ struct ConversationComposerView: View {
 
     private func photoThumbnail(_ data: Data) -> some View {
         Group {
-            if let image = UIImage(data: data) {
+            if let image = ConversationImageCache.image(key: "composer-pending-\(data.count)", data: data) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
