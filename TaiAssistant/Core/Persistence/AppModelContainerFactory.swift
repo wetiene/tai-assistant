@@ -11,7 +11,8 @@ enum AppModelContainerFactory {
             RecurringMeal.self,
             AlcoholPlan.self,
             WeightLog.self,
-            AppConfig.self
+            AppConfig.self,
+            PersistedConversation.self
         ])
 
         // Architecture decision: one shared container for the scaffold keeps

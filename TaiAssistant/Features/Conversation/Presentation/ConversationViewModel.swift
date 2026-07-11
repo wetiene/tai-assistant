@@ -20,26 +20,7 @@ final class ConversationViewModel {
         return meal.isBusy
     }
 
-    static let defaultQuickActions: [ConversationQuickAction] = [
-        ConversationQuickAction(
-            id: MealCapabilityID.QuickAction.takePhoto,
-            title: "Take Photo",
-            systemImage: "camera.fill",
-            accessibilityHint: "Open the camera to log a meal"
-        ),
-        ConversationQuickAction(
-            id: MealCapabilityID.QuickAction.describeMeal,
-            title: "Describe Meal",
-            systemImage: "fork.knife",
-            accessibilityHint: "Type a description of what you ate"
-        ),
-        ConversationQuickAction(
-            id: MealCapabilityID.QuickAction.askTai,
-            title: "Ask Tai",
-            systemImage: "bubble.left.fill",
-            accessibilityHint: "Ask Tai a question"
-        ),
-    ]
+    static let defaultQuickActions: [ConversationQuickAction] = ConversationDefaults.mealQuickActions
 
     init(
         store: ConversationSessionStore,
@@ -195,7 +176,7 @@ final class ConversationViewModel {
 
         case .logMeal:
             guard payload.refinementAccepted else { return }
-            Task { await confirmLog(cardID: cardID, payload: payload) }
+            Task { await logMealDraft(cardID: cardID, payload: payload) }
         }
     }
 
@@ -313,44 +294,80 @@ final class ConversationViewModel {
         }
     }
 
-    func confirmLog(cardID: UUID, payload: MealEstimateCardPayload) async {
+    /// Logs exactly one draft addressed by `payload.draft.id` / `cardID`.
+    func logMealDraft(cardID: UUID, payload: MealEstimateCardPayload) async {
+        let draftID = payload.draft.id
         store.setActivity(.processing(reason: "saving_meal"))
-        let result = await meal.confirmAndSave()
+        let result = await meal.confirmAndSaveDraft(draftID: draftID, payload: payload)
         switch result {
         case .failure(let saveError):
             let message: String
             switch saveError {
-            case .nothingToLog:
+            case .nothingToLog, .draftNotFound:
                 message = "Nothing to log yet."
+            case .alreadyLogged:
+                message = "That meal is already logged."
+            case .draftMismatch:
+                message = "That meal card is out of date. Please try again."
+            case .validationFailed(let reason):
+                message = reason
             case .persistenceFailed:
                 message = meal.lastError ?? "Could not save this meal. Please try again."
             }
             errorMessage = message
             store.append(ConversationMessage(actor: .assistant, text: message))
-            store.setActivity(.capability(
-                capabilityID: MealCapabilityID.capability,
-                phaseID: MealCapabilityID.Phase.readyToLog.rawValue,
-                payload: nil
-            ))
+            restoreActivityAfterPartialMealState()
 
-        case .success(let drafts):
+        case .success(let draft):
             var logged = payload
             logged.isLogged = true
             logged.refinementAccepted = true
             replaceCardPayload(cardID: cardID, payload: logged, interactive: false)
-            store.freezeInteractiveCards(typeID: MealCapabilityID.estimateCardType)
 
-            let names = drafts.map(\CheckInMealDraft.label).joined(separator: ", ")
             store.append(
                 ConversationMessage(
                     actor: .assistant,
-                    text: "Logged \(names). Nice work — anything else I can help with?"
+                    text: "Logged \(draft.label). Nice work — anything else I can help with?"
                 )
             )
-            meal.resetAfterCompletion()
+
+            let remaining = ConversationRestoration.interactiveUnloggedMealPayloads(in: store.active)
+            meal.syncUnloggedDrafts(from: remaining)
+            if remaining.isEmpty {
+                meal.resetAfterCompletion()
+                store.setActivity(.awaitingUser)
+                store.setQuickActions(Self.defaultQuickActions)
+            } else {
+                let ready = remaining.contains(where: \.refinementAccepted)
+                store.setActivity(.capability(
+                    capabilityID: MealCapabilityID.capability,
+                    phaseID: (ready ? MealCapabilityID.Phase.readyToLog : MealCapabilityID.Phase.reviewing).rawValue,
+                    payload: nil
+                ))
+                store.setQuickActions([])
+            }
+            onMealSaved?()
+        }
+    }
+
+    /// - Warning: Prefer `logMealDraft`. Kept for existing tests that call `confirmLog`.
+    func confirmLog(cardID: UUID, payload: MealEstimateCardPayload) async {
+        await logMealDraft(cardID: cardID, payload: payload)
+    }
+
+    private func restoreActivityAfterPartialMealState() {
+        let remaining = ConversationRestoration.interactiveUnloggedMealPayloads(in: store.active)
+        meal.syncUnloggedDrafts(from: remaining)
+        if remaining.isEmpty {
             store.setActivity(.awaitingUser)
             store.setQuickActions(Self.defaultQuickActions)
-            onMealSaved?()
+        } else {
+            let ready = remaining.contains(where: \.refinementAccepted)
+            store.setActivity(.capability(
+                capabilityID: MealCapabilityID.capability,
+                phaseID: (ready ? MealCapabilityID.Phase.readyToLog : MealCapabilityID.Phase.reviewing).rawValue,
+                payload: nil
+            ))
         }
     }
 

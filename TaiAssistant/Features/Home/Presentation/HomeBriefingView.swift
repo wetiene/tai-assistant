@@ -62,11 +62,9 @@ struct HomeBriefingView: View {
 
                 NutritionEstimateDisclaimer()
                     .padding(.top, DSSpacing.xs)
-
-                Color.clear
-                    .frame(height: DSSpacing.customBottomNavHeight + 48)
             }
             .padding(DSSpacing.lg)
+            .padding(.bottom, DSSpacing.xl)
         }
         .background(DSColor.background.ignoresSafeArea())
         .task {

@@ -72,6 +72,17 @@
 		A1000000000000000000005A /* ConversationStateTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005A /* ConversationStateTransitionTests.swift */; };
 		A1000000000000000000005B /* MealCapabilityConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005B /* MealCapabilityConfirmationTests.swift */; };
 		A1000000000000000000005C /* ConversationQuickActionLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005C /* ConversationQuickActionLifecycleTests.swift */; };
+		A10000000000000000000060 /* ConversationPersistentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000060 /* ConversationPersistentModels.swift */; };
+		A10000000000000000000061 /* ActiveConversationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000061 /* ActiveConversationRepository.swift */; };
+		A10000000000000000000062 /* ConversationSnapshotCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000062 /* ConversationSnapshotCodec.swift */; };
+		A10000000000000000000063 /* ConversationRestoration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000063 /* ConversationRestoration.swift */; };
+		A10000000000000000000064 /* LocalSwiftDataActiveConversationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000064 /* LocalSwiftDataActiveConversationRepository.swift */; };
+		A10000000000000000000065 /* ConversationPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000065 /* ConversationPersistenceTests.swift */; };
+		A10000000000000000000066 /* ConversationStartupProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000066 /* ConversationStartupProbe.swift */; };
+		A10000000000000000000067 /* ActiveConversationSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000067 /* ActiveConversationSessionController.swift */; };
+		A10000000000000000000068 /* TaiLaunchIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000068 /* TaiLaunchIntent.swift */; };
+		A10000000000000000000069 /* ConversationSessionRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000069 /* ConversationSessionRegressionTests.swift */; };
+		A1000000000000000000006A /* MultiMealDraftIntegrityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006A /* MultiMealDraftIntegrityTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -144,6 +155,17 @@
 		A2000000000000000000005A /* ConversationStateTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStateTransitionTests.swift; sourceTree = "<group>"; };
 		A2000000000000000000005B /* MealCapabilityConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCapabilityConfirmationTests.swift; sourceTree = "<group>"; };
 		A2000000000000000000005C /* ConversationQuickActionLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationQuickActionLifecycleTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000060 /* ConversationPersistentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPersistentModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000061 /* ActiveConversationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveConversationRepository.swift; sourceTree = "<group>"; };
+		A20000000000000000000062 /* ConversationSnapshotCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSnapshotCodec.swift; sourceTree = "<group>"; };
+		A20000000000000000000063 /* ConversationRestoration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRestoration.swift; sourceTree = "<group>"; };
+		A20000000000000000000064 /* LocalSwiftDataActiveConversationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSwiftDataActiveConversationRepository.swift; sourceTree = "<group>"; };
+		A20000000000000000000065 /* ConversationPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPersistenceTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000066 /* ConversationStartupProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStartupProbe.swift; sourceTree = "<group>"; };
+		A20000000000000000000067 /* ActiveConversationSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveConversationSessionController.swift; sourceTree = "<group>"; };
+		A20000000000000000000068 /* TaiLaunchIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaiLaunchIntent.swift; sourceTree = "<group>"; };
+		A20000000000000000000069 /* ConversationSessionRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSessionRegressionTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000006A /* MultiMealDraftIntegrityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiMealDraftIntegrityTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -257,6 +279,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000004 /* AppShellView.swift */,
+				A20000000000000000000068 /* TaiLaunchIntent.swift */,
 			);
 			path = Navigation;
 			sourceTree = "<group>";
@@ -317,6 +340,7 @@
 			isa = PBXGroup;
 			children = (
 				A2000000000000000000000E /* PersistentModels.swift */,
+				A20000000000000000000060 /* ConversationPersistentModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -345,6 +369,7 @@
 				A20000000000000000000013 /* HealthService.swift */,
 				A20000000000000000000014 /* MealRepository.swift */,
 				A20000000000000000000015 /* PersistenceRepositories.swift */,
+				A20000000000000000000061 /* ActiveConversationRepository.swift */,
 			);
 			path = Protocols;
 			sourceTree = "<group>";
@@ -407,6 +432,9 @@
 				A2000000000000000000005A /* ConversationStateTransitionTests.swift */,
 				A2000000000000000000005B /* MealCapabilityConfirmationTests.swift */,
 				A2000000000000000000005C /* ConversationQuickActionLifecycleTests.swift */,
+				A20000000000000000000065 /* ConversationPersistenceTests.swift */,
+				A20000000000000000000069 /* ConversationSessionRegressionTests.swift */,
+				A2000000000000000000006A /* MultiMealDraftIntegrityTests.swift */,
 			);
 			path = TaiAssistantTests;
 			sourceTree = "<group>";
@@ -470,6 +498,7 @@
 				A00000000000000000000071 /* Conversation/Domain */,
 				A00000000000000000000072 /* Conversation/Presentation */,
 				A00000000000000000000073 /* Conversation/Capabilities */,
+				A00000000000000000000075 /* Conversation/Persistence */,
 			);
 			path = Conversation;
 			sourceTree = "<group>";
@@ -479,6 +508,10 @@
 			children = (
 				A20000000000000000000050 /* ConversationModels.swift */,
 				A20000000000000000000051 /* ConversationSessionStore.swift */,
+				A20000000000000000000062 /* ConversationSnapshotCodec.swift */,
+				A20000000000000000000063 /* ConversationRestoration.swift */,
+				A20000000000000000000066 /* ConversationStartupProbe.swift */,
+				A20000000000000000000067 /* ActiveConversationSessionController.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -511,6 +544,14 @@
 				A20000000000000000000054 /* MealEstimateCardView.swift */,
 			);
 			path = Meal;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000075 /* Conversation/Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000064 /* LocalSwiftDataActiveConversationRepository.swift */,
+			);
+			path = Persistence;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -682,6 +723,14 @@
 				A10000000000000000000057 /* ConversationComposerView.swift in Sources */,
 				A10000000000000000000058 /* ConversationMessageRenderer.swift in Sources */,
 				A10000000000000000000059 /* TaiConversationContainerView.swift in Sources */,
+				A10000000000000000000060 /* ConversationPersistentModels.swift in Sources */,
+				A10000000000000000000061 /* ActiveConversationRepository.swift in Sources */,
+				A10000000000000000000062 /* ConversationSnapshotCodec.swift in Sources */,
+				A10000000000000000000063 /* ConversationRestoration.swift in Sources */,
+				A10000000000000000000064 /* LocalSwiftDataActiveConversationRepository.swift in Sources */,
+				A10000000000000000000066 /* ConversationStartupProbe.swift in Sources */,
+				A10000000000000000000067 /* ActiveConversationSessionController.swift in Sources */,
+				A10000000000000000000068 /* TaiLaunchIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -694,6 +743,9 @@
 				A1000000000000000000005A /* ConversationStateTransitionTests.swift in Sources */,
 				A1000000000000000000005B /* MealCapabilityConfirmationTests.swift in Sources */,
 				A1000000000000000000005C /* ConversationQuickActionLifecycleTests.swift in Sources */,
+				A10000000000000000000065 /* ConversationPersistenceTests.swift in Sources */,
+				A10000000000000000000069 /* ConversationSessionRegressionTests.swift in Sources */,
+				A1000000000000000000006A /* MultiMealDraftIntegrityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

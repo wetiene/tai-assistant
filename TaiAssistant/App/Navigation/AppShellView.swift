@@ -8,27 +8,24 @@ struct AppShellView: View {
         case goals
     }
 
-    fileprivate enum NavV2Tab: Hashable {
-        case home
-        case tai
-    }
-
     let dependencies: AppDependencies
     let config: RuntimeAppConfig
 
     @State private var legacyTab: LegacyTab = .dashboard
-    @State private var navV2Tab: NavV2Tab = .home
+    @State private var navV2Tab: NavV2PrimaryTab = .home
     @State private var isAskTaiPresented = false
     @State private var askTaiSeedPrompt: String?
     @State private var isKeyboardVisible = false
     @State private var mealAddedFeedbackTrigger = 0
     @State private var isAskTaiDeemphasized = false
-    @State private var mealIntentToken = 0
+    @State private var pendingTaiIntent: TaiLaunchIntent?
 
     init(dependencies: AppDependencies, config: RuntimeAppConfig) {
         self.dependencies = dependencies
         self.config = config
-        UITabBar.appearance().isHidden = true
+        // Nav V2 uses the system tab bar (exactly Home | Tai).
+        // Legacy keeps a custom centre Check In control, so hide the system bar.
+        UITabBar.appearance().isHidden = !config.navV2Enabled
     }
 
     var body: some View {
@@ -60,7 +57,7 @@ struct AppShellView: View {
         }
     }
 
-    // MARK: - Nav V2 (Home | Tai)
+    // MARK: - Nav V2 (Home | Tai) — structurally two destinations only
 
     private var navV2Shell: some View {
         TabView(selection: $navV2Tab) {
@@ -75,37 +72,34 @@ struct AppShellView: View {
                     onPrimaryAction: handleHomePrimaryAction
                 )
             }
-            .tabItem { Label("Home", systemImage: "house.fill") }
-            .tag(NavV2Tab.home)
+            .tabItem { Label(NavV2PrimaryTab.home.title, systemImage: "house.fill") }
+            .tag(NavV2PrimaryTab.home)
 
             NavigationStack {
                 TaiConversationContainerView(
-                    mealRepository: dependencies.mealRepository,
+                    conversationSession: dependencies.conversationSession,
                     goalRepository: dependencies.goalRepository,
                     aiService: dependencies.aiService,
                     ownerID: config.localOwnerID,
                     assistantName: config.assistantName,
                     analytics: dependencies.analytics,
-                    mealIntentToken: mealIntentToken,
-                    onMealSaved: {
-                        mealAddedFeedbackTrigger += 1
+                    launchIntent: pendingTaiIntent,
+                    onLaunchIntentConsumed: {
+                        pendingTaiIntent = nil
                     }
                 )
             }
-            .tabItem { Label("Tai", systemImage: "bubble.left.and.bubble.right.fill") }
-            .tag(NavV2Tab.tai)
+            .tabItem {
+                Label(NavV2PrimaryTab.tai.title, systemImage: "bubble.left.and.bubble.right.fill")
+            }
+            .tag(NavV2PrimaryTab.tai)
         }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom) {
-            if !isKeyboardVisible {
-                AppShellBottomBarV2(
-                    selectedTab: $navV2Tab,
-                    onComposeTapped: {
-                        navV2Tab = .tai
-                        mealIntentToken += 1
-                    }
-                )
+        .task {
+            dependencies.conversationSession.updateOnMealSaved {
+                mealAddedFeedbackTrigger += 1
             }
+            // Prefetch Conversation after first frame so Home is not blocked.
+            await dependencies.conversationSession.ensureLoaded()
         }
     }
 
@@ -206,79 +200,12 @@ struct AppShellView: View {
     }
 
     private func handleHomePrimaryAction(_ destination: RecommendationActionDestination) {
-        switch destination {
-        case .checkInMeal:
-            navV2Tab = .tai
-            mealIntentToken += 1
-        case .reviewGoal:
-            navV2Tab = .tai
-        }
+        pendingTaiIntent = TaiLaunchIntent.fromHomeDestination(destination)
+        navV2Tab = .tai
     }
 }
 
-// MARK: - Bottom bars
-
-private struct AppShellBottomBarV2: View {
-    @Binding var selectedTab: AppShellView.NavV2Tab
-    var onComposeTapped: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .stroke(Color.white.opacity(0.55), lineWidth: 1)
-                )
-                .frame(height: 68)
-                .padding(.top, 22)
-
-            Button(action: onComposeTapped) {
-                VStack(spacing: 2) {
-                    Image(systemName: "plus")
-                        .font(.headline.weight(.bold))
-                    Text("Log")
-                        .font(.caption2.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .frame(width: 84, height: 84)
-                .background(DSColor.coralGradient)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.45), lineWidth: 1)
-                )
-                .shadow(color: DSColor.coralEnd.opacity(0.3), radius: 12, y: 8)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Log meal with Tai")
-            .accessibilityHint("Opens Tai to log a meal")
-
-            HStack {
-                BottomTabButton(
-                    title: "Home",
-                    icon: "house.fill",
-                    isSelected: selectedTab == .home
-                ) {
-                    selectedTab = .home
-                }
-                Spacer(minLength: 92)
-                BottomTabButton(
-                    title: "Tai",
-                    icon: "bubble.left.and.bubble.right.fill",
-                    isSelected: selectedTab == .tai
-                ) {
-                    selectedTab = .tai
-                }
-            }
-            .padding(.horizontal, DSSpacing.xl + 6)
-            .padding(.top, 32)
-        }
-        .padding(.horizontal, DSSpacing.lg)
-        .padding(.top, DSSpacing.xs)
-        .frame(height: DSSpacing.customBottomNavHeight + 8)
-    }
-}
+// MARK: - Legacy bottom bar only
 
 private struct AppShellBottomBarLegacy: View {
     @Binding var selectedTab: AppShellView.LegacyTab

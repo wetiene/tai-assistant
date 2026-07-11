@@ -115,6 +115,8 @@ struct ActiveConversation: Identifiable, Equatable, Sendable {
     var activity: ConversationActivity
     var activeQuickActions: [ConversationQuickAction]
     let createdAt: Date
+    /// Last message the user was looking at; restored when practical.
+    var scrollAnchorMessageID: UUID?
 
     init(
         id: UUID = UUID(),
@@ -122,7 +124,8 @@ struct ActiveConversation: Identifiable, Equatable, Sendable {
         composer: ConversationComposerState = ConversationComposerState(),
         activity: ConversationActivity = .idle,
         activeQuickActions: [ConversationQuickAction] = [],
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        scrollAnchorMessageID: UUID? = nil
     ) {
         self.id = id
         self.messages = messages
@@ -130,5 +133,30 @@ struct ActiveConversation: Identifiable, Equatable, Sendable {
         self.activity = activity
         self.activeQuickActions = activeQuickActions
         self.createdAt = createdAt
+        self.scrollAnchorMessageID = scrollAnchorMessageID
     }
+}
+
+enum ConversationDefaults {
+    /// IDs must match `MealCapabilityID.QuickAction` (kept as literals to avoid Domain→Capability coupling).
+    static let mealQuickActions: [ConversationQuickAction] = [
+        ConversationQuickAction(
+            id: "meal.takePhoto",
+            title: "Take Photo",
+            systemImage: "camera.fill",
+            accessibilityHint: "Open the camera to log a meal"
+        ),
+        ConversationQuickAction(
+            id: "meal.describeMeal",
+            title: "Describe Meal",
+            systemImage: "fork.knife",
+            accessibilityHint: "Type a description of what you ate"
+        ),
+        ConversationQuickAction(
+            id: "meal.askTai",
+            title: "Ask Tai",
+            systemImage: "bubble.left.fill",
+            accessibilityHint: "Ask Tai a question"
+        ),
+    ]
 }

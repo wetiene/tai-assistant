@@ -9,57 +9,60 @@ struct ConversationView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: DSSpacing.md) {
-                        ForEach(viewModel.conversation.messages) { message in
-                            ConversationMessageRenderer(
-                                message: message,
-                                onQuickAction: { viewModel.handleQuickAction($0) },
-                                onMealCardAction: { action, cardID in
-                                    viewModel.handleMealCardAction(action, cardID: cardID)
-                                }
-                            )
-                            .id(message.id)
-                        }
-
-                        if viewModel.isProcessing {
-                            HStack(spacing: DSSpacing.sm) {
-                                ProgressView()
-                                Text("Tai is thinking…")
-                                    .font(.subheadline)
-                                    .foregroundStyle(DSColor.textSecondary)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: DSSpacing.md) {
+                    ForEach(viewModel.conversation.messages) { message in
+                        ConversationMessageRenderer(
+                            message: message,
+                            onQuickAction: { viewModel.handleQuickAction($0) },
+                            onMealCardAction: { action, cardID in
+                                viewModel.handleMealCardAction(action, cardID: cardID)
                             }
-                            .padding(.horizontal, DSSpacing.lg)
-                            .accessibilityLabel("Tai is thinking")
-                            .id("thinking")
-                        }
-
-                        if !viewModel.conversation.activeQuickActions.isEmpty,
-                           viewModel.conversation.messages.last?.quickActions == nil {
-                            ConversationQuickActionsRow(
-                                actions: viewModel.conversation.activeQuickActions,
-                                isEnabled: !viewModel.isProcessing
-                            ) { action in
-                                viewModel.handleQuickAction(action)
-                            }
-                            .id("quick-actions")
-                        }
+                        )
+                        .id(message.id)
                     }
-                    .padding(.horizontal, DSSpacing.lg)
-                    .padding(.top, DSSpacing.md)
-                    .padding(.bottom, DSSpacing.lg)
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .onChange(of: viewModel.conversation.messages.count) { _, _ in
-                    scrollToBottom(proxy: proxy)
-                }
-                .onChange(of: viewModel.isProcessing) { _, _ in
-                    scrollToBottom(proxy: proxy)
-                }
-            }
 
+                    if viewModel.isProcessing {
+                        HStack(spacing: DSSpacing.sm) {
+                            ProgressView()
+                            Text("Tai is thinking…")
+                                .font(.subheadline)
+                                .foregroundStyle(DSColor.textSecondary)
+                        }
+                        .padding(.horizontal, DSSpacing.lg)
+                        .accessibilityLabel("Tai is thinking")
+                        .id("thinking")
+                    }
+
+                    if !viewModel.conversation.activeQuickActions.isEmpty,
+                       viewModel.conversation.messages.last?.quickActions == nil {
+                        ConversationQuickActionsRow(
+                            actions: viewModel.conversation.activeQuickActions,
+                            isEnabled: !viewModel.isProcessing
+                        ) { action in
+                            viewModel.handleQuickAction(action)
+                        }
+                        .id("quick-actions")
+                    }
+                }
+                .padding(.horizontal, DSSpacing.lg)
+                .padding(.top, DSSpacing.md)
+                .padding(.bottom, DSSpacing.lg)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onAppear {
+                restoreScrollPosition(proxy: proxy)
+            }
+            .onChange(of: viewModel.conversation.messages.count) { _, _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .onChange(of: viewModel.isProcessing) { _, _ in
+                scrollToBottom(proxy: proxy)
+            }
+        }
+        .background(DSColor.background.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             ConversationComposerView(
                 text: Binding(
                     get: { viewModel.conversation.composer.text },
@@ -83,7 +86,6 @@ struct ConversationView: View {
                 }
             )
         }
-        .background(DSColor.background.ignoresSafeArea())
         .onAppear {
             viewModel.startIfNeeded()
         }
@@ -129,6 +131,19 @@ struct ConversationView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    private func restoreScrollPosition(proxy: ScrollViewProxy) {
+        let target = viewModel.conversation.scrollAnchorMessageID
+            ?? viewModel.conversation.messages.last?.id
+        guard let target else { return }
+        if reduceMotion {
+            proxy.scrollTo(target, anchor: .bottom)
+        } else {
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo(target, anchor: .bottom)
+            }
         }
     }
 

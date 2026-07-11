@@ -1,11 +1,19 @@
 import Foundation
 
 /// In-memory store for the single active conversation.
-/// Archive / multi-conversation can wrap this later without changing the UI contract.
+/// Persistence is injected via `onPersist` so Archive can later wrap the same UI contract.
 @MainActor
 @Observable
 final class ConversationSessionStore {
     private(set) var active: ActiveConversation
+
+    /// Called after durable mutations. Must not be invoked for every compositor keystroke.
+    var onPersist: ((ActiveConversation) -> Void)?
+
+    /// When true, mutations skip `onPersist` (used during bootstrap).
+    var suppressPersistence = false
+
+    private var composerPersistTask: Task<Void, Never>?
 
     init(seed: ActiveConversation? = nil) {
         self.active = seed ?? ActiveConversation()
@@ -13,12 +21,17 @@ final class ConversationSessionStore {
 
     func replace(_ conversation: ActiveConversation) {
         active = conversation
+        persistIfNeeded()
     }
 
     func mutate(_ body: (inout ActiveConversation) -> Void) {
         var copy = active
         body(&copy)
+        if let lastID = copy.messages.last?.id {
+            copy.scrollAnchorMessageID = lastID
+        }
         active = copy
+        persistIfNeeded()
     }
 
     func append(_ message: ConversationMessage) {
@@ -33,11 +46,15 @@ final class ConversationSessionStore {
         mutate { $0.activeQuickActions = actions }
     }
 
+    /// Composer text/photo updates: in-memory immediately; disk debounced to avoid write storms.
     func updateComposer(_ body: (inout ConversationComposerState) -> Void) {
-        mutate { body(&$0.composer) }
+        var copy = active
+        body(&copy.composer)
+        active = copy
+        scheduleDebouncedComposerPersist()
     }
 
-    /// Freeze prior interactive cards matching `typeID` so history is immutable.
+    /// Freeze prior interactive cards matching `typeID` so superseded cards remain in history.
     func freezeInteractiveCards(typeID: String) {
         mutate { conversation in
             conversation.messages = conversation.messages.map { message in
@@ -63,8 +80,24 @@ final class ConversationSessionStore {
         }
     }
 
-    /// Designed extension point: archive current, start fresh (not implemented in P0 meal slice).
+    /// Designed extension point: archive current, start fresh (Archive product slice).
     func prepareForArchiveReplacement(newConversation: ActiveConversation) {
         active = newConversation
+        persistIfNeeded()
+    }
+
+    private func scheduleDebouncedComposerPersist() {
+        guard !suppressPersistence else { return }
+        composerPersistTask?.cancel()
+        composerPersistTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            persistIfNeeded()
+        }
+    }
+
+    private func persistIfNeeded() {
+        guard !suppressPersistence else { return }
+        onPersist?(active)
     }
 }

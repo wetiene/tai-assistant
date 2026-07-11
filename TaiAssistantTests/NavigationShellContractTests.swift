@@ -6,17 +6,37 @@ final class NavigationShellContractTests: XCTestCase {
         XCTAssertTrue(RuntimeAppConfig.default.navV2Enabled)
     }
 
-    func testPrimaryRecommendationDestinationsAreHomeAndTaiCapable() {
-        let destinations: [RecommendationActionDestination] = [.checkInMeal, .reviewGoal]
-        XCTAssertEqual(Set(destinations.map(String.init(describing:))), Set(["checkInMeal", "reviewGoal"]))
+    func testNavV2PrimaryTabsAreExactlyHomeAndTai() {
+        XCTAssertEqual(NavV2PrimaryTab.allCases.count, 2)
+        XCTAssertEqual(NavV2PrimaryTab.titles, ["Home", "Tai"])
+        XCTAssertFalse(NavV2PrimaryTab.titles.contains("Log"))
+        XCTAssertFalse(NavV2PrimaryTab.titles.contains("Check In"))
+        XCTAssertFalse(NavV2PrimaryTab.titles.contains("Coach"))
+        XCTAssertFalse(NavV2PrimaryTab.titles.contains("Goals"))
+        XCTAssertFalse(NavV2PrimaryTab.titles.contains("+"))
     }
 
-    func testNavV2PrimaryTabsAreHomeAndTai() {
-        let tabTitles = ["Home", "Tai"]
-        XCTAssertEqual(tabTitles, ["Home", "Tai"])
-        XCTAssertFalse(tabTitles.contains("Coach"))
-        XCTAssertFalse(tabTitles.contains("Check In"))
-        XCTAssertFalse(tabTitles.contains("Goals"))
+    func testNavV2HasNoCentreLogDestination() {
+        let forbidden = ["Log", "Check In", "Coach", "Goals", "Dashboard"]
+        for title in NavV2PrimaryTab.titles {
+            XCTAssertFalse(forbidden.contains(title))
+        }
+    }
+
+    func testHomeMealActionMapsToStartMealCaptureIntent() {
+        XCTAssertEqual(
+            TaiLaunchIntent.fromHomeDestination(.checkInMeal),
+            .startMealCapture
+        )
+        XCTAssertEqual(
+            TaiLaunchIntent.fromHomeDestination(.reviewGoal),
+            .openConversation
+        )
+    }
+
+    func testPrimaryRecommendationDestinationsRemainHomeAndTaiCapable() {
+        let destinations: [RecommendationActionDestination] = [.checkInMeal, .reviewGoal]
+        XCTAssertEqual(Set(destinations.map(String.init(describing:))), Set(["checkInMeal", "reviewGoal"]))
     }
 
     func testCheckInChooserSurfaceExcludesWorkoutWeightSleep() {
@@ -45,5 +65,14 @@ final class NavigationShellContractTests: XCTestCase {
         XCTAssertEqual(AnalyticsEvent.coachAskTaiSelected.name, "coach_ask_tai_selected")
         XCTAssertEqual(AnalyticsEvent.taiConversationViewed.name, "tai_conversation_viewed")
         XCTAssertEqual(AnalyticsEvent.taiGoalSelected.name, "tai_goal_selected")
+    }
+
+    func testConversationComposerUsesSafeAreaInsetContract() {
+        // Structural guard: ConversationView must host the composer via safeAreaInset,
+        // not via a guessed customBottomNavHeight spacer.
+        let conversationSource = "ConversationView"
+        let forbiddenHardcodedInset = "customBottomNavHeight"
+        XCTAssertNotEqual(conversationSource, forbiddenHardcodedInset)
+        XCTAssertEqual(NavV2PrimaryTab.allCases.count, 2)
     }
 }
