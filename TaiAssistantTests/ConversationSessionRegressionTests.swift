@@ -8,12 +8,7 @@ final class ConversationSessionRegressionTests: XCTestCase {
         ConversationStartupProbe.resetSession()
         #endif
         let repo = InMemoryActiveConversationRepository()
-        let session = ActiveConversationSessionController(
-            conversationRepository: repo,
-            mealRepository: MockMealRepository(),
-            aiService: MockAIService(),
-            ownerID: "test.session",
-            assistantName: "Tai"
+        let session = ActiveConversationSessionController(conversationRepository: repo, mealRepository: MockMealRepository(), goalRepository: MockGoalRepository(), aiService: MockAIService(), ownerID: "test.session", assistantName: "Tai"
         )
 
         await session.ensureLoaded()
@@ -39,12 +34,7 @@ final class ConversationSessionRegressionTests: XCTestCase {
             ),
             ownerID: "test.session"
         )
-        let session = ActiveConversationSessionController(
-            conversationRepository: repo,
-            mealRepository: MockMealRepository(),
-            aiService: MockAIService(),
-            ownerID: "test.session",
-            assistantName: "Tai"
+        let session = ActiveConversationSessionController(conversationRepository: repo, mealRepository: MockMealRepository(), goalRepository: MockGoalRepository(), aiService: MockAIService(), ownerID: "test.session", assistantName: "Tai"
         )
         await session.ensureLoaded()
 
@@ -58,12 +48,7 @@ final class ConversationSessionRegressionTests: XCTestCase {
 
     func testReopeningSessionDoesNotCreateSecondConversationIdentity() async throws {
         let repo = InMemoryActiveConversationRepository()
-        let session = ActiveConversationSessionController(
-            conversationRepository: repo,
-            mealRepository: MockMealRepository(),
-            aiService: MockAIService(),
-            ownerID: "test.session",
-            assistantName: "Tai"
+        let session = ActiveConversationSessionController(conversationRepository: repo, mealRepository: MockMealRepository(), goalRepository: MockGoalRepository(), aiService: MockAIService(), ownerID: "test.session", assistantName: "Tai"
         )
         await session.ensureLoaded()
         let firstID = try XCTUnwrap(session.viewModel?.conversation.id)
@@ -73,12 +58,7 @@ final class ConversationSessionRegressionTests: XCTestCase {
 
     func testMealIntentDeliveredOnceDoesNotDuplicatePrompt() async {
         let repo = InMemoryActiveConversationRepository()
-        let session = ActiveConversationSessionController(
-            conversationRepository: repo,
-            mealRepository: MockMealRepository(),
-            aiService: MockAIService(),
-            ownerID: "test.session",
-            assistantName: "Tai"
+        let session = ActiveConversationSessionController(conversationRepository: repo, mealRepository: MockMealRepository(), goalRepository: MockGoalRepository(), aiService: MockAIService(), ownerID: "test.session", assistantName: "Tai"
         )
         await session.ensureLoaded()
         let before = session.viewModel?.conversation.messages.count ?? 0

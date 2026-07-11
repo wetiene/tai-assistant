@@ -45,6 +45,7 @@ struct ConversationMessageRenderer: View {
     let message: ConversationMessage
     var onQuickAction: (ConversationQuickAction) -> Void
     var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
+    var onWhy: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: bubbleAlignment, spacing: DSSpacing.xs) {
@@ -120,8 +121,22 @@ struct ConversationMessageRenderer: View {
                     }
                 )
             }
+        case LiveTaiEvidencePayload.cardTypeID:
+            // Why disclosure control — not a structured coaching card.
+            if card.isInteractive {
+                Button {
+                    onWhy?()
+                } label: {
+                    Label("Why?", systemImage: "questionmark.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(DSColor.coralEnd)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Why Tai said this")
+            }
         default:
             EmptyView()
         }
     }
 }
+

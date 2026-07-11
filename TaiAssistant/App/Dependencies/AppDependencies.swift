@@ -28,10 +28,12 @@ struct AppDependencies {
         let persistence = LocalPersistenceService(container: modelContainer)
         let aiService = makeAIService(config: config)
         let mealRepository = persistence.makeMealRepository()
+        let goalRepository = persistence.makeGoalRepository()
         let conversationRepository = persistence.makeActiveConversationRepository()
         let conversationSession = ActiveConversationSessionController(
             conversationRepository: conversationRepository,
             mealRepository: mealRepository,
+            goalRepository: goalRepository,
             aiService: aiService,
             ownerID: config.localOwnerID,
             assistantName: config.assistantName
@@ -41,7 +43,7 @@ struct AppDependencies {
             askTaiGuidance: MockAskTaiGuidanceService(),
             healthService: MockHealthService(),
             mealRepository: mealRepository,
-            goalRepository: persistence.makeGoalRepository(),
+            goalRepository: goalRepository,
             conversationRepository: conversationRepository,
             conversationSession: conversationSession,
             fineTuneCorrectionRepository: persistence.makeFineTuneCorrectionRepository(),
@@ -58,6 +60,7 @@ struct AppDependencies {
     static func mocksOnly(config: RuntimeAppConfig = .default) -> AppDependencies {
         ConversationAttachmentStore.shared = .makeEphemeralForTests()
         let mealRepository = MockMealRepository()
+        let goalRepository = MockGoalRepository()
         let conversationRepository = InMemoryActiveConversationRepository(
             attachmentStore: ConversationAttachmentStore.shared
         )
@@ -65,6 +68,7 @@ struct AppDependencies {
         let conversationSession = ActiveConversationSessionController(
             conversationRepository: conversationRepository,
             mealRepository: mealRepository,
+            goalRepository: goalRepository,
             aiService: aiService,
             ownerID: config.localOwnerID,
             assistantName: config.assistantName
@@ -74,7 +78,7 @@ struct AppDependencies {
             askTaiGuidance: MockAskTaiGuidanceService(),
             healthService: MockHealthService(),
             mealRepository: mealRepository,
-            goalRepository: MockGoalRepository(),
+            goalRepository: goalRepository,
             conversationRepository: conversationRepository,
             conversationSession: conversationSession,
             fineTuneCorrectionRepository: MockFineTuneCorrectionRepository(),
@@ -108,6 +112,7 @@ struct AppDependencies {
                     baseURL: baseURL,
                     interpretMealPath: config.aiInterpretMealPath,
                     interpretGoalPath: config.aiInterpretGoalPath,
+                    coachPath: config.aiCoachPath,
                     proxyBearerToken: config.aiProxyBearerToken
                 )
             )

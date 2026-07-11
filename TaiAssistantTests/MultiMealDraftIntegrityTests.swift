@@ -132,7 +132,7 @@ final class MultiMealDraftIntegrityTests: XCTestCase {
         let repo = RecordingMealRepository()
         let (store, meal, cardA, _, payloadA, _) = makeTwoReadyCards(repo: repo)
 
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         async let first: Void = vm.logMealDraft(cardID: cardA, payload: payloadA)
         async let second: Void = vm.logMealDraft(cardID: cardA, payload: payloadA)
         _ = await (first, second)
@@ -218,7 +218,7 @@ final class MultiMealDraftIntegrityTests: XCTestCase {
     func testRefiningOneDraftDoesNotAlterTheOther() {
         let repo = RecordingMealRepository()
         let (store, meal, cardA, cardB, _, payloadB) = makeTwoReadyCards(repo: repo)
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
 
         vm.handleMealCardAction(.changeSomething, cardID: cardA)
 
@@ -367,7 +367,7 @@ final class MultiMealDraftIntegrityTests: XCTestCase {
         cardID: UUID,
         payload: MealEstimateCardPayload
     ) async {
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         await vm.logMealDraft(cardID: cardID, payload: payload)
     }
 

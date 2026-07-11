@@ -18,12 +18,56 @@ enum MealCapabilityID {
         static let takePhoto = "meal.takePhoto"
         static let describeMeal = "meal.describeMeal"
         static let askTai = "meal.askTai"
+        static let cancelRefine = "meal.cancelRefine"
     }
 
     enum CardAction: String, Codable, Sendable {
         case looksRight
         case changeSomething
         case logMeal
+    }
+}
+
+/// Durable meal capability activity payload (persisted in `ConversationActivity.capability.payload`).
+struct MealCapabilityActivityPayload: Codable, Equatable, Sendable {
+    /// Explicit draft targeted for refinement after "Change something". Nil when not refining.
+    var targetedDraftID: UUID?
+
+    static func encode(_ payload: MealCapabilityActivityPayload) -> Data? {
+        try? JSONEncoder().encode(payload)
+    }
+
+    static func decode(_ data: Data?) -> MealCapabilityActivityPayload? {
+        guard let data, !data.isEmpty else { return nil }
+        return try? JSONDecoder().decode(MealCapabilityActivityPayload.self, from: data)
+    }
+}
+
+enum MealCapabilityActivityCodec {
+    static func makeActivity(
+        phase: MealCapabilityID.Phase,
+        targetedDraftID: UUID? = nil
+    ) -> ConversationActivity {
+        let payload: Data?
+        if let targetedDraftID {
+            payload = MealCapabilityActivityPayload.encode(
+                MealCapabilityActivityPayload(targetedDraftID: targetedDraftID)
+            )
+        } else {
+            payload = nil
+        }
+        return .capability(
+            capabilityID: MealCapabilityID.capability,
+            phaseID: phase.rawValue,
+            payload: payload
+        )
+    }
+
+    static func targetedDraftID(from activity: ConversationActivity) -> UUID? {
+        guard case let .capability(capabilityID, _, payload) = activity,
+              capabilityID == MealCapabilityID.capability
+        else { return nil }
+        return MealCapabilityActivityPayload.decode(payload)?.targetedDraftID
     }
 }
 

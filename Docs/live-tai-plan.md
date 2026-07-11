@@ -1,15 +1,15 @@
-# Live Tai implementation plan (deferred)
+# Live Tai implementation plan
 
-Operational plan for the next product slice after attachment externalisation.
-Not constitutional — obey `Docs/README.md` reading order and constitutional docs when implementing.
+Operational plan for Live Tai inside the one active Conversation.  
+Not constitutional — obey `Docs/README.md` reading order and constitutional docs.
 
-**Status:** Deferred until attachment-externalisation + off-main snapshot-codec slice is committed and re-inspected.  
+**Status:** Implemented (post attachment-externalisation baseline `0a01a8c`).  
 **Endpoint:** `POST /ai/coach`  
-**Do not implement until this document is refreshed against post-attachment APIs.**
+**Contract:** [`Docs/ai-proxy-live-tai-contract.md`](ai-proxy-live-tai-contract.md)
 
 ---
 
-## Locked product behaviour (unchanged)
+## Locked product behaviour
 
 - Navigation remains `Home | Tai`.
 - One active Conversation.
@@ -20,111 +20,74 @@ Not constitutional — obey `Docs/README.md` reading order and constitutional do
 
 ---
 
-## Mandatory plan amendments (2026-07-11)
+## Implemented behaviour (2026-07-11)
 
 ### 1. Targeted meal refinement only
 
-A pending meal card must **not** automatically capture all composer text.
-
-- Meal refinement runs only when Conversation is in an **explicit targeted refinement state** for one `draftID`.
-- That state is entered only after the user taps **Change something** on a specific meal card.
-- Outside that targeted state, ordinary text routes to **Live Tai** — even if interactive unlogged meal cards are still on screen.
-- Photos / Take Photo / Describe Meal still start or continue meal capture as capability intents (not free-text hijacking).
-
-Router sketch:
-
-| State | Route |
-|-------|--------|
-| Targeted meal refinement (`draftID` set after Change something) | Meal refine for that draft |
-| Photo present / meal collect intents | Meal |
-| Otherwise (including idle with leftover cards awaiting Log) | Live Tai |
+- Meal refinement runs only when Conversation activity carries an **explicit** `targetedDraftID` in the meal capability payload (persisted in `activityJSON`).
+- Entered only after **Change something** on a specific meal card.
+- Cleared on: successful refinement, Cancel change, Log Meal for that draft, Looks right for that draft, or new meal capture (Take Photo / Describe Meal / start meal intent).
+- Photos / Take Photo / Describe Meal (collecting phase) still start meal capture.
+- **Natural-language meal log statements** (e.g. “Had half a pizza…”) route to Meal via `ConversationMealIntentClassifier` — users do not need to tap Describe Meal first.
+- Food **questions** (“Can I have pizza tonight?”) route to Live Tai.
+- Short ambiguous food fragments (“Pizza”) ask whether to log or ask about it.
+- Pending meal cards alone never hijack general questions.
 
 ### 2. Consent versioning
 
-Inspect existing AI consent wording before shipping Live Tai.
+| Version | Scope |
+|---------|--------|
+| 1 | Meal check-in text/photo + goal strategy |
+| 2 | Live Tai coaching (question + bounded confirmed meals/goals + recent text; **no** meal photos on `/ai/coach`) |
 
-Current consent copy covers check-in text/photo and goal strategy only. Live general coaching **materially expands** processing scope.
+- Legacy boolean consent migrates to version **1**.
+- Version **2** is required once before the first Live Tai request.
+- Declining v2 does **not** disable v1 meal/goal interpretation.
 
-Therefore:
+### 3. Context assembly
 
-- Version the consent record (do not silently reuse v1 acceptance for Live Tai).
-- Request acceptance before the **first** Live Tai network request.
-- Reuse the same sheet UX pattern; do not invent a parallel legal flow.
-- Decline blocks the network call.
+- Capture immutable `LiveTaiContextSnapshot` (`Sendable`) at the repository boundary (value types only).
+- Assemble via `LiveTaiContextAssembler` **actor** (Swift concurrency, off MainActor).
+- Do not hop SwiftData models, repositories, or `@Observable` state across actors.
+- Known limitations always included in the **request**; shown in UI only when `response.limitations` is non-empty (material to the answer).
 
-### 3. Context assembly Sendable snapshot
+### 4. Identifiers
 
-`LiveTaiContextAssembler` must consume a **lightweight immutable `Sendable` snapshot**.
+Omit `ownerID` from `/ai/coach` requests.
 
-- Do not hop SwiftData models or live `@Observable` state across actors.
-- Build the snapshot on MainActor (or from repository value types), then assemble off-main.
-- Snapshot includes confirmed meals/goals progress, bounded recent turns (text only), capability flags, known limitations — not JPEG bytes.
+### 5. Response presentation
 
-### 4. Endpoint
+- Default: conversational assistant text + optional Why/Evidence disclosure.
+- No visible structured coaching card for ordinary text responses.
+- `requiresUserDecision` is advisory only — never mutates Artifacts.
+- Proxy quick actions map through a typed allowlist; unknown ids never trigger navigation/persistence/capabilities.
 
-Use **`POST /ai/coach`** only (document in `Docs/ai-proxy-live-tai-contract.md` when implementing).
+### 6. Allowlisted quick actions
 
-### 5. Identifiers
+`meal.takePhoto` · `meal.describeMeal` · `meal.askTai` · `meal.cancelRefine` · `meal.logIt` · `liveTai.askAboutIt` · `liveTai.retry` · `liveTai.why`
 
-Omit `ownerID` from the proxy request unless a demonstrated backend requirement appears.  
-If an identifier is required, use an **opaque** client/session id — never a human-readable owner string by default.
+### 7. Live Tai prose hygiene
 
-### 6. Response presentation
-
-Default to **conversational assistant text** with:
-
-- attached Evidence metadata
-- a Why disclosure surface
-
-Use structured visible cards **selectively** (e.g. safety refusal, strong recommendation requiring User Decision) — not for every response.
+- `assistantText` is clean conversational prose only (Worker prompt + sanitize + app renderer).
+- Bracketed evidence tags and capability jargon are forbidden in user-visible text.
+- Evidence / material limitations appear in the Why sheet only.
 
 ---
 
-## Proposed live request flow
+## Live request flow
 
 ```text
-Composer send (text, no photo)
-  → consent gate (versioned for Live Tai)
-  → ConversationRouter (targeted meal refinement vs Live Tai)
-       ├─ targeted meal draftID → MealCapability.interpret / refine
-       └─ otherwise → LiveTaiCapability
-            → build Sendable context snapshot
-            → assemble Context Prompt off MainActor
-            → POST /ai/coach
-            → validate typed LiveTaiResponse
-            → append assistant text (+ optional Why / selective card)
-            → single coalesced persist
-            → activity → awaitingUser
+Composer send
+  ↓
+Conversation router
+  ├─ targeted meal refinement draftID → Meal capability
+  ├─ photo / meal collecting intent → Meal capability
+  ├─ high-confidence NL meal statement → Meal capability
+  ├─ ambiguous food fragment → clarify (Log meal / Ask about it)
+  └─ otherwise → Live Tai
 ```
 
-No streaming in v1. Duplicate send while processing is ignored.
-
----
-
-## Response contract (typed)
-
-- `assistantText`
-- optional `recommendation` (advisory)
-- `evidence[]`
-- `confidence` / data sufficiency
-- `limitations[]`
-- optional `quickActions`
-- `requiresUserDecision`
-- `safety` state
-
-Must not create/mutate meals, goals, programs, reminders, preferences, Memory.
-
----
-
-## Evidence
-
-Grounded Why surface from confirmed context. No prompts / chain-of-thought.
-
----
-
-## Safety
-
-Worker rules + typed `safety` on response + honest missing-data limitations. Test diagnosis, urgent symptoms, unsafe restriction, disordered-eating, pain/injury, missing-data uncertainty.
+No streaming. Duplicate send while `processing(live_tai)` is ignored.
 
 ---
 
@@ -134,21 +97,12 @@ Retain user message; append failure; Retry without duplicating user turn; heal i
 
 ---
 
-## Performance (post-attachment baseline)
+## Performance
 
-Preserve:
+Preserves attachment externalisation + off-main coalesced persist from `0a01a8c`:
 
 - composer draft isolation + composer-only saves
 - externalised attachments (no JPEG in `messagesJSON`)
-- off-main encode/decode / coalesced persist coordinator
-- lazy Tai mount + image cache
+- coalesced persist coordinator
 - bounded context; no images on `/ai/coach`
 - no sensitive production logs
-
----
-
-## Pre-implementation checklist
-
-1. Re-inspect attachment store + persist coordinator APIs after that slice lands.
-2. Update this plan with exact types/paths.
-3. Then implement Live Tai (not before).

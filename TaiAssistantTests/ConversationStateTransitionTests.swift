@@ -13,7 +13,7 @@ final class ConversationStateTransitionTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         vm.startIfNeeded()
 
         XCTAssertEqual(store.active.activity, .awaitingUser)
@@ -29,7 +29,7 @@ final class ConversationStateTransitionTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         vm.startIfNeeded()
         let count = store.active.messages.count
         vm.startIfNeeded()
@@ -43,7 +43,7 @@ final class ConversationStateTransitionTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         vm.startIfNeeded()
 
         let action = ConversationViewModel.defaultQuickActions.first {

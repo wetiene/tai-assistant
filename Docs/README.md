@@ -46,7 +46,8 @@ These are useful but are **not** constitutional:
 |----------|------|
 | [`dev-workflow.md`](dev-workflow.md) | Branching, multi-agent ownership, TestFlight proxy auth |
 | [`ai-proxy-meal-interpretation-contract.md`](ai-proxy-meal-interpretation-contract.md) | Implementation contract for meal interpretation via the AI proxy |
-| [`live-tai-plan.md`](live-tai-plan.md) | Deferred Live Tai slice plan (operational; not constitutional) |
+| [`live-tai-plan.md`](live-tai-plan.md) | Live Tai slice plan (operational; not constitutional) |
+| [`ai-proxy-live-tai-contract.md`](ai-proxy-live-tai-contract.md) | Implementation contract for Live Tai via `POST /ai/coach` |
 
 Operational and contract docs may change with engineering work. They must not contradict the constitutional layer.
 

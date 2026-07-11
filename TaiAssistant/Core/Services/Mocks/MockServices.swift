@@ -101,6 +101,81 @@ struct MockAIService: AIService {
         )
     }
 
+    func coach(request: AICoachRequest) async throws -> AICoachResponse {
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let ask = request.message.lowercased()
+        let proteinRemaining: Int? = {
+            guard let day = request.context?.dayNutrition,
+                  let target = day.proteinTarget
+            else { return nil }
+            return max(0, Int(target - day.proteinGrams))
+        }()
+
+        if ask.contains("diagnos") || ask.contains("chest pain") || ask.contains("suicid") {
+            return AICoachResponse(
+                assistantText: "I can’t help with medical diagnosis or urgent symptoms. Please contact a clinician or emergency services if you’re in danger.",
+                evidence: [],
+                confidence: "high",
+                limitations: [],
+                quickActions: [],
+                requiresUserDecision: false,
+                safety: AICoachSafety(state: "refuse", reason: "medical_or_urgent")
+            )
+        }
+
+        if ask.contains("protein") {
+            let remainingText = proteinRemaining.map { "\($0)g" } ?? "your remaining target"
+            return AICoachResponse(
+                assistantText: "Based on today’s confirmed meals, you have about \(remainingText) of protein left toward your goal. A protein-forward dinner (eggs, fish, Greek yogurt, or lean meat with vegetables) would help close the gap.",
+                recommendation: AICoachRecommendation(
+                    title: "Prioritise protein at dinner",
+                    detail: "Aim for a meal that covers most of the remaining protein."
+                ),
+                evidence: [
+                    AICoachEvidenceItem(
+                        kind: "day_progress",
+                        label: "Today’s protein progress",
+                        detail: proteinRemaining.map { "About \($0)g remaining vs target" }
+                    ),
+                    AICoachEvidenceItem(
+                        kind: "goal_target",
+                        label: "Active goal targets",
+                        detail: request.context?.goal?.title
+                    ),
+                ].filter { $0.detail != nil || $0.kind == "day_progress" },
+                confidence: request.context?.dayNutrition?.proteinTarget == nil ? "low" : "medium",
+                limitations: request.context?.dayNutrition?.proteinTarget == nil
+                    ? ["No protein target is set yet"]
+                    : [],
+                quickActions: [
+                    AICoachQuickAction(id: "liveTai.why", title: "Why?"),
+                    AICoachQuickAction(id: "meal.describeMeal", title: "Describe Meal"),
+                ],
+                requiresUserDecision: false,
+                safety: AICoachSafety(state: "ok", reason: nil)
+            )
+        }
+
+        let mealCount = request.context?.dayNutrition?.mealCount ?? 0
+        return AICoachResponse(
+            assistantText: mealCount == 0
+                ? "I don’t have confirmed meals for today yet. Tell me what you’ve eaten, or ask about your goals and I’ll coach from what we know."
+                : "Here’s my take from today’s confirmed logs: you’ve logged \(mealCount) meal(s). Ask about protein left, dinner ideas, or how today compares — I’ll stay grounded in what you’ve confirmed.",
+            evidence: [
+                AICoachEvidenceItem(
+                    kind: "confirmed_meal",
+                    label: "Today’s meal count",
+                    detail: "\(mealCount) confirmed meal(s)"
+                ),
+            ],
+            confidence: mealCount == 0 ? "low" : "medium",
+            limitations: mealCount == 0 ? ["No confirmed meals logged today"] : [],
+            quickActions: [AICoachQuickAction(id: "liveTai.why", title: "Why?")],
+            requiresUserDecision: false,
+            safety: AICoachSafety(state: "ok", reason: nil)
+        )
+    }
+
     func interpretGoal(request: AIInterpretGoalRequest) async throws -> AIInterpretGoalResponse {
         try await Task.sleep(nanoseconds: 250_000_000)
         let trimmed = request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)

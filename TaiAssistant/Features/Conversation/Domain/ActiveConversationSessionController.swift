@@ -12,6 +12,7 @@ final class ActiveConversationSessionController {
 
     private let conversationRepository: ActiveConversationRepository
     private let mealRepository: MealRepository
+    private let goalRepository: GoalRepository
     private let aiService: AIService
     private let ownerID: String
     private let assistantName: String
@@ -23,6 +24,7 @@ final class ActiveConversationSessionController {
     init(
         conversationRepository: ActiveConversationRepository,
         mealRepository: MealRepository,
+        goalRepository: GoalRepository,
         aiService: AIService,
         ownerID: String,
         assistantName: String,
@@ -30,6 +32,7 @@ final class ActiveConversationSessionController {
     ) {
         self.conversationRepository = conversationRepository
         self.mealRepository = mealRepository
+        self.goalRepository = goalRepository
         self.aiService = aiService
         self.ownerID = ownerID
         self.assistantName = assistantName
@@ -117,9 +120,17 @@ final class ActiveConversationSessionController {
             )
             meal.restoreFromConversation(restored)
 
+            let liveTai = LiveTaiCapabilityController(
+                mealRepository: mealRepository,
+                goalRepository: goalRepository,
+                aiService: aiService,
+                ownerID: ownerID
+            )
+
             let vm = ConversationViewModel(
                 store: store,
                 meal: meal,
+                liveTai: liveTai,
                 assistantName: assistantName,
                 onMealSaved: onMealSaved
             )

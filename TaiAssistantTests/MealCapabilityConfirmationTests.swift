@@ -5,12 +5,12 @@ import XCTest
 final class MealCapabilityConfirmationTests: XCTestCase {
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: "tai.aiDataProcessingConsent.accepted")
-        AIDataProcessingConsentStore.accept()
+        AIDataProcessingConsentStore.resetForTests()
+        AIDataProcessingConsentStore.accept(version: AIDataProcessingConsentStore.liveTaiVersion)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: "tai.aiDataProcessingConsent.accepted")
+        AIDataProcessingConsentStore.resetForTests()
         super.tearDown()
     }
 
@@ -53,7 +53,7 @@ final class MealCapabilityConfirmationTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         vm.startIfNeeded()
         await vm.sendComposerWithTestHooks(text: "lunch bowl", photo: nil)
 
@@ -83,7 +83,7 @@ final class MealCapabilityConfirmationTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         vm.startIfNeeded()
         await vm.sendComposerWithTestHooks(text: "dinner steak", photo: nil)
 
@@ -95,6 +95,7 @@ final class MealCapabilityConfirmationTests: XCTestCase {
         )
         XCTAssertEqual(payload?.refinementAccepted, false)
         XCTAssertEqual(payload?.showsLogMeal, false)
+        XCTAssertEqual(vm.targetedMealDraftID, payload?.draft.id)
         XCTAssertTrue(store.active.messages.contains { $0.text?.contains("what to change") == true })
     }
 }

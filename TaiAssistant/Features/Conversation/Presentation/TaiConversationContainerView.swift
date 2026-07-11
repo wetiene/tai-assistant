@@ -99,6 +99,7 @@ struct TaiConversationContainerView: View {
     let session = ActiveConversationSessionController(
         conversationRepository: InMemoryActiveConversationRepository(),
         mealRepository: MockMealRepository(),
+        goalRepository: MockGoalRepository(),
         aiService: MockAIService(),
         ownerID: "preview.user",
         assistantName: "Tai"

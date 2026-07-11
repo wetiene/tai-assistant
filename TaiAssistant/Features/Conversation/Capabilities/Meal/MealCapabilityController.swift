@@ -62,14 +62,23 @@ final class MealCapabilityController {
     }
 
     /// Run AI interpretation using the existing Check In interpreter (unchanged backend).
-    func interpret(userText: String, photoJPEG: Data?) async -> MealInterpretationOutcome {
+    /// - Parameter targetDraftID: When set (targeted meal refinement), only that draft is re-estimated.
+    func interpret(
+        userText: String,
+        photoJPEG: Data?,
+        targetDraftID: UUID? = nil
+    ) async -> MealInterpretationOutcome {
         clearError()
         phase = .interpreting
         if let photoJPEG {
             engine.session.selectedPhotoData = photoJPEG
         }
         engine.session.userInput = userText
-        await engine.onUpdateMealTapped()
+        await engine.interpretFromConversation(
+            userText: userText,
+            photoData: photoJPEG,
+            explicitReestimateMealID: targetDraftID
+        )
 
         if let error = engine.errorMessage {
             lastError = error
@@ -87,10 +96,21 @@ final class MealCapabilityController {
 
         phase = .reviewing
         let notes = engine.session.interpretationNotes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let successDrafts: [CheckInMealDraft]
+        if let targetDraftID {
+            successDrafts = drafts.filter { $0.id == targetDraftID }
+            if successDrafts.isEmpty {
+                let message = "I couldn’t update that meal estimate. Try again or change another detail."
+                lastError = message
+                return .failure(message)
+            }
+        } else {
+            successDrafts = drafts
+        }
         return .success(
             MealInterpretationOutcome.Success(
-                drafts: drafts,
-                assistantNote: (notes?.isEmpty == false) ? notes : defaultAssistantNote(for: drafts)
+                drafts: successDrafts,
+                assistantNote: (notes?.isEmpty == false) ? notes : defaultAssistantNote(for: successDrafts)
             )
         )
     }

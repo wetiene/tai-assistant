@@ -17,6 +17,9 @@ struct ConversationView: View {
                 onQuickAction: { viewModel.handleQuickAction($0) },
                 onMealCardAction: { action, cardID in
                     viewModel.handleMealCardAction(action, cardID: cardID)
+                },
+                onWhy: {
+                    viewModel.showLiveTaiWhy = true
                 }
             )
             ConversationComposerHost(
@@ -65,6 +68,7 @@ struct ConversationView: View {
         }
         .sheet(isPresented: $isConsentPresented) {
             AIDataProcessingConsentSheet(
+                kind: viewModel.pendingConsentKind,
                 onAccept: {
                     isConsentPresented = false
                     viewModel.acceptConsent()
@@ -74,6 +78,20 @@ struct ConversationView: View {
                     viewModel.declineConsent()
                 }
             )
+        }
+        .sheet(isPresented: Binding(
+            get: { viewModel.showLiveTaiWhy },
+            set: { presented in
+                if !presented { viewModel.dismissLiveTaiWhy() }
+            }
+        )) {
+            if let evidence = viewModel.latestLiveTaiEvidence {
+                LiveTaiWhySheet(
+                    evidence: evidence,
+                    assistantName: viewModel.assistantName,
+                    onDismiss: { viewModel.dismissLiveTaiWhy() }
+                )
+            }
         }
         .alert("Tai", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -95,6 +113,7 @@ private struct ConversationMessageListView: View {
     var reduceMotion: Bool
     var onQuickAction: (ConversationQuickAction) -> Void
     var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
+    var onWhy: () -> Void
 
     var body: some View {
         let messages = store.active.messages
@@ -107,7 +126,8 @@ private struct ConversationMessageListView: View {
                         ConversationMessageRenderer(
                             message: message,
                             onQuickAction: onQuickAction,
-                            onMealCardAction: onMealCardAction
+                            onMealCardAction: onMealCardAction,
+                            onWhy: onWhy
                         )
                         .id(message.id)
                     }

@@ -954,6 +954,328 @@ async function handleInterpretGoal(request: Request, env: Env): Promise<Response
 	return json({ error: "malformed_ai_response" }, 502);
 }
 
+export type TaiCoachRequest = {
+	message: string;
+	context?: Record<string, unknown>;
+};
+
+export type TaiCoachResponse = {
+	assistantText: string;
+	recommendation?: { title: string; detail?: string | null } | null;
+	evidence: Array<{ kind: string; label: string; detail?: string | null }>;
+	confidence: string;
+	limitations: string[];
+	quickActions: Array<{ id: string; title: string }>;
+	requiresUserDecision: boolean;
+	safety: { state: string; reason?: string | null };
+};
+
+const TAI_COACH_RESPONSE_JSON_SCHEMA = {
+	type: "object",
+	additionalProperties: false,
+	properties: {
+		assistantText: { type: "string" },
+		recommendation: {
+			anyOf: [
+				{
+					type: "object",
+					additionalProperties: false,
+					properties: {
+						title: { type: "string" },
+						detail: { type: ["string", "null"] },
+					},
+					required: ["title", "detail"],
+				},
+				{ type: "null" },
+			],
+		},
+		evidence: {
+			type: "array",
+			items: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					kind: { type: "string" },
+					label: { type: "string" },
+					detail: { type: ["string", "null"] },
+				},
+				required: ["kind", "label", "detail"],
+			},
+		},
+		confidence: { type: "string" },
+		limitations: { type: "array", items: { type: "string" } },
+		quickActions: {
+			type: "array",
+			items: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					id: { type: "string" },
+					title: { type: "string" },
+				},
+				required: ["id", "title"],
+			},
+		},
+		requiresUserDecision: { type: "boolean" },
+		safety: {
+			type: "object",
+			additionalProperties: false,
+			properties: {
+				state: { type: "string" },
+				reason: { type: ["string", "null"] },
+			},
+			required: ["state", "reason"],
+		},
+	},
+	required: [
+		"assistantText",
+		"recommendation",
+		"evidence",
+		"confidence",
+		"limitations",
+		"quickActions",
+		"requiresUserDecision",
+		"safety",
+	],
+} as const;
+
+function sanitizeCoachAssistantText(raw: string): string {
+	let text = raw.trim();
+	// Strip [bracketed annotations]
+	text = text.replace(/\[[^\]]{0,120}\]/g, "");
+	const banned = [
+		/Meal Memory unavailable/gi,
+		/Location context unavailable/gi,
+		/Location unavailable/gi,
+		/HealthKit unavailable/gi,
+		/Apple Health \/ HealthKit is not connected/gi,
+		/Workout tracking is not available[^.]*\.?/gi,
+		/Confirmed today['’]s totals/gi,
+		/Confirmed Artifact/gi,
+		/capability flags/gi,
+		/I don['’]t have meal memory[^.]*\.?/gi,
+		/I won['’]t update your saved data[^.]*\.?/gi,
+		/I will not update your saved data[^.]*\.?/gi,
+	];
+	for (const re of banned) {
+		text = text.replace(re, "");
+	}
+	text = text.replace(/\n{3,}/g, "\n\n").replace(/ {2,}/g, " ").trim();
+	return text;
+}
+
+function buildCoachSystemPrompt(): string {
+	return [
+		"You are Tai, an advisory AI health and performance coach.",
+		"Ground answers ONLY in the provided confirmed meals, goals, recent conversation text, and limitations.",
+		"Never invent HealthKit, sleep, weight, workouts, location, or Meal Memory when those signals are unavailable.",
+		"Do not mutate, create, or claim to have saved meals, goals, programs, reminders, preferences, or Memory.",
+		"requiresUserDecision is an advisory flag only — never treat it as permission to write data, and do not lecture the user about not updating saved data in assistantText.",
+		"Safety: refuse medical diagnosis, urgent/emergency symptoms, unsafe restriction, disordered-eating encouragement, and injury-pushing advice. Use safety.state refuse or redirect.",
+		"assistantText must be concise, conversational, actionable user-facing prose only.",
+		"Never put evidence markers, bracketed annotations, capability flags, or internal labels in assistantText.",
+		"Forbidden in assistantText: strings like [Confirmed…], Meal Memory unavailable, Location unavailable, HealthKit unavailable, Confirmed Artifact, capability jargon, or debug provenance.",
+		"Put grounded facts in the evidence array. Put only material answer-specific gaps in limitations — never dump the full unavailable-signal catalogue.",
+		"Do not repeat generic disclaimers. Prefer short answers (2–4 sentences) unless safety requires more.",
+		"quickActions ids must be from this allowlist only when used: meal.takePhoto, meal.describeMeal, meal.askTai, meal.cancelRefine, meal.logIt, liveTai.askAboutIt, liveTai.retry, liveTai.why. Prefer liveTai.why when evidence is present.",
+		"No meal photos are in this request.",
+	].join(" ");
+}
+
+function mapProviderStructuredToCoachResponse(parsed: unknown): TaiCoachResponse | null {
+	const o = asRecord(parsed);
+	if (!o) return null;
+	const assistantTextRaw = readString(o.assistantText)?.trim();
+	if (!assistantTextRaw) return null;
+	const assistantText = sanitizeCoachAssistantText(assistantTextRaw);
+	if (!assistantText) return null;
+
+	let recommendation: TaiCoachResponse["recommendation"] = null;
+	if (o.recommendation != null) {
+		const r = asRecord(o.recommendation);
+		const title = r ? readString(r.title)?.trim() : undefined;
+		if (title) {
+			recommendation = {
+				title,
+				detail: r ? readString(r.detail) ?? null : null,
+			};
+		}
+	}
+
+	const evidence: TaiCoachResponse["evidence"] = [];
+	if (Array.isArray(o.evidence)) {
+		for (const item of o.evidence) {
+			const e = asRecord(item);
+			if (!e) continue;
+			const kind = readString(e.kind)?.trim();
+			const label = readString(e.label)?.trim();
+			if (!kind || !label) continue;
+			evidence.push({
+				kind,
+				label,
+				detail: readString(e.detail) ?? null,
+			});
+		}
+	}
+
+	const limitations = readStringArray(o.limitations, 8);
+	const quickActions: TaiCoachResponse["quickActions"] = [];
+	if (Array.isArray(o.quickActions)) {
+		for (const item of o.quickActions) {
+			const q = asRecord(item);
+			if (!q) continue;
+			const id = readString(q.id)?.trim();
+			const title = readString(q.title)?.trim();
+			if (!id || !title) continue;
+			quickActions.push({ id, title });
+		}
+	}
+
+	const safetyRaw = asRecord(o.safety);
+	const safetyState = (safetyRaw && readString(safetyRaw.state)?.trim()) || "ok";
+	const safety = {
+		state: safetyState,
+		reason: safetyRaw ? readString(safetyRaw.reason) ?? null : null,
+	};
+
+	return {
+		assistantText,
+		recommendation,
+		evidence,
+		confidence: readString(o.confidence)?.trim() || "medium",
+		limitations,
+		quickActions,
+		requiresUserDecision: o.requiresUserDecision === true,
+		safety,
+	};
+}
+
+async function interpretWithOpenAIStructuredCoach(
+	env: Env,
+	message: string,
+	context: Record<string, unknown> | undefined,
+): Promise<
+	| { status: "success"; payload: TaiCoachResponse }
+	| { status: "ai_provider_error"; openaiHttpStatus: number; openAIDetail?: string }
+	| { status: "malformed_ai_response" }
+> {
+	const contextJson = JSON.stringify(context ?? {}, null, 2);
+	const userText = [
+		`User question:\n${message}`,
+		`Confirmed context JSON (no photos; respect limitations and capability flags):\n${contextJson}`,
+	].join("\n\n");
+
+	const openaiRes = await fetch(OPENAI_RESPONSES_URL, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			model: OPENAI_MEAL_MODEL,
+			input: [
+				{
+					role: "system",
+					content: [{ type: "input_text", text: buildCoachSystemPrompt() }],
+				},
+				{
+					role: "user",
+					content: [{ type: "input_text", text: userText }],
+				},
+			],
+			text: {
+				format: {
+					type: "json_schema",
+					name: "tai_coach_response",
+					strict: true,
+					schema: TAI_COACH_RESPONSE_JSON_SCHEMA,
+				},
+			},
+		}),
+	});
+
+	if (!openaiRes.ok) {
+		const detail = await openaiRes.text().catch(() => undefined);
+		return {
+			status: "ai_provider_error",
+			openaiHttpStatus: openaiRes.status,
+			openAIDetail: detail?.slice(0, 2000),
+		};
+	}
+
+	const raw = await openaiRes.json();
+	const refusal = extractFirstRefusal(raw);
+	if (refusal) {
+		return {
+			status: "success",
+			payload: {
+				assistantText: refusal,
+				recommendation: null,
+				evidence: [],
+				confidence: "high",
+				limitations: [],
+				quickActions: [],
+				requiresUserDecision: false,
+				safety: { state: "refuse", reason: "model_refusal" },
+			},
+		};
+	}
+
+	const text = extractOutputText(raw);
+	if (!text) return { status: "malformed_ai_response" };
+	try {
+		const parsed = parseJsonFromModelText(text);
+		const mapped = mapProviderStructuredToCoachResponse(parsed);
+		if (!mapped) return { status: "malformed_ai_response" };
+		return { status: "success", payload: mapped };
+	} catch {
+		return { status: "malformed_ai_response" };
+	}
+}
+
+async function handleCoach(request: Request, env: Env): Promise<Response> {
+	if (request.method !== "POST") {
+		return json({ error: "method_not_allowed" }, 405);
+	}
+	const unauthorized = requireProxyAuth(request, env);
+	if (unauthorized) return unauthorized;
+
+	const contentLength = Number(request.headers.get("Content-Length") ?? "0");
+	if (contentLength > MAX_BODY_BYTES) {
+		return json({ error: "payload_too_large" }, 413);
+	}
+
+	let body: TaiCoachRequest;
+	try {
+		body = (await request.json()) as TaiCoachRequest;
+	} catch {
+		return json({ error: "invalid_json" }, 400);
+	}
+
+	const message = typeof body.message === "string" ? body.message.trim() : "";
+	if (message.length === 0) {
+		return json({ error: "message_required" }, 400);
+	}
+
+	const ctx = body.context !== undefined ? asRecord(body.context) ?? undefined : undefined;
+	// Never accept or forward ownerID / image payloads on this route.
+	if (ctx && "ownerID" in ctx) {
+		delete ctx.ownerID;
+	}
+
+	const outcome = await interpretWithOpenAIStructuredCoach(env, message, ctx);
+	if (outcome.status === "success") return json(outcome.payload, 200);
+	if (outcome.status === "ai_provider_error") {
+		const payload: Record<string, unknown> = {
+			error: "ai_provider_error",
+			status: outcome.openaiHttpStatus,
+		};
+		if (outcome.openAIDetail) payload.openai_detail = outcome.openAIDetail;
+		return json(payload, 502);
+	}
+	return json({ error: "malformed_ai_response" }, 502);
+}
+
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		if (request.method === "OPTIONS") {
@@ -968,6 +1290,9 @@ export default {
 		if (url.pathname === "/ai/interpret-goal") {
 			return handleInterpretGoal(request, env);
 		}
+		if (url.pathname === "/ai/coach") {
+			return handleCoach(request, env);
+		}
 
 		return json({ error: "not_found" }, 404);
 	},
@@ -976,10 +1301,14 @@ export default {
 export const __test = {
 	TAI_MEAL_RESPONSE_JSON_SCHEMA,
 	TAI_GOAL_RESPONSE_JSON_SCHEMA,
+	TAI_COACH_RESPONSE_JSON_SCHEMA,
 	buildSystemPrompt,
 	buildGoalSystemPrompt,
+	buildCoachSystemPrompt,
 	mapProviderStructuredToAppResponse,
 	mapProviderStructuredToGoalResponse,
+	mapProviderStructuredToCoachResponse,
+	sanitizeCoachAssistantText,
 	parseMealRefinementFromContext,
 	collectUserTextBlocksForTests,
 };

@@ -16,6 +16,7 @@ struct RuntimeAppConfig {
     let aiProxyBearerToken: String?
     let aiInterpretMealPath: String
     let aiInterpretGoalPath: String
+    let aiCoachPath: String
     /// When true, ships Home / Check In chooser / Coach. When false, restores Dashboard / Check In / Goals.
     let navV2Enabled: Bool
 
@@ -73,6 +74,7 @@ struct RuntimeAppConfig {
         aiProxyBearerToken: LocalProxyAuth.resolveBearerToken(),
         aiInterpretMealPath: "/ai/interpret-meal",
         aiInterpretGoalPath: "/ai/interpret-goal",
+        aiCoachPath: "/ai/coach",
         navV2Enabled: FeatureFlags.resolveNavV2Enabled()
     )
 }

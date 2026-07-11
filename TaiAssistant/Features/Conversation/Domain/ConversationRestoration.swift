@@ -4,9 +4,11 @@ import Foundation
 enum ConversationRestoration {
     static let interruptedMealInterpretationMessage = "Meal interpretation was interrupted."
     static let interruptedMealSaveMessage = "Meal save was interrupted. Your meal was not logged — try again when ready."
+    static let interruptedLiveTaiMessage = "Tai was interrupted while answering. Your question is still here — tap Retry when you’re ready."
 
     /// Returns a healed conversation when activity was left in a non-restorable transient state.
     /// Does not duplicate messages if an interruption notice is already the last assistant text.
+    /// Targeted meal refinement (`capability` reviewing + draft payload) is restorable and is not healed away.
     static func healInterruptedWork(_ conversation: ActiveConversation) -> (ActiveConversation, didHeal: Bool) {
         var healed = conversation
         switch conversation.activity {
@@ -14,18 +16,26 @@ enum ConversationRestoration {
             let messageText: String
             if reason == "saving_meal" {
                 messageText = interruptedMealSaveMessage
+            } else if reason == LiveTaiCapabilityController.processingReason {
+                messageText = interruptedLiveTaiMessage
             } else {
                 messageText = interruptedMealInterpretationMessage
             }
             appendInterruptionNoticeIfNeeded(to: &healed, text: messageText)
             healed.activity = .awaitingUser
-            healed.activeQuickActions = ConversationDefaults.mealQuickActions
+            if reason == LiveTaiCapabilityController.processingReason {
+                healed.activeQuickActions = [
+                    ConversationAllowedQuickAction.liveTaiRetry.asConversationQuickAction()
+                ] + ConversationDefaults.mealQuickActions
+            } else {
+                healed.activeQuickActions = ConversationDefaults.mealQuickActions
+            }
             healed.composer.pendingPhotoJPEG = nil
             return (healed, true)
 
         case .capability(let capabilityID, let phaseID, _):
             // Interpreting/saving phases should not appear as capability; processing covers those.
-            // Collecting / reviewing / readyToLog are restorable with card rebuild.
+            // Collecting / reviewing / readyToLog (including targeted refine payload) are restorable.
             if capabilityID == MealCapabilityID.capability,
                phaseID == MealCapabilityID.Phase.interpreting.rawValue
                 || phaseID == MealCapabilityID.Phase.saving.rawValue

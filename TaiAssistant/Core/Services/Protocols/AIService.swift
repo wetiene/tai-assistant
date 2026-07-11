@@ -4,6 +4,157 @@ protocol AIService {
     func send(message: String, context: [String: String]) async throws -> String
     func interpretMeal(request: AIInterpretMealRequest) async throws -> AIInterpretMealResponse
     func interpretGoal(request: AIInterpretGoalRequest) async throws -> AIInterpretGoalResponse
+    func coach(request: AICoachRequest) async throws -> AICoachResponse
+}
+
+// MARK: - Live Tai coaching (`POST /ai/coach`) — no ownerID; no meal photos
+
+struct AICoachRequest: Codable, Sendable {
+    var message: String
+    var context: AICoachRequestContext?
+}
+
+struct AICoachRequestContext: Codable, Sendable {
+    var localeIdentifier: String?
+    var timeZoneIdentifier: String?
+    var dayNutrition: AICoachDayNutritionContext?
+    var mealsToday: [AICoachMealContext]
+    var goal: AICoachGoalContext?
+    var recentTurns: [AICoachTurnContext]
+    var limitations: [String]
+    var capabilityFlags: AICoachCapabilityFlags?
+
+    init(
+        localeIdentifier: String? = nil,
+        timeZoneIdentifier: String? = nil,
+        dayNutrition: AICoachDayNutritionContext? = nil,
+        mealsToday: [AICoachMealContext] = [],
+        goal: AICoachGoalContext? = nil,
+        recentTurns: [AICoachTurnContext] = [],
+        limitations: [String] = [],
+        capabilityFlags: AICoachCapabilityFlags? = nil
+    ) {
+        self.localeIdentifier = localeIdentifier
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.dayNutrition = dayNutrition
+        self.mealsToday = mealsToday
+        self.goal = goal
+        self.recentTurns = recentTurns
+        self.limitations = limitations
+        self.capabilityFlags = capabilityFlags
+    }
+}
+
+struct AICoachDayNutritionContext: Codable, Sendable {
+    var mealCount: Int
+    var calories: Int
+    var proteinGrams: Double
+    var carbsGrams: Double
+    var fatGrams: Double
+    var calorieTarget: Int?
+    var proteinTarget: Double?
+    var carbsTarget: Double?
+    var fatTarget: Double?
+}
+
+struct AICoachMealContext: Codable, Sendable {
+    var label: String
+    var eatenAtISO8601: String?
+    var calories: Int
+    var proteinGrams: Double
+    var carbsGrams: Double
+    var fatGrams: Double
+}
+
+struct AICoachGoalContext: Codable, Sendable {
+    var title: String
+    var calorieTarget: Int?
+    var proteinTarget: Double?
+    var carbsTarget: Double?
+    var fatTarget: Double?
+}
+
+struct AICoachTurnContext: Codable, Sendable {
+    var role: String
+    var text: String
+}
+
+struct AICoachCapabilityFlags: Codable, Sendable {
+    var hasHealthKit: Bool
+    var hasWorkouts: Bool
+    var hasLocation: Bool
+    var hasMealMemory: Bool
+}
+
+struct AICoachResponse: Codable, Sendable {
+    var assistantText: String
+    var recommendation: AICoachRecommendation?
+    var evidence: [AICoachEvidenceItem]
+    var confidence: String
+    var limitations: [String]
+    var quickActions: [AICoachQuickAction]
+    var requiresUserDecision: Bool
+    var safety: AICoachSafety
+
+    enum CodingKeys: String, CodingKey {
+        case assistantText, recommendation, evidence, confidence, limitations
+        case quickActions, requiresUserDecision, safety
+    }
+
+    init(
+        assistantText: String,
+        recommendation: AICoachRecommendation? = nil,
+        evidence: [AICoachEvidenceItem] = [],
+        confidence: String = "medium",
+        limitations: [String] = [],
+        quickActions: [AICoachQuickAction] = [],
+        requiresUserDecision: Bool = false,
+        safety: AICoachSafety = AICoachSafety(state: "ok", reason: nil)
+    ) {
+        self.assistantText = assistantText
+        self.recommendation = recommendation
+        self.evidence = evidence
+        self.confidence = confidence
+        self.limitations = limitations
+        self.quickActions = quickActions
+        self.requiresUserDecision = requiresUserDecision
+        self.safety = safety
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        assistantText = try container.decode(String.self, forKey: .assistantText)
+        recommendation = try container.decodeIfPresent(AICoachRecommendation.self, forKey: .recommendation)
+        evidence = try container.decodeIfPresent([AICoachEvidenceItem].self, forKey: .evidence) ?? []
+        confidence = try container.decodeIfPresent(String.self, forKey: .confidence) ?? "medium"
+        limitations = try container.decodeIfPresent([String].self, forKey: .limitations) ?? []
+        quickActions = try container.decodeIfPresent([AICoachQuickAction].self, forKey: .quickActions) ?? []
+        requiresUserDecision = try container.decodeIfPresent(Bool.self, forKey: .requiresUserDecision) ?? false
+        safety = try container.decodeIfPresent(AICoachSafety.self, forKey: .safety)
+            ?? AICoachSafety(state: "ok", reason: nil)
+    }
+}
+
+struct AICoachRecommendation: Codable, Sendable {
+    var title: String
+    var detail: String?
+}
+
+struct AICoachEvidenceItem: Codable, Sendable {
+    var kind: String
+    var label: String
+    var detail: String?
+}
+
+struct AICoachQuickAction: Codable, Sendable {
+    var id: String
+    var title: String
+}
+
+struct AICoachSafety: Codable, Sendable {
+    /// `ok` | `refuse` | `redirect`
+    var state: String
+    var reason: String?
 }
 
 // MARK: - Goal interpretation (`POST /ai/interpret-goal`)
@@ -200,6 +351,7 @@ struct OpenAIProxyServiceConfig {
     var baseURL: URL
     var interpretMealPath: String
     var interpretGoalPath: String
+    var coachPath: String
     /// Optional proxy credential. This is for the app -> backend proxy hop only.
     var proxyBearerToken: String?
 
@@ -207,6 +359,7 @@ struct OpenAIProxyServiceConfig {
         baseURL: URL(string: "http://localhost:8080")!,
         interpretMealPath: "/ai/interpret-meal",
         interpretGoalPath: "/ai/interpret-goal",
+        coachPath: "/ai/coach",
         proxyBearerToken: nil
     )
 }
@@ -247,6 +400,10 @@ struct OpenAIProxyAIService: AIService {
 
     func interpretGoal(request: AIInterpretGoalRequest) async throws -> AIInterpretGoalResponse {
         try await postJSON(path: config.interpretGoalPath, body: request, decode: AIInterpretGoalResponse.self)
+    }
+
+    func coach(request: AICoachRequest) async throws -> AICoachResponse {
+        try await postJSON(path: config.coachPath, body: request, decode: AICoachResponse.self)
     }
 
     private func postJSON<Body: Encodable, Response: Decodable>(

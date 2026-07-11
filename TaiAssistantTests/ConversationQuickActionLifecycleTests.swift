@@ -22,7 +22,7 @@ final class ConversationQuickActionLifecycleTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         vm.startIfNeeded()
 
         let ask = ConversationViewModel.defaultQuickActions.first {
@@ -31,7 +31,7 @@ final class ConversationQuickActionLifecycleTests: XCTestCase {
         vm.handleQuickAction(ask)
 
         XCTAssertEqual(store.active.activeQuickActions.count, 3)
-        XCTAssertTrue(store.active.messages.contains { $0.text?.contains("log meals") == true })
+        XCTAssertTrue(store.active.messages.contains { $0.text?.localizedCaseInsensitiveContains("ask me") == true })
     }
 
     func testMealIntentDeepLinkNarrowsQuickActions() {
@@ -41,7 +41,7 @@ final class ConversationQuickActionLifecycleTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
         vm.applyMealIntent()
 
         let ids = store.active.activeQuickActions.map(\.id)

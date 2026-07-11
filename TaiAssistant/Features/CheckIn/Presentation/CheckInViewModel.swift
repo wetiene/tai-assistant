@@ -71,6 +71,34 @@ final class CheckInViewModel {
         )
     }
 
+    /// Conversation-driven interpretation with an optional explicit refine target.
+    func interpretFromConversation(
+        userText: String,
+        photoData: Data?,
+        explicitReestimateMealID: UUID?
+    ) async {
+        guard !isInterpreting else { return }
+        let rawInput = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let photoData {
+            session.selectedPhotoData = photoData
+            ensurePhotoContextRow()
+        }
+        let hasPhoto = session.selectedPhotoData != nil
+        if rawInput.isEmpty && !hasPhoto && session.interpretedMeals.isEmpty {
+            return
+        }
+        if !rawInput.isEmpty {
+            appendContextRow(kind: .user, text: rawInput)
+        }
+        session.userInput = ""
+
+        await runInterpretation(
+            input: buildInterpretationInput(from: rawInput),
+            rawUserMessageForRefinement: rawInput,
+            explicitReestimateMealID: explicitReestimateMealID
+        )
+    }
+
     func updateEstimate(for mealId: UUID) async {
         guard !isInterpreting else { return }
         guard let meal = session.interpretedMeals.first(where: { $0.id == mealId }) else { return }

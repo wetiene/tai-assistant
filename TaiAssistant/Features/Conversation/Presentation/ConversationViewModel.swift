@@ -6,12 +6,22 @@ import Observation
 final class ConversationViewModel {
     let store: ConversationSessionStore
     let meal: MealCapabilityController
+    let liveTai: LiveTaiCapabilityController
     let assistantName: String
     var onMealSaved: (() -> Void)?
 
     private(set) var needsCamera = false
     private(set) var needsAIConsent = false
+    private(set) var pendingConsentKind: AIDataProcessingConsentKind = .mealAndGoal
     private var pendingAfterConsent: (() -> Void)?
+
+    /// Last Live Tai ask retained for Retry without duplicating the user turn.
+    private(set) var pendingLiveTaiRetryAsk: String?
+    /// Original text awaiting clarify → Log meal / Ask about it (no duplicate user turn).
+    private(set) var pendingClarificationText: String?
+    /// Evidence for the most recent Live Tai reply (Why sheet).
+    private(set) var latestLiveTaiEvidence: LiveTaiEvidencePayload?
+    var showLiveTaiWhy = false
 
     var conversation: ActiveConversation { store.snapshotIncludingComposer }
     var composer: ConversationComposerState { store.composerDraft }
@@ -21,16 +31,23 @@ final class ConversationViewModel {
         return meal.isBusy
     }
 
+    /// Durable targeted meal refinement draft ID (restored from activity payload).
+    var targetedMealDraftID: UUID? {
+        MealCapabilityActivityCodec.targetedDraftID(from: store.active.activity)
+    }
+
     static let defaultQuickActions: [ConversationQuickAction] = ConversationDefaults.mealQuickActions
 
     init(
         store: ConversationSessionStore,
         meal: MealCapabilityController,
+        liveTai: LiveTaiCapabilityController,
         assistantName: String,
         onMealSaved: (() -> Void)? = nil
     ) {
         self.store = store
         self.meal = meal
+        self.liveTai = liveTai
         self.assistantName = assistantName
         self.onMealSaved = onMealSaved
     }
@@ -43,12 +60,9 @@ final class ConversationViewModel {
     /// Deep-link from Home: open Tai ready for meal logging.
     func applyMealIntent() {
         startIfNeeded()
+        clearTargetedMealRefinement()
         meal.beginCollecting()
-        store.setActivity(.capability(
-            capabilityID: MealCapabilityID.capability,
-            phaseID: MealCapabilityID.Phase.collecting.rawValue,
-            payload: nil
-        ))
+        store.setActivity(MealCapabilityActivityCodec.makeActivity(phase: .collecting))
         store.append(
             ConversationMessage(
                 actor: .assistant,
@@ -62,19 +76,22 @@ final class ConversationViewModel {
     }
 
     func handleQuickAction(_ action: ConversationQuickAction) {
-        switch action.id {
-        case MealCapabilityID.QuickAction.takePhoto:
-            requestConsentThen {
+        guard let allowed = ConversationAllowedQuickAction.resolve(action.id) else {
+            // Unknown / non-allowlisted ids never drive behaviour.
+            return
+        }
+
+        switch allowed {
+        case .mealTakePhoto:
+            requestConsent(.mealAndGoal) {
+                self.clearTargetedMealRefinement()
                 self.meal.beginCollecting()
                 self.needsCamera = true
             }
-        case MealCapabilityID.QuickAction.describeMeal:
+        case .mealDescribeMeal:
+            clearTargetedMealRefinement()
             meal.beginCollecting()
-            store.setActivity(.capability(
-                capabilityID: MealCapabilityID.capability,
-                phaseID: MealCapabilityID.Phase.collecting.rawValue,
-                payload: nil
-            ))
+            store.setActivity(MealCapabilityActivityCodec.makeActivity(phase: .collecting))
             store.append(
                 ConversationMessage(
                     actor: .assistant,
@@ -82,22 +99,27 @@ final class ConversationViewModel {
                 )
             )
             store.setQuickActions([])
-        case MealCapabilityID.QuickAction.askTai:
-            store.append(
-                ConversationMessage(
-                    actor: .user,
-                    text: "Ask Tai"
-                )
-            )
+        case .mealAskTai:
+            store.append(ConversationMessage(actor: .user, text: "Ask Tai"))
             store.append(
                 ConversationMessage(
                     actor: .assistant,
-                    text: "I’m here. For now I can help you log meals — try Take Photo or Describe Meal, or just tell me what you ate."
+                    text: "Ask me anything about today’s meals or goals — for example protein left, dinner ideas, or how today compares."
                 )
             )
             store.setQuickActions(Self.defaultQuickActions)
-        default:
-            break
+        case .mealCancelRefine:
+            cancelTargetedMealRefinement()
+        case .mealLogIt:
+            Task { await resolveClarificationLogMeal() }
+        case .liveTaiAskAboutIt:
+            Task { await resolveClarificationAskAboutIt() }
+        case .liveTaiRetry:
+            Task { await retryLiveTai() }
+        case .liveTaiWhy:
+            if latestLiveTaiEvidence != nil {
+                showLiveTaiWhy = true
+            }
         }
     }
 
@@ -107,7 +129,7 @@ final class ConversationViewModel {
 
     func handleCapturedPhoto(_ jpeg: Data) {
         needsCamera = false
-        requestConsentThen {
+        requestConsent(.mealAndGoal) {
             Task { await self.sendPhotoAndInterpret(jpeg) }
         }
     }
@@ -125,10 +147,33 @@ final class ConversationViewModel {
         let photo = store.composerDraft.pendingPhotoJPEG
         guard !text.isEmpty || photo != nil else { return }
 
-        requestConsentThen {
-            Task {
-                await self.performSend(text: text, photo: photo)
+        let route = ConversationRouter.route(
+            text: text,
+            hasPhoto: photo != nil,
+            targetedMealDraftID: targetedMealDraftID,
+            isExplicitMealCaptureIntent: ConversationRouter.isMealCollecting(store.active.activity)
+        )
+
+        switch route {
+        case .clarifyMealOrAsk:
+            presentMealOrAskClarification(originalText: text)
+            return
+        case .liveTai:
+            guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.liveTaiVersion) else {
+                pendingConsentKind = .liveTai
+                pendingAfterConsent = { Task { await self.sendComposer() } }
+                needsAIConsent = true
+                return
             }
+            await performLiveTaiSend(text: text)
+        case .mealInterpret, .mealRefine:
+            guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.mealAndGoalVersion) else {
+                pendingConsentKind = .mealAndGoal
+                pendingAfterConsent = { Task { await self.sendComposer() } }
+                needsAIConsent = true
+                return
+            }
+            await performMealSend(text: text, photo: photo, route: route)
         }
     }
 
@@ -145,11 +190,15 @@ final class ConversationViewModel {
             payload.refinementAccepted = true
             meal.markReadyToLog()
             replaceCardPayload(cardID: cardID, payload: payload, interactive: true)
-            store.setActivity(.capability(
-                capabilityID: MealCapabilityID.capability,
-                phaseID: MealCapabilityID.Phase.readyToLog.rawValue,
-                payload: nil
-            ))
+            // Accepting an estimate ends targeted refinement for that draft.
+            if targetedMealDraftID == payload.draft.id {
+                clearTargetedMealRefinementKeepingPhase(.readyToLog)
+            } else {
+                store.setActivity(MealCapabilityActivityCodec.makeActivity(
+                    phase: .readyToLog,
+                    targetedDraftID: targetedMealDraftID
+                ))
+            }
             store.append(
                 ConversationMessage(
                     actor: .assistant,
@@ -162,18 +211,19 @@ final class ConversationViewModel {
             payload.refinementAccepted = false
             meal.markReviewing()
             replaceCardPayload(cardID: cardID, payload: payload, interactive: true)
-            store.setActivity(.capability(
-                capabilityID: MealCapabilityID.capability,
-                phaseID: MealCapabilityID.Phase.reviewing.rawValue,
-                payload: nil
+            store.setActivity(MealCapabilityActivityCodec.makeActivity(
+                phase: .reviewing,
+                targetedDraftID: payload.draft.id
             ))
             store.append(
                 ConversationMessage(
                     actor: .assistant,
-                    text: "No problem — tell me what to change. For example: “it was grilled chicken,” “much smaller,” or “no cheese.”"
+                    text: "No problem — tell me what to change for this meal. For example: “it was grilled chicken,” “much smaller,” or “no cheese.”"
                 )
             )
-            store.setQuickActions([])
+            store.setQuickActions([
+                ConversationAllowedQuickAction.mealCancelRefine.asConversationQuickAction()
+            ])
 
         case .logMeal:
             guard payload.refinementAccepted else { return }
@@ -195,6 +245,21 @@ final class ConversationViewModel {
     func declineConsent() {
         needsAIConsent = false
         pendingAfterConsent = nil
+        // Declining v2 must not revoke v1 meal/goal consent.
+    }
+
+    func dismissLiveTaiWhy() {
+        showLiveTaiWhy = false
+    }
+
+    /// Test hook — resolves clarification Log meal without going through sync quick-action Task.
+    func resolveClarificationLogMealForTests() async {
+        await resolveClarificationLogMeal()
+    }
+
+    /// Test hook — resolves clarification Ask about it without going through sync quick-action Task.
+    func resolveClarificationAskAboutItForTests() async {
+        await resolveClarificationAskAboutIt()
     }
 
     // MARK: - Private
@@ -216,16 +281,17 @@ final class ConversationViewModel {
         }
     }
 
-    private func requestConsentThen(_ action: @escaping () -> Void) {
-        if AIDataProcessingConsentStore.hasAccepted {
+    private func requestConsent(_ kind: AIDataProcessingConsentKind, _ action: @escaping () -> Void) {
+        if AIDataProcessingConsentStore.hasAccepted(version: kind.requiredVersion) {
             action()
         } else {
+            pendingConsentKind = kind
             pendingAfterConsent = action
             needsAIConsent = true
         }
     }
 
-    private func performSend(text: String, photo: Data?) async {
+    private func performMealSend(text: String, photo: Data?, route: ConversationInputRoute) async {
         store.updateComposer {
             $0.text = ""
             $0.pendingPhotoJPEG = nil
@@ -249,10 +315,147 @@ final class ConversationViewModel {
             store.append(ConversationMessage(actor: .user, text: text))
         }
 
-        await runInterpretation(userText: text, photoJPEG: photo)
+        switch route {
+        case .mealRefine(let draftID):
+            await runTargetedRefinement(userText: text, draftID: draftID)
+        case .mealInterpret:
+            await runInterpretation(userText: text, photoJPEG: photo)
+        case .liveTai, .clarifyMealOrAsk:
+            break
+        }
+    }
+
+    private func presentMealOrAskClarification(originalText: String) {
+        let trimmed = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        store.updateComposer {
+            $0.text = ""
+            $0.pendingPhotoJPEG = nil
+        }
+        // Append the user turn once; clarifying actions reuse this text.
+        store.append(ConversationMessage(actor: .user, text: trimmed))
+        pendingClarificationText = trimmed
+        store.append(
+            ConversationMessage(
+                actor: .assistant,
+                text: "Would you like me to log that as a meal?",
+                quickActions: [
+                    ConversationAllowedQuickAction.mealLogIt.asConversationQuickAction(),
+                    ConversationAllowedQuickAction.liveTaiAskAboutIt.asConversationQuickAction(),
+                ]
+            )
+        )
+        store.setActivity(.awaitingUser)
+        store.setQuickActions([
+            ConversationAllowedQuickAction.mealLogIt.asConversationQuickAction(),
+            ConversationAllowedQuickAction.liveTaiAskAboutIt.asConversationQuickAction(),
+        ])
+    }
+
+    private func resolveClarificationLogMeal() async {
+        guard let text = pendingClarificationText else { return }
+        pendingClarificationText = nil
+        store.setQuickActions([])
+
+        guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.mealAndGoalVersion) else {
+            pendingClarificationText = text
+            pendingConsentKind = .mealAndGoal
+            pendingAfterConsent = { Task { await self.resolveClarificationLogMeal() } }
+            needsAIConsent = true
+            return
+        }
+
+        // Do not re-append the user message — it was already posted at clarification.
+        await runInterpretation(userText: text, photoJPEG: nil)
+    }
+
+    private func resolveClarificationAskAboutIt() async {
+        guard let text = pendingClarificationText else { return }
+        pendingClarificationText = nil
+        store.setQuickActions([])
+
+        guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.liveTaiVersion) else {
+            pendingClarificationText = text
+            pendingConsentKind = .liveTai
+            pendingAfterConsent = { Task { await self.resolveClarificationAskAboutIt() } }
+            needsAIConsent = true
+            return
+        }
+
+        // Do not re-append the user message.
+        await runLiveTai(ask: text, isRetry: true)
+    }
+
+    private func performLiveTaiSend(text: String) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if case .processing(let reason) = store.active.activity,
+           reason == LiveTaiCapabilityController.processingReason
+        {
+            return
+        }
+
+        store.updateComposer {
+            $0.text = ""
+            $0.pendingPhotoJPEG = nil
+        }
+        store.append(ConversationMessage(actor: .user, text: trimmed))
+        await runLiveTai(ask: trimmed, isRetry: false)
+    }
+
+    private func retryLiveTai() async {
+        guard let ask = pendingLiveTaiRetryAsk else { return }
+        await runLiveTai(ask: ask, isRetry: true)
+    }
+
+    private func runLiveTai(ask: String, isRetry: Bool) async {
+        store.setActivity(.processing(reason: LiveTaiCapabilityController.processingReason))
+        store.setQuickActions([])
+
+        // Exclude the just-appended user ask from "recent" duplication by using messages before this turn's reply.
+        let outcome = await liveTai.ask(userAsk: ask, conversationMessages: store.active.messages)
+        switch outcome {
+        case .failure(let message):
+            pendingLiveTaiRetryAsk = ask
+            errorMessage = message
+            store.append(ConversationMessage(actor: .assistant, text: message))
+            store.setActivity(.awaitingUser)
+            store.setQuickActions([
+                ConversationAllowedQuickAction.liveTaiRetry.asConversationQuickAction()
+            ] + Self.defaultQuickActions)
+
+        case .success(let response):
+            pendingLiveTaiRetryAsk = nil
+            let text = LiveTaiResponsePresentation.assistantText(from: response)
+            let evidence = LiveTaiResponsePresentation.evidencePayload(from: response)
+            latestLiveTaiEvidence = evidence
+
+            var suggestionsNote: String?
+            let unknown = ConversationQuickActionAllowlist.nonInteractiveSuggestions(from: response.quickActions)
+            if !unknown.isEmpty {
+                suggestionsNote = "Suggestions: " + unknown.joined(separator: " · ")
+            }
+
+            let body = [text, suggestionsNote].compactMap { $0 }.joined(separator: "\n\n")
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: body,
+                    card: evidence.map { LiveTaiEvidenceCodec.makeCard(payload: $0) },
+                    quickActions: LiveTaiResponsePresentation.quickActions(from: response)
+                )
+            )
+            store.setActivity(.awaitingUser)
+            store.setQuickActions(Self.defaultQuickActions)
+            // requiresUserDecision is advisory only — never mutates Artifacts here.
+            _ = response.requiresUserDecision
+            _ = isRetry
+        }
     }
 
     private func sendPhotoAndInterpret(_ jpeg: Data) async {
+        clearTargetedMealRefinement()
         let attachment: ConversationAttachment
         if let stored = try? ConversationAttachment.storedPhotoJPEG(jpeg) {
             attachment = stored
@@ -272,7 +475,7 @@ final class ConversationViewModel {
         store.setActivity(.processing(reason: "interpreting_meal"))
         store.setQuickActions([])
 
-        let outcome = await meal.interpret(userText: userText, photoJPEG: photoJPEG)
+        let outcome = await meal.interpret(userText: userText, photoJPEG: photoJPEG, targetDraftID: nil)
         switch outcome {
         case .failure(let message):
             errorMessage = message
@@ -298,11 +501,43 @@ final class ConversationViewModel {
                     )
                 )
             }
-            store.setActivity(.capability(
-                capabilityID: MealCapabilityID.capability,
-                phaseID: MealCapabilityID.Phase.reviewing.rawValue,
-                payload: nil
+            store.setActivity(MealCapabilityActivityCodec.makeActivity(phase: .reviewing))
+            store.setQuickActions([])
+        }
+    }
+
+    private func runTargetedRefinement(userText: String, draftID: UUID) async {
+        store.setActivity(.processing(reason: "interpreting_meal"))
+        store.setQuickActions([])
+
+        let outcome = await meal.interpret(userText: userText, photoJPEG: nil, targetDraftID: draftID)
+        switch outcome {
+        case .failure(let message):
+            errorMessage = message
+            store.append(ConversationMessage(actor: .assistant, text: message))
+            // Keep target so the user can retry refinement for the same draft.
+            store.setActivity(MealCapabilityActivityCodec.makeActivity(
+                phase: .reviewing,
+                targetedDraftID: draftID
             ))
+            store.setQuickActions([
+                ConversationAllowedQuickAction.mealCancelRefine.asConversationQuickAction()
+            ])
+
+        case .success(let success):
+            guard let updated = success.drafts.first(where: { $0.id == draftID }) ?? success.drafts.first else {
+                store.setActivity(MealCapabilityActivityCodec.makeActivity(
+                    phase: .reviewing,
+                    targetedDraftID: draftID
+                ))
+                return
+            }
+            if let note = success.assistantNote {
+                store.append(ConversationMessage(actor: .assistant, text: note))
+            }
+            replaceInteractiveCard(forDraftID: draftID, draft: updated)
+            // Successful refinement clears the target; other pending cards stay unchanged.
+            store.setActivity(MealCapabilityActivityCodec.makeActivity(phase: .reviewing))
             store.setQuickActions([])
         }
     }
@@ -310,6 +545,9 @@ final class ConversationViewModel {
     /// Logs exactly one draft addressed by `payload.draft.id` / `cardID`.
     func logMealDraft(cardID: UUID, payload: MealEstimateCardPayload) async {
         let draftID = payload.draft.id
+        if targetedMealDraftID == draftID {
+            clearTargetedMealRefinementKeepingPhase(.saving)
+        }
         store.setActivity(.processing(reason: "saving_meal"))
         let result = await meal.confirmAndSaveDraft(draftID: draftID, payload: payload)
         switch result {
@@ -352,10 +590,8 @@ final class ConversationViewModel {
                 store.setQuickActions(Self.defaultQuickActions)
             } else {
                 let ready = remaining.contains(where: \.refinementAccepted)
-                store.setActivity(.capability(
-                    capabilityID: MealCapabilityID.capability,
-                    phaseID: (ready ? MealCapabilityID.Phase.readyToLog : MealCapabilityID.Phase.reviewing).rawValue,
-                    payload: nil
+                store.setActivity(MealCapabilityActivityCodec.makeActivity(
+                    phase: ready ? .readyToLog : .reviewing
                 ))
                 store.setQuickActions([])
             }
@@ -368,19 +604,82 @@ final class ConversationViewModel {
         await logMealDraft(cardID: cardID, payload: payload)
     }
 
+    private func cancelTargetedMealRefinement() {
+        guard targetedMealDraftID != nil else { return }
+        clearTargetedMealRefinementKeepingPhase(.reviewing)
+        store.append(
+            ConversationMessage(
+                actor: .assistant,
+                text: "Okay — I won’t change that meal estimate. Ask me a question, or tap Change something on a meal when you want to refine it."
+            )
+        )
+        store.setQuickActions(Self.defaultQuickActions)
+    }
+
+    private func clearTargetedMealRefinement() {
+        if targetedMealDraftID != nil {
+            let remaining = ConversationRestoration.interactiveUnloggedMealPayloads(in: store.active)
+            if remaining.isEmpty {
+                store.setActivity(.awaitingUser)
+            } else {
+                let ready = remaining.contains(where: \.refinementAccepted)
+                store.setActivity(MealCapabilityActivityCodec.makeActivity(
+                    phase: ready ? .readyToLog : .reviewing
+                ))
+            }
+        }
+    }
+
+    private func clearTargetedMealRefinementKeepingPhase(_ phase: MealCapabilityID.Phase) {
+        store.setActivity(MealCapabilityActivityCodec.makeActivity(phase: phase))
+    }
+
     private func restoreActivityAfterPartialMealState() {
         let remaining = ConversationRestoration.interactiveUnloggedMealPayloads(in: store.active)
         meal.syncUnloggedDrafts(from: remaining)
+        let target = targetedMealDraftID
         if remaining.isEmpty {
             store.setActivity(.awaitingUser)
             store.setQuickActions(Self.defaultQuickActions)
         } else {
             let ready = remaining.contains(where: \.refinementAccepted)
-            store.setActivity(.capability(
-                capabilityID: MealCapabilityID.capability,
-                phaseID: (ready ? MealCapabilityID.Phase.readyToLog : MealCapabilityID.Phase.reviewing).rawValue,
-                payload: nil
+            store.setActivity(MealCapabilityActivityCodec.makeActivity(
+                phase: ready ? .readyToLog : .reviewing,
+                targetedDraftID: target.flatMap { id in remaining.contains(where: { $0.draft.id == id }) ? id : nil }
             ))
+        }
+    }
+
+    private func replaceInteractiveCard(forDraftID draftID: UUID, draft: CheckInMealDraft) {
+        let newPayload = MealEstimateCardPayload(
+            draft: MealEstimateSnapshot(draft: draft),
+            refinementAccepted: false,
+            isLogged: false
+        )
+        store.mutate { conversation in
+            conversation.messages = conversation.messages.map { message in
+                guard let card = message.card,
+                      card.typeID == MealCapabilityID.estimateCardType,
+                      card.isInteractive,
+                      let existing = MealCardCodec.decode(card.payload),
+                      existing.draft.id == draftID
+                else { return message }
+                let updated = MealCardCodec.makeCard(payload: newPayload, interactive: true)
+                return ConversationMessage(
+                    id: message.id,
+                    actor: message.actor,
+                    createdAt: message.createdAt,
+                    text: message.text,
+                    attachment: message.attachment,
+                    card: ConversationCard(
+                        id: card.id,
+                        typeID: updated.typeID,
+                        payload: updated.payload,
+                        isInteractive: true
+                    ),
+                    quickActions: message.quickActions
+                )
+            }
         }
     }
 
