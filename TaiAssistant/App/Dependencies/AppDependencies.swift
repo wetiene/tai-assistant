@@ -24,6 +24,7 @@ struct AppDependencies {
     /// Production wiring: all repositories read/write the same `ModelContainer` injected into the SwiftUI tree.
     @MainActor
     static func live(modelContainer: ModelContainer, config: RuntimeAppConfig = .default) -> AppDependencies {
+        ConversationAttachmentStore.shared = .makeDefault()
         let persistence = LocalPersistenceService(container: modelContainer)
         let aiService = makeAIService(config: config)
         let mealRepository = persistence.makeMealRepository()
@@ -55,8 +56,11 @@ struct AppDependencies {
     /// Fully in-memory repositories for UI experiments without SwiftData (no disk container required).
     @MainActor
     static func mocksOnly(config: RuntimeAppConfig = .default) -> AppDependencies {
+        ConversationAttachmentStore.shared = .makeEphemeralForTests()
         let mealRepository = MockMealRepository()
-        let conversationRepository = InMemoryActiveConversationRepository()
+        let conversationRepository = InMemoryActiveConversationRepository(
+            attachmentStore: ConversationAttachmentStore.shared
+        )
         let aiService = makeAIService(config: config)
         let conversationSession = ActiveConversationSessionController(
             conversationRepository: conversationRepository,

@@ -16,12 +16,21 @@ struct ConversationAttachment: Identifiable, Equatable, Sendable {
     let kind: Kind
 
     enum Kind: Equatable, Sendable {
+        /// In-memory bytes (composer capture / not yet externalised).
         case photoJPEG(Data)
+        /// Durable file reference; bytes live in `ConversationAttachmentStore` keyed by `id`.
+        case photoJPEGFile
     }
 
     init(id: UUID = UUID(), kind: Kind) {
         self.id = id
         self.kind = kind
+    }
+
+    /// Convenience: externalise immediately via the process store.
+    static func storedPhotoJPEG(_ data: Data, id: UUID = UUID(), store: ConversationAttachmentStore = .shared) throws -> ConversationAttachment {
+        try store.save(id: id, data: data)
+        return ConversationAttachment(id: id, kind: .photoJPEGFile)
     }
 }
 

@@ -3,9 +3,14 @@ import SwiftData
 
 final class LocalSwiftDataActiveConversationRepository: ActiveConversationRepository {
     private let container: ModelContainer
+    private let attachmentStore: ConversationAttachmentStore
 
-    init(container: ModelContainer) {
+    init(
+        container: ModelContainer,
+        attachmentStore: ConversationAttachmentStore = .shared
+    ) {
         self.container = container
+        self.attachmentStore = attachmentStore
     }
 
     func loadOrCreateActive(ownerID: String) throws -> ActiveConversation {
@@ -15,6 +20,9 @@ final class LocalSwiftDataActiveConversationRepository: ActiveConversationReposi
             let healed = ConversationRestoration.healInterruptedWork(conversation)
             if healed.didHeal {
                 conversation = healed.0
+                try write(conversation, ownerID: ownerID, context: context)
+            } else if messagesJSONContainsInlineJPEG(existing.messagesJSON) {
+                // Rewrite once so subsequent loads stay file-referenced and small.
                 try write(conversation, ownerID: ownerID, context: context)
             }
             return conversation
@@ -82,7 +90,10 @@ final class LocalSwiftDataActiveConversationRepository: ActiveConversationReposi
     }
 
     private func write(_ conversation: ActiveConversation, ownerID: String, context: ModelContext) throws {
-        let messagesJSON = try ConversationSnapshotCodec.encodeMessages(conversation.messages)
+        let messagesJSON = try ConversationSnapshotCodec.encodeMessages(
+            conversation.messages,
+            attachmentStore: attachmentStore
+        )
         let activityJSON = try ConversationSnapshotCodec.encodeActivity(conversation.activity)
         let quickActionsJSON = try ConversationSnapshotCodec.encodeQuickActions(conversation.activeQuickActions)
         let metadataJSON = try ConversationSnapshotCodec.encodeMetadata()
@@ -142,7 +153,10 @@ final class LocalSwiftDataActiveConversationRepository: ActiveConversationReposi
     }
 
     private func mapToDomain(_ row: PersistedConversation) throws -> ActiveConversation {
-        let messages = try ConversationSnapshotCodec.decodeMessages(row.messagesJSON)
+        let messages = try ConversationSnapshotCodec.decodeMessages(
+            row.messagesJSON,
+            attachmentStore: attachmentStore
+        )
         let activity = try ConversationSnapshotCodec.decodeActivity(row.activityJSON)
         let quickActions = try ConversationSnapshotCodec.decodeQuickActions(row.activeQuickActionsJSON)
         return ActiveConversation(
@@ -158,12 +172,23 @@ final class LocalSwiftDataActiveConversationRepository: ActiveConversationReposi
             scrollAnchorMessageID: row.scrollAnchorMessageID
         )
     }
+
+    /// Heuristic for one-shot rewrite of legacy inline JPEG snapshots.
+    private func messagesJSONContainsInlineJPEG(_ data: Data) -> Bool {
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+        return text.contains("\"jpegData\"") && !text.contains("\"jpegData\":null")
+    }
 }
 
 /// In-memory repository for previews and unit tests (no SwiftData).
 final class InMemoryActiveConversationRepository: ActiveConversationRepository {
     private var activeByOwner: [String: ActiveConversation] = [:]
     private var archived: [ActiveConversation] = []
+    private let attachmentStore: ConversationAttachmentStore
+
+    init(attachmentStore: ConversationAttachmentStore = .shared) {
+        self.attachmentStore = attachmentStore
+    }
 
     func loadOrCreateActive(ownerID: String) throws -> ActiveConversation {
         if var existing = activeByOwner[ownerID] {
@@ -180,7 +205,22 @@ final class InMemoryActiveConversationRepository: ActiveConversationRepository {
     }
 
     func saveActive(_ conversation: ActiveConversation, ownerID: String) throws {
-        activeByOwner[ownerID] = conversation
+        // Mirror disk behaviour: externalise photos so in-memory tests exercise file refs.
+        var copy = conversation
+        copy.messages = try conversation.messages.map { message in
+            guard let attachment = message.attachment else { return message }
+            let externalized = try attachmentStore.externalize(attachment)
+            return ConversationMessage(
+                id: message.id,
+                actor: message.actor,
+                createdAt: message.createdAt,
+                text: message.text,
+                attachment: externalized,
+                card: message.card,
+                quickActions: message.quickActions
+            )
+        }
+        activeByOwner[ownerID] = copy
     }
 
     func saveComposerDraft(_ composer: ConversationComposerState, ownerID: String) throws {

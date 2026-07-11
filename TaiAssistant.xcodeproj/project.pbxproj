@@ -86,6 +86,8 @@
 		A1000000000000000000006B /* ConversationPerformanceProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006B /* ConversationPerformanceProbeTests.swift */; };
 		A1000000000000000000006C /* ConversationImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006C /* ConversationImageCache.swift */; };
 		A1000000000000000000006D /* HomeOptimisticDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006D /* HomeOptimisticDeleteTests.swift */; };
+		A1000000000000000000006E /* ConversationAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006E /* ConversationAttachmentStore.swift */; };
+		A1000000000000000000006F /* ConversationPersistCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006F /* ConversationPersistCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -172,6 +174,8 @@
 		A2000000000000000000006B /* ConversationPerformanceProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPerformanceProbeTests.swift; sourceTree = "<group>"; };
 		A2000000000000000000006C /* ConversationImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationImageCache.swift; sourceTree = "<group>"; };
 		A2000000000000000000006D /* HomeOptimisticDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOptimisticDeleteTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000006E /* ConversationAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAttachmentStore.swift; sourceTree = "<group>"; };
+		A2000000000000000000006F /* ConversationPersistCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPersistCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -521,6 +525,8 @@
 				A20000000000000000000066 /* ConversationStartupProbe.swift */,
 				A20000000000000000000067 /* ActiveConversationSessionController.swift */,
 				A2000000000000000000006C /* ConversationImageCache.swift */,
+				A2000000000000000000006E /* ConversationAttachmentStore.swift */,
+				A2000000000000000000006F /* ConversationPersistCoordinator.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -741,6 +747,8 @@
 				A10000000000000000000067 /* ActiveConversationSessionController.swift in Sources */,
 				A10000000000000000000068 /* TaiLaunchIntent.swift in Sources */,
 				A1000000000000000000006C /* ConversationImageCache.swift in Sources */,
+				A1000000000000000000006E /* ConversationAttachmentStore.swift in Sources */,
+				A1000000000000000000006F /* ConversationPersistCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

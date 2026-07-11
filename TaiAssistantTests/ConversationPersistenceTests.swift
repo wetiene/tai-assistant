@@ -6,6 +6,11 @@ import SwiftData
 final class ConversationPersistenceTests: XCTestCase {
     private var ownerID: String { "test.user.conversation" }
 
+    override func setUp() {
+        super.setUp()
+        ConversationAttachmentStore.shared = .makeEphemeralForTests()
+    }
+
     // MARK: - Persistence & restoration
 
     func testSaveAndLoadPreservesMessagesCardsComposerAndQuickActions() throws {
@@ -260,6 +265,102 @@ final class ConversationPersistenceTests: XCTestCase {
         XCTAssertEqual(actives.first?.id, fresh.id)
         XCTAssertEqual(archived.count, 1)
         XCTAssertEqual(archived.first?.id, original.id)
+    }
+
+    // MARK: - Attachment externalisation
+
+    func testPhotoAttachmentsAreStoredOutsideMessagesJSON() throws {
+        let container = AppModelContainerFactory.makeContainer(inMemory: true)
+        let store = ConversationAttachmentStore.makeEphemeralForTests()
+        ConversationAttachmentStore.shared = store
+        let repo = LocalSwiftDataActiveConversationRepository(container: container, attachmentStore: store)
+        let photo = Data(repeating: 0xAB, count: 120_000)
+        let attachmentID = UUID()
+        let conversation = ActiveConversation(
+            messages: [
+                ConversationMessage(
+                    actor: .user,
+                    attachment: ConversationAttachment(id: attachmentID, kind: .photoJPEG(photo))
+                )
+            ],
+            activity: .awaitingUser
+        )
+        try repo.saveActive(conversation, ownerID: ownerID)
+
+        let loaded = try repo.loadOrCreateActive(ownerID: ownerID)
+        XCTAssertEqual(loaded.messages.count, 1)
+        guard let attachment = loaded.messages[0].attachment else {
+            return XCTFail("Expected attachment")
+        }
+        guard case .photoJPEGFile = attachment.kind else {
+            return XCTFail("Expected file-backed attachment after save/load")
+        }
+        XCTAssertEqual(attachment.id, attachmentID)
+        XCTAssertEqual(try store.load(id: attachmentID)?.count, photo.count)
+    }
+
+    func testMessagesJSONDoesNotEmbedLargeJPEGPayload() throws {
+        let container = AppModelContainerFactory.makeContainer(inMemory: true)
+        let store = ConversationAttachmentStore.makeEphemeralForTests()
+        ConversationAttachmentStore.shared = store
+        let repo = LocalSwiftDataActiveConversationRepository(container: container, attachmentStore: store)
+        let photo = Data(repeating: 0xCD, count: 280_000)
+        let conversation = ActiveConversation(
+            messages: [
+                ConversationMessage(
+                    actor: .user,
+                    attachment: ConversationAttachment(kind: .photoJPEG(photo))
+                )
+            ],
+            activity: .awaitingUser
+        )
+        try repo.saveActive(conversation, ownerID: ownerID)
+        let row = try fetchActiveRow(container: container)
+        XCTAssertLessThan(row.messagesJSON.count, 8_000, "messagesJSON must not embed photo bytes")
+        XCTAssertFalse(
+            (String(data: row.messagesJSON, encoding: .utf8) ?? "").contains("\"jpegData\"")
+        )
+        XCTAssertTrue(store.exists(conversation.messages[0].attachment!.id))
+    }
+
+    func testLegacyInlineJPEGMigratesToFileOnDecode() throws {
+        let store = ConversationAttachmentStore.makeEphemeralForTests()
+        let id = UUID()
+        let inline = Data(repeating: 0x11, count: 4096)
+        let legacyRecord = ConversationAttachmentRecord(
+            id: id,
+            kind: ConversationAttachmentRecord.photoJPEGKind,
+            jpegData: inline,
+            storage: nil
+        )
+        let message = ConversationMessageRecord(
+            id: UUID(),
+            actor: "user",
+            createdAt: .now,
+            text: nil,
+            attachment: legacyRecord,
+            card: nil,
+            quickActions: nil
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode([message])
+
+        let decoded = try ConversationSnapshotCodec.decodeMessages(data, attachmentStore: store)
+        XCTAssertEqual(decoded.count, 1)
+        guard let attachment = decoded[0].attachment else {
+            return XCTFail("Expected migrated attachment")
+        }
+        if case .photoJPEGFile = attachment.kind {
+            XCTAssertEqual(try store.load(id: id), inline)
+        } else {
+            XCTFail("Legacy inline JPEG should migrate to photoJPEGFile")
+        }
+
+        let reencoded = try ConversationSnapshotCodec.encodeMessages(decoded, attachmentStore: store)
+        let reencodedText = String(data: reencoded, encoding: .utf8) ?? ""
+        XCTAssertFalse(reencodedText.contains("\"jpegData\""))
+        XCTAssertTrue(reencodedText.contains("\"storage\":\"file\""))
     }
 
     // MARK: - Regression

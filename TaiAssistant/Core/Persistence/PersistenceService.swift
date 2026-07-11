@@ -28,7 +28,10 @@ struct LocalPersistenceService: PersistenceService {
     }
 
     func makeActiveConversationRepository() -> ActiveConversationRepository {
-        LocalSwiftDataActiveConversationRepository(container: container)
+        LocalSwiftDataActiveConversationRepository(
+            container: container,
+            attachmentStore: ConversationAttachmentStore.shared
+        )
     }
 
     func makeFineTuneCorrectionRepository() -> FineTuneCorrectionRepository {

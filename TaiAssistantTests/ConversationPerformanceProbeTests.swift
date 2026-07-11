@@ -8,8 +8,15 @@ import UIKit
 @MainActor
 final class ConversationPerformanceProbeTests: XCTestCase {
     private var ownerID: String { "perf.probe.user" }
+    private var attachmentStore: ConversationAttachmentStore!
 
-    func testSnapshotEncodeCostScalesWithInlinePhotos() throws {
+    override func setUp() {
+        super.setUp()
+        attachmentStore = .makeEphemeralForTests()
+        ConversationAttachmentStore.shared = attachmentStore
+    }
+
+    func testExternalisedEncodeKeepsMessagesJSONSmallWithPhotos() throws {
         let textOnly = makeConversation(photoCount: 0, messageCount: 40)
         let onePhoto = makeConversation(photoCount: 1, messageCount: 40, jpegBytes: 280_000)
         let threePhotos = makeConversation(photoCount: 3, messageCount: 40, jpegBytes: 280_000)
@@ -19,25 +26,28 @@ final class ConversationPerformanceProbeTests: XCTestCase {
         let threeEncode = measureEncode(threePhotos)
 
         print("[TaiPerf] encode text-only messages=\(textOnly.messages.count) bytes=\(textEncode.bytes) ms=\(format(textEncode.ms))")
-        print("[TaiPerf] encode 1×280KB photo bytes=\(oneEncode.bytes) ms=\(format(oneEncode.ms))")
-        print("[TaiPerf] encode 3×280KB photos bytes=\(threeEncode.bytes) ms=\(format(threeEncode.ms))")
+        print("[TaiPerf] encode 1×280KB photo (externalised) bytes=\(oneEncode.bytes) ms=\(format(oneEncode.ms))")
+        print("[TaiPerf] encode 3×280KB photos (externalised) bytes=\(threeEncode.bytes) ms=\(format(threeEncode.ms))")
 
         XCTAssertLessThan(textEncode.bytes, 50_000, "Text-only snapshot should stay small")
-        XCTAssertGreaterThan(oneEncode.bytes, 250_000)
-        XCTAssertGreaterThan(threeEncode.bytes, 750_000)
-        XCTAssertGreaterThan(oneEncode.ms, textEncode.ms)
-        XCTAssertGreaterThan(threeEncode.ms, oneEncode.ms)
+        XCTAssertLessThan(oneEncode.bytes, 20_000, "Externalised photo must not inflate messagesJSON")
+        XCTAssertLessThan(threeEncode.bytes, 30_000, "Externalised photos must not inflate messagesJSON")
+        XCTAssertTrue(attachmentStore.exists(onePhoto.messages[0].attachment!.id))
+        XCTAssertTrue(attachmentStore.exists(threePhotos.messages[2].attachment!.id))
     }
 
-    func testSnapshotDecodeCostWithPhotos() throws {
+    func testSnapshotDecodeCostWithExternalisedPhotos() throws {
         let threePhotos = makeConversation(photoCount: 3, messageCount: 40, jpegBytes: 280_000)
-        let encoded = try ConversationSnapshotCodec.encodeMessages(threePhotos.messages)
+        let encoded = try ConversationSnapshotCodec.encodeMessages(
+            threePhotos.messages,
+            attachmentStore: attachmentStore
+        )
 
         let started = CFAbsoluteTimeGetCurrent()
-        _ = try ConversationSnapshotCodec.decodeMessages(encoded)
+        _ = try ConversationSnapshotCodec.decodeMessages(encoded, attachmentStore: attachmentStore)
         let ms = (CFAbsoluteTimeGetCurrent() - started) * 1000
-        print("[TaiPerf] decode 3×280KB photos bytes=\(encoded.count) ms=\(format(ms))")
-        XCTAssertGreaterThan(encoded.count, 750_000)
+        print("[TaiPerf] decode 3 externalised photos bytes=\(encoded.count) ms=\(format(ms))")
+        XCTAssertLessThan(encoded.count, 30_000)
     }
 
     func testComposerKeystrokeCopiesConversationAndSchedulesFullPersist() async throws {
@@ -104,7 +114,10 @@ final class ConversationPerformanceProbeTests: XCTestCase {
 
     func testSwiftDataFullSnapshotSaveWithPhotos() throws {
         let container = AppModelContainerFactory.makeContainer(inMemory: true)
-        let repo = LocalSwiftDataActiveConversationRepository(container: container)
+        let repo = LocalSwiftDataActiveConversationRepository(
+            container: container,
+            attachmentStore: attachmentStore
+        )
         let conversation = makeConversation(photoCount: 3, messageCount: 40, jpegBytes: 280_000)
         try repo.saveActive(conversation, ownerID: ownerID)
 
@@ -113,13 +126,19 @@ final class ConversationPerformanceProbeTests: XCTestCase {
         mutated.composer.text = "draft"
         try repo.saveActive(mutated, ownerID: ownerID)
         let ms = (CFAbsoluteTimeGetCurrent() - started) * 1000
-        print("[TaiPerf] SwiftData saveActive (3 photos, composer-only change) ms=\(format(ms))")
+        print("[TaiPerf] SwiftData saveActive (3 externalised photos, composer-only change) ms=\(format(ms))")
         XCTAssertLessThan(ms, 500)
+
+        let row = try fetchActive(container: container)
+        XCTAssertLessThan(row.messagesJSON.count, 30_000)
     }
 
     func testFetchActiveConversationScansAllRows() throws {
         let container = AppModelContainerFactory.makeContainer(inMemory: true)
-        let repo = LocalSwiftDataActiveConversationRepository(container: container)
+        let repo = LocalSwiftDataActiveConversationRepository(
+            container: container,
+            attachmentStore: attachmentStore
+        )
         // Seed one active + several archived via beginArchiveTransition.
         _ = try repo.loadOrCreateActive(ownerID: ownerID)
         for _ in 0..<5 {
@@ -131,7 +150,7 @@ final class ConversationPerformanceProbeTests: XCTestCase {
         let started = CFAbsoluteTimeGetCurrent()
         _ = try repo.loadOrCreateActive(ownerID: ownerID)
         let ms = (CFAbsoluteTimeGetCurrent() - started) * 1000
-        print("[TaiPerf] loadOrCreateActive with photo snapshot ms=\(format(ms))")
+        print("[TaiPerf] loadOrCreateActive with externalised photo snapshot ms=\(format(ms))")
     }
 
     func testHomeDeleteDoesNotUpdateBriefingUntilReload() {
@@ -178,9 +197,19 @@ final class ConversationPerformanceProbeTests: XCTestCase {
 
     private func measureEncode(_ conversation: ActiveConversation) -> (bytes: Int, ms: Double) {
         let started = CFAbsoluteTimeGetCurrent()
-        let data = (try? ConversationSnapshotCodec.encodeMessages(conversation.messages)) ?? Data()
+        let data = (try? ConversationSnapshotCodec.encodeMessages(
+            conversation.messages,
+            attachmentStore: attachmentStore
+        )) ?? Data()
         let ms = (CFAbsoluteTimeGetCurrent() - started) * 1000
         return (data.count, ms)
+    }
+
+    private func fetchActive(container: ModelContainer) throws -> PersistedConversation {
+        let context = ModelContext(container)
+        let rows = try context.fetch(FetchDescriptor<PersistedConversation>())
+            .filter { $0.ownerID == ownerID && $0.status == .active }
+        return try XCTUnwrap(rows.first)
     }
 
     /// Compressible filler that still produces a multi-hundred-KB JPEG payload for size probes.
@@ -232,7 +261,10 @@ private final class CountingConversationRepository: ActiveConversationRepository
 
     func saveActive(_ conversation: ActiveConversation, ownerID: String) throws {
         saveCount += 1
-        lastEncodedMessageBytes = try ConversationSnapshotCodec.encodeMessages(conversation.messages).count
+        lastEncodedMessageBytes = try ConversationSnapshotCodec.encodeMessages(
+            conversation.messages,
+            attachmentStore: ConversationAttachmentStore.shared
+        ).count
         active = conversation
     }
 

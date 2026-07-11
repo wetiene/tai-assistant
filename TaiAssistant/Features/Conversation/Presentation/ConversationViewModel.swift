@@ -232,11 +232,17 @@ final class ConversationViewModel {
         }
 
         if let photo {
+            let attachment: ConversationAttachment
+            if let stored = try? ConversationAttachment.storedPhotoJPEG(photo) {
+                attachment = stored
+            } else {
+                attachment = ConversationAttachment(kind: .photoJPEG(photo))
+            }
             store.append(
                 ConversationMessage(
                     actor: .user,
                     text: text.isEmpty ? nil : text,
-                    attachment: ConversationAttachment(kind: .photoJPEG(photo))
+                    attachment: attachment
                 )
             )
         } else if !text.isEmpty {
@@ -247,10 +253,16 @@ final class ConversationViewModel {
     }
 
     private func sendPhotoAndInterpret(_ jpeg: Data) async {
+        let attachment: ConversationAttachment
+        if let stored = try? ConversationAttachment.storedPhotoJPEG(jpeg) {
+            attachment = stored
+        } else {
+            attachment = ConversationAttachment(kind: .photoJPEG(jpeg))
+        }
         store.append(
             ConversationMessage(
                 actor: .user,
-                attachment: ConversationAttachment(kind: .photoJPEG(jpeg))
+                attachment: attachment
             )
         )
         await runInterpretation(userText: "", photoJPEG: jpeg)

@@ -96,16 +96,14 @@ struct ConversationMessageRenderer: View {
 
     @ViewBuilder
     private func attachmentView(_ attachment: ConversationAttachment) -> some View {
-        switch attachment.kind {
-        case .photoJPEG(let data):
-            if let image = ConversationImageCache.image(id: attachment.id, data: data) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: 220, maxHeight: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .accessibilityLabel("Meal photo")
-            }
+        if let data = ConversationAttachmentStore.shared.resolvedJPEGData(for: attachment),
+           let image = ConversationImageCache.image(id: attachment.id, data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: 220, maxHeight: 220)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .accessibilityLabel("Meal photo")
         }
     }
 

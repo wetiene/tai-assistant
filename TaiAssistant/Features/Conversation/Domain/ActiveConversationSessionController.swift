@@ -18,6 +18,7 @@ final class ActiveConversationSessionController {
     private var onMealSaved: (() -> Void)?
     private var loadTask: Task<Void, Never>?
     private var didLoad = false
+    private var persistCoordinator: ConversationPersistCoordinator?
 
     init(
         conversationRepository: ActiveConversationRepository,
@@ -77,20 +78,36 @@ final class ActiveConversationSessionController {
 
         do {
             let loadStarted = CFAbsoluteTimeGetCurrent()
-            let restored = try conversationRepository.loadOrCreateActive(ownerID: ownerID)
+            let repository = conversationRepository
+            let owner = ownerID
+            // Decode + attachment migration off the MainActor; hop back for UI wiring.
+            let restored: ActiveConversation = try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        let value = try repository.loadOrCreateActive(ownerID: owner)
+                        continuation.resume(returning: value)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
             ConversationStartupProbe.recordLoadOrCreate(
                 durationMilliseconds: (CFAbsoluteTimeGetCurrent() - loadStarted) * 1000
             )
 
+            let coordinator = ConversationPersistCoordinator(
+                repository: conversationRepository,
+                ownerID: ownerID
+            )
+            persistCoordinator = coordinator
+
             let store = ConversationSessionStore(seed: restored)
             store.suppressPersistence = true
-            store.onPersist = { [conversationRepository, ownerID] conversation in
-                ConversationStartupProbe.recordPersist()
-                try? conversationRepository.saveActive(conversation, ownerID: ownerID)
+            store.onPersist = { conversation in
+                coordinator.enqueueActive(conversation)
             }
-            store.onPersistComposer = { [conversationRepository, ownerID] draft in
-                ConversationStartupProbe.recordComposerPersist()
-                try? conversationRepository.saveComposerDraft(draft, ownerID: ownerID)
+            store.onPersistComposer = { draft in
+                coordinator.enqueueComposer(draft)
             }
 
             let meal = MealCapabilityController(

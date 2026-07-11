@@ -15,9 +15,13 @@ struct ConversationMessageRecord: Codable, Equatable, Sendable {
 struct ConversationAttachmentRecord: Codable, Equatable, Sendable {
     var id: UUID
     var kind: String
+    /// Legacy inline payload — migrated to file storage on decode; never written for new saves.
     var jpegData: Data?
+    /// `"file"` when bytes live in `ConversationAttachmentStore`; omitted/legacy means inline `jpegData`.
+    var storage: String?
 
     static let photoJPEGKind = "photoJPEG"
+    static let fileStorage = "file"
 }
 
 struct ConversationCardRecord: Codable, Equatable, Sendable {
@@ -63,6 +67,8 @@ struct ConversationMetadataRecord: Codable, Equatable, Sendable {
     var archivePackageID: UUID?
 }
 
+/// Pure encode/decode for Conversation snapshots.
+/// Attachment externalisation and JSON work are safe off the MainActor.
 enum ConversationSnapshotCodec {
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
@@ -78,8 +84,12 @@ enum ConversationSnapshotCodec {
 
     // MARK: Encode domain → records
 
-    static func encodeMessages(_ messages: [ConversationMessage]) throws -> Data {
-        try encoder.encode(messages.map(messageRecord(from:)))
+    static func encodeMessages(
+        _ messages: [ConversationMessage],
+        attachmentStore: ConversationAttachmentStore = .shared
+    ) throws -> Data {
+        let records = try messages.map { try messageRecord(from: $0, attachmentStore: attachmentStore) }
+        return try encoder.encode(records)
     }
 
     static func encodeActivity(_ activity: ConversationActivity) throws -> Data {
@@ -96,10 +106,19 @@ enum ConversationSnapshotCodec {
 
     // MARK: Decode records → domain
 
-    static func decodeMessages(_ data: Data) throws -> [ConversationMessage] {
+    static func decodeMessages(
+        _ data: Data,
+        attachmentStore: ConversationAttachmentStore = .shared
+    ) throws -> [ConversationMessage] {
         let started = CFAbsoluteTimeGetCurrent()
         let records = try decoder.decode([ConversationMessageRecord].self, from: data)
-        let messages = records.compactMap(message(from:))
+        var messages: [ConversationMessage] = []
+        messages.reserveCapacity(records.count)
+        for record in records {
+            if let message = try message(from: record, attachmentStore: attachmentStore) {
+                messages.append(message)
+            }
+        }
         ConversationStartupProbe.recordSnapshotDecode(
             durationMilliseconds: (CFAbsoluteTimeGetCurrent() - started) * 1000
         )
@@ -128,26 +147,32 @@ enum ConversationSnapshotCodec {
 
     // MARK: Domain ↔ record
 
-    static func messageRecord(from message: ConversationMessage) -> ConversationMessageRecord {
+    static func messageRecord(
+        from message: ConversationMessage,
+        attachmentStore: ConversationAttachmentStore = .shared
+    ) throws -> ConversationMessageRecord {
         ConversationMessageRecord(
             id: message.id,
             actor: actorString(message.actor),
             createdAt: message.createdAt,
             text: message.text,
-            attachment: message.attachment.map(attachmentRecord(from:)),
+            attachment: try message.attachment.map { try attachmentRecord(from: $0, attachmentStore: attachmentStore) },
             card: message.card.map(cardRecord(from:)),
             quickActions: message.quickActions?.map(quickActionRecord(from:))
         )
     }
 
-    static func message(from record: ConversationMessageRecord) -> ConversationMessage? {
+    static func message(
+        from record: ConversationMessageRecord,
+        attachmentStore: ConversationAttachmentStore = .shared
+    ) throws -> ConversationMessage? {
         guard let actor = actor(from: record.actor) else { return nil }
         return ConversationMessage(
             id: record.id,
             actor: actor,
             createdAt: record.createdAt,
             text: record.text,
-            attachment: record.attachment.flatMap(attachment(from:)),
+            attachment: try record.attachment.flatMap { try attachment(from: $0, attachmentStore: attachmentStore) },
             card: record.card.map(card(from:)),
             quickActions: record.quickActions?.map(quickAction(from:))
         )
@@ -183,22 +208,35 @@ enum ConversationSnapshotCodec {
         }
     }
 
-    private static func attachmentRecord(from attachment: ConversationAttachment) -> ConversationAttachmentRecord {
-        switch attachment.kind {
-        case .photoJPEG(let data):
-            return ConversationAttachmentRecord(
-                id: attachment.id,
-                kind: ConversationAttachmentRecord.photoJPEGKind,
-                jpegData: data
-            )
-        }
+    private static func attachmentRecord(
+        from attachment: ConversationAttachment,
+        attachmentStore: ConversationAttachmentStore
+    ) throws -> ConversationAttachmentRecord {
+        let externalized = try attachmentStore.externalize(attachment)
+        return ConversationAttachmentRecord(
+            id: externalized.id,
+            kind: ConversationAttachmentRecord.photoJPEGKind,
+            jpegData: nil,
+            storage: ConversationAttachmentRecord.fileStorage
+        )
     }
 
-    private static func attachment(from record: ConversationAttachmentRecord) -> ConversationAttachment? {
-        guard record.kind == ConversationAttachmentRecord.photoJPEGKind, let data = record.jpegData else {
-            return nil
+    private static func attachment(
+        from record: ConversationAttachmentRecord,
+        attachmentStore: ConversationAttachmentStore
+    ) throws -> ConversationAttachment? {
+        guard record.kind == ConversationAttachmentRecord.photoJPEGKind else { return nil }
+
+        if let inline = record.jpegData, !inline.isEmpty {
+            try attachmentStore.save(id: record.id, data: inline)
+            return ConversationAttachment(id: record.id, kind: .photoJPEGFile)
         }
-        return ConversationAttachment(id: record.id, kind: .photoJPEG(data))
+
+        if record.storage == ConversationAttachmentRecord.fileStorage || attachmentStore.exists(record.id) {
+            return ConversationAttachment(id: record.id, kind: .photoJPEGFile)
+        }
+
+        return nil
     }
 
     private static func cardRecord(from card: ConversationCard) -> ConversationCardRecord {
