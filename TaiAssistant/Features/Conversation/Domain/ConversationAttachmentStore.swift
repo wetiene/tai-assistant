@@ -60,6 +60,7 @@ final class ConversationAttachmentStore: @unchecked Sendable {
         defer { lock.unlock() }
         let url = fileURL(for: id)
         guard fileManager.fileExists(atPath: url.path) else { return nil }
+        ConversationRuntimeProbe.recordAttachmentDiskLoad()
         return try Data(contentsOf: url)
     }
 

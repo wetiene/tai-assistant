@@ -97,8 +97,10 @@ struct ConversationMessageRenderer: View {
 
     @ViewBuilder
     private func attachmentView(_ attachment: ConversationAttachment) -> some View {
-        if let data = ConversationAttachmentStore.shared.resolvedJPEGData(for: attachment),
-           let image = ConversationImageCache.image(id: attachment.id, data: data) {
+        // Cache-first: never hit disk when the decoded UIImage is already retained.
+        if let image = ConversationImageCache.image(id: attachment.id, loadData: {
+            ConversationAttachmentStore.shared.resolvedJPEGData(for: attachment)
+        }) {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
@@ -112,7 +114,7 @@ struct ConversationMessageRenderer: View {
     private func cardView(_ card: ConversationCard) -> some View {
         switch card.typeID {
         case MealCapabilityID.estimateCardType:
-            if let payload = MealCardCodec.decode(card.payload) {
+            if let payload = MealCardPayloadCache.payload(for: card) {
                 MealEstimateCardView(
                     payload: payload,
                     isInteractive: card.isInteractive,

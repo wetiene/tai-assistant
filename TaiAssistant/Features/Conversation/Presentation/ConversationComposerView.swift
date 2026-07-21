@@ -11,7 +11,6 @@ struct ConversationComposerView: View {
     var onSend: () -> Void
 
     @FocusState private var isFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: DSSpacing.xs) {
@@ -45,6 +44,7 @@ struct ConversationComposerView: View {
                 .accessibilityLabel("Camera")
                 .accessibilityHint("Take a meal photo")
 
+                // Stable identity: do not recreate this field when sibling chrome updates.
                 TextField("Message Tai…", text: $text, axis: .vertical)
                     .lineLimit(1...5)
                     .focused($isFocused)
@@ -58,6 +58,7 @@ struct ConversationComposerView: View {
                     )
                     .disabled(isBusy)
                     .accessibilityLabel("Message")
+                    .id("tai.composer.textField")
 
                 Button(action: onSend) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -90,8 +91,10 @@ struct ConversationComposerView: View {
     }
 
     private func photoThumbnail(_ data: Data) -> some View {
-        Group {
-            if let image = ConversationImageCache.image(key: "composer-pending-\(data.count)", data: data) {
+        let key = "composer-pending-\(data.count)"
+        return Group {
+            if let image = ConversationImageCache.cached(key: key)
+                ?? ConversationImageCache.image(key: key, data: data) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()

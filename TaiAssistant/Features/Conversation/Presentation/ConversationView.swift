@@ -12,7 +12,7 @@ struct ConversationView: View {
         VStack(spacing: 0) {
             ConversationMessageListView(
                 store: viewModel.store,
-                isProcessing: viewModel.isProcessing,
+                isMealBusy: viewModel.meal.isBusy,
                 reduceMotion: reduceMotion,
                 onQuickAction: { viewModel.handleQuickAction($0) },
                 onMealCardAction: { action, cardID in
@@ -106,18 +106,24 @@ struct ConversationView: View {
     }
 }
 
-/// Observes message/history state only — composer keystrokes must not rebuild this tree.
+    /// Observes message/history state only — composer keystrokes must not rebuild this tree.
 private struct ConversationMessageListView: View {
     @Bindable var store: ConversationSessionStore
-    var isProcessing: Bool
+    var isMealBusy: Bool
     var reduceMotion: Bool
     var onQuickAction: (ConversationQuickAction) -> Void
     var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
     var onWhy: () -> Void
 
+    private var isProcessing: Bool {
+        if case .processing = store.active.activity { return true }
+        return isMealBusy
+    }
+
     var body: some View {
         let messages = store.active.messages
         let quickActions = store.active.activeQuickActions
+        let processing = isProcessing
 
         ScrollViewReader { proxy in
             ScrollView {
@@ -132,7 +138,7 @@ private struct ConversationMessageListView: View {
                         .id(message.id)
                     }
 
-                    if isProcessing {
+                    if processing {
                         HStack(spacing: DSSpacing.sm) {
                             ProgressView()
                             Text("Tai is thinking…")
@@ -148,7 +154,7 @@ private struct ConversationMessageListView: View {
                        messages.last?.quickActions == nil {
                         ConversationQuickActionsRow(
                             actions: quickActions,
-                            isEnabled: !isProcessing,
+                            isEnabled: !processing,
                             onSelect: onQuickAction
                         )
                         .id("quick-actions")
@@ -162,11 +168,16 @@ private struct ConversationMessageListView: View {
             .onAppear {
                 restoreScrollPosition(proxy: proxy, messages: messages)
             }
+            // Auto-scroll only for transcript growth / processing — never for composer keystrokes.
             .onChange(of: messages.count) { _, _ in
-                scrollToBottom(proxy: proxy, messages: messages, isProcessing: isProcessing)
+                scrollToBottom(proxy: proxy, isProcessing: processing)
             }
-            .onChange(of: isProcessing) { _, _ in
-                scrollToBottom(proxy: proxy, messages: messages, isProcessing: isProcessing)
+            .onChange(of: processing) { wasBusy, isBusyNow in
+                // Scroll when thinking begins; avoid a second animated scroll when it ends
+                // unless message count also changed (handled above).
+                if isBusyNow && !wasBusy {
+                    scrollToBottom(proxy: proxy, isProcessing: true)
+                }
             }
         }
     }
@@ -174,6 +185,7 @@ private struct ConversationMessageListView: View {
     private func restoreScrollPosition(proxy: ScrollViewProxy, messages: [ConversationMessage]) {
         let target = store.active.scrollAnchorMessageID ?? messages.last?.id
         guard let target else { return }
+        ConversationRuntimeProbe.recordScrollToBottom()
         if reduceMotion {
             proxy.scrollTo(target, anchor: .bottom)
         } else {
@@ -183,15 +195,12 @@ private struct ConversationMessageListView: View {
         }
     }
 
-    private func scrollToBottom(
-        proxy: ScrollViewProxy,
-        messages: [ConversationMessage],
-        isProcessing: Bool
-    ) {
+    private func scrollToBottom(proxy: ScrollViewProxy, isProcessing: Bool) {
+        ConversationRuntimeProbe.recordScrollToBottom()
         let scroll = {
             if isProcessing {
                 proxy.scrollTo("thinking", anchor: .bottom)
-            } else if let last = messages.last {
+            } else if let last = store.active.messages.last {
                 proxy.scrollTo(last.id, anchor: .bottom)
             }
         }
@@ -206,7 +215,8 @@ private struct ConversationMessageListView: View {
     }
 }
 
-/// Observes composer draft only.
+/// Local `@State` owns the TextField so Observable draft updates do not recreate the editor
+/// or destroy selection / cursor while typing.
 private struct ConversationComposerHost: View {
     @Bindable var store: ConversationSessionStore
     var isBusy: Bool
@@ -215,18 +225,40 @@ private struct ConversationComposerHost: View {
     var onSend: () -> Void
     var onTextChange: (String) -> Void
 
+    @State private var localText: String = ""
+    @State private var didSeedText = false
+
+    private var isSendEnabled: Bool {
+        let trimmed = localText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty || store.composerDraft.pendingPhotoJPEG != nil
+    }
+
     var body: some View {
         ConversationComposerView(
-            text: Binding(
-                get: { store.composerDraft.text },
-                set: onTextChange
-            ),
+            text: $localText,
             pendingPhoto: store.composerDraft.pendingPhotoJPEG,
-            isSendEnabled: store.composerDraft.isSendEnabled,
+            isSendEnabled: isSendEnabled,
             isBusy: isBusy,
             onCamera: onCamera,
             onClearPhoto: onClearPhoto,
             onSend: onSend
         )
+        .onAppear {
+            guard !didSeedText else { return }
+            localText = store.composerDraft.text
+            didSeedText = true
+        }
+        .onChange(of: localText) { _, newValue in
+            if newValue != store.composerDraft.text {
+                onTextChange(newValue)
+            }
+        }
+        .onChange(of: store.composerDraft.text) { _, external in
+            // Sync clears / restores from the store without fighting in-progress edits
+            // when values already match.
+            if external != localText {
+                localText = external
+            }
+        }
     }
 }

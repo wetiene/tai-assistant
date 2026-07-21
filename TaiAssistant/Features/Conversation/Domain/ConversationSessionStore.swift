@@ -70,6 +70,7 @@ final class ConversationSessionStore {
     /// Composer text/photo updates: mutate draft only; disk debounced via composer-only path.
     func updateComposer(_ body: (inout ConversationComposerState) -> Void) {
         body(&composerDraft)
+        ConversationRuntimeProbe.recordComposerStoreUpdate()
         scheduleDebouncedComposerPersist()
     }
 
@@ -109,6 +110,7 @@ final class ConversationSessionStore {
     private func scheduleDebouncedComposerPersist() {
         guard !suppressPersistence else { return }
         composerPersistTask?.cancel()
+        ConversationRuntimeProbe.recordDebounceTaskCreated()
         composerPersistTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard !Task.isCancelled else { return }
