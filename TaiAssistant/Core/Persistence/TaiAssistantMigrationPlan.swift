@@ -8,11 +8,12 @@ enum TaiAssistantMigrationPlan: SchemaMigrationPlan {
             TaiAssistantSchemaV2.self,
             TaiAssistantSchemaV3.self,
             TaiAssistantSchemaV4.self,
+            TaiAssistantSchemaV5.self,
         ]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3, migrateV3toV4]
+        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5]
     }
 
     static let migrateV1toV2 = MigrationStage.lightweight(
@@ -28,5 +29,10 @@ enum TaiAssistantMigrationPlan: SchemaMigrationPlan {
     static let migrateV3toV4 = MigrationStage.lightweight(
         fromVersion: TaiAssistantSchemaV3.self,
         toVersion: TaiAssistantSchemaV4.self
+    )
+
+    static let migrateV4toV5 = MigrationStage.lightweight(
+        fromVersion: TaiAssistantSchemaV4.self,
+        toVersion: TaiAssistantSchemaV5.self
     )
 }

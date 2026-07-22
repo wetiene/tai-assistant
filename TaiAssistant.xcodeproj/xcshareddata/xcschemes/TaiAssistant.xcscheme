@@ -39,6 +39,16 @@
                ReferencedContainer = "container:TaiAssistant.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A00000000000000000000070"
+               BuildableName = "TaiAssistantUITests.xctest"
+               BlueprintName = "TaiAssistantUITests"
+               ReferencedContainer = "container:TaiAssistant.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

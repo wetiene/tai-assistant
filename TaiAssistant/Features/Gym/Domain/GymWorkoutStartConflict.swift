@@ -7,6 +7,11 @@ struct GymWorkoutStartConflict: Equatable, Sendable {
     var requestedPlanReference: GymPlanReference
     var requestedPlanTitle: String
     var requestedWorkoutTarget: GymPlanWorkoutTarget
+    var entrySource: StrengthWorkoutEntrySource
+    /// Human-readable progress, e.g. "5/18 sets · 12:34".
+    var activeProgressSummary: String?
+    var activeCompletedSets: Int?
+    var activeTotalSets: Int?
 }
 
 enum GymWorkoutStartConflictResolution: Equatable, Sendable {

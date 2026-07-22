@@ -359,6 +359,12 @@ final class MockWorkoutRepository: WorkoutRepository {
         if sessions.contains(where: { $0.id == session.id }) {
             throw WorkoutRepositoryError.sessionAlreadyExists(id: session.id)
         }
+        if session.status == .inProgress,
+           let existing = sessions.first(where: { $0.ownerID == session.ownerID && $0.status == .inProgress }),
+           existing.id != session.id
+        {
+            throw WorkoutRepositoryError.activeSessionAlreadyExists(existingSessionID: existing.id)
+        }
         sessions.append(session)
     }
 
@@ -381,13 +387,14 @@ final class MockWorkoutRepository: WorkoutRepository {
         sessions[index].sets.append(set)
     }
 
-    func completeSession(id: UUID, completedAt: Date) async throws {
+    func completeSession(id: UUID, completedAt: Date, debriefJSON: Data?) async throws {
         guard let index = sessions.firstIndex(where: { $0.id == id }) else {
             throw WorkoutRepositoryError.sessionNotFound(id: id)
         }
         sessions[index].status = .completed
         sessions[index].completedAt = completedAt
         sessions[index].activeSessionJSON = nil
+        sessions[index].debriefJSON = debriefJSON
     }
 
     func abandonSession(id: UUID) async throws {

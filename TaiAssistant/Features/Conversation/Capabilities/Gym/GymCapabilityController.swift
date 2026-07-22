@@ -14,6 +14,8 @@ final class GymCapabilityController {
 
     private(set) var phase: GymCapabilityID.Phase = .idle
     private(set) var session: GymActiveSession?
+    private(set) var hasActiveStrengthSession = false
+    private(set) var activeStrengthSessionID: UUID?
     private(set) var pendingSetDraft: GymSetDraft?
     private(set) var lastError: String?
     private var inFlightSaveDraftIDs: Set<UUID> = []
@@ -27,7 +29,7 @@ final class GymCapabilityController {
     }
 
     var hasActiveSession: Bool {
-        session?.status == .inProgress
+        session?.status == .inProgress || hasActiveStrengthSession
     }
 
     init(workoutRepository: WorkoutRepository, aiService: AIService, ownerID: String) {
@@ -47,30 +49,65 @@ final class GymCapabilityController {
     // MARK: - Session lifecycle
 
     func activeSessionSnapshot() async throws -> GymActiveSession? {
+        if let persisted = try await workoutRepository.fetchInProgressSession(ownerID: ownerID) {
+            if StrengthSessionPersistence.decodeStrengthEnvelope(from: persisted.activeSessionJSON) != nil {
+                hasActiveStrengthSession = true
+                activeStrengthSessionID = persisted.id
+                session = nil
+                phase = .idle
+                return nil
+            }
+            if let restored = decodeActiveSession(from: persisted) {
+                hasActiveStrengthSession = false
+                activeStrengthSessionID = nil
+                session = restored
+                phase = .active
+                return restored
+            }
+        }
+        hasActiveStrengthSession = false
+        activeStrengthSessionID = nil
         if let session, session.status == .inProgress {
             return session
-        }
-        if let persisted = try await workoutRepository.fetchInProgressSession(ownerID: ownerID),
-           let restored = decodeActiveSession(from: persisted)
-        {
-            session = restored
-            phase = .active
-            return restored
         }
         return nil
     }
 
     func startWorkout(plan: GymResolvablePlan, replacingExisting: Bool = false) async throws -> GymActiveSession {
         clearError()
-        if !replacingExisting, let existing = try await activeSessionSnapshot() {
-            throw GymWorkoutStartError.activeSessionInProgress(existing)
+        if !replacingExisting {
+            if let existing = try await workoutRepository.fetchInProgressSession(ownerID: ownerID) {
+                if let legacy = decodeActiveSession(from: existing) {
+                    throw GymWorkoutStartError.activeSessionInProgress(legacy)
+                }
+                if StrengthSessionPersistence.decodeStrengthEnvelope(from: existing.activeSessionJSON) != nil {
+                    throw GymWorkoutStartError.activeSessionInProgress(
+                        GymActiveSession(
+                            sessionID: existing.id,
+                            planReference: GymPlanReference.decode(storageKey: existing.templateID) ?? .starter(.upperBody),
+                            title: existing.title,
+                            exercises: plan.exercises,
+                            prescription: plan.prescription,
+                            currentExerciseIndex: 0,
+                            currentSetNumber: 1,
+                            startedAt: existing.startedAt,
+                            status: .inProgress
+                        )
+                    )
+                }
+            }
+            if let existing = try await activeSessionSnapshot() {
+                throw GymWorkoutStartError.activeSessionInProgress(existing)
+            }
         }
 
         if replacingExisting {
-            if let existing = try await activeSessionSnapshot() {
-                try await workoutRepository.abandonSession(id: existing.sessionID)
+            if let existing = try await workoutRepository.fetchInProgressSession(ownerID: ownerID) {
+                try await workoutRepository.abandonSession(id: existing.id)
             }
             session = nil
+            hasActiveStrengthSession = false
+            activeStrengthSessionID = nil
             phase = .idle
         }
 
@@ -112,15 +149,27 @@ final class GymCapabilityController {
     }
 
     func restoreFromConversation(_ conversation: ActiveConversation) async {
+        if let persisted = try? await workoutRepository.fetchInProgressSession(ownerID: ownerID),
+           StrengthSessionPersistence.decodeStrengthEnvelope(from: persisted.activeSessionJSON) != nil {
+            hasActiveStrengthSession = true
+            activeStrengthSessionID = persisted.id
+            session = nil
+            phase = .idle
+            return
+        }
+
         if let active = GymCapabilityActivityCodec.activeSession(from: conversation.activity) {
+            hasActiveStrengthSession = false
+            activeStrengthSessionID = nil
             session = active
             phase = active.status == .completed ? .completed : .active
             return
         }
 
         if let persisted = try? await workoutRepository.fetchInProgressSession(ownerID: ownerID),
-           let active = decodeActiveSession(from: persisted)
-        {
+           let active = decodeActiveSession(from: persisted) {
+            hasActiveStrengthSession = false
+            activeStrengthSessionID = nil
             session = active
             phase = .active
         }
@@ -291,7 +340,7 @@ final class GymCapabilityController {
             try await workoutRepository.updateSession(persisted)
 
             if active.status == .completed {
-                try await workoutRepository.completeSession(id: active.sessionID, completedAt: .now)
+                try await workoutRepository.completeSession(id: active.sessionID, completedAt: .now, debriefJSON: nil)
                 phase = .completed
             } else {
                 phase = .active
@@ -311,7 +360,7 @@ final class GymCapabilityController {
         session = active
         phase = .completed
         do {
-            try await workoutRepository.completeSession(id: active.sessionID, completedAt: .now)
+            try await workoutRepository.completeSession(id: active.sessionID, completedAt: .now, debriefJSON: nil)
             guard let log = try await workoutRepository.fetchSessions(
                 ownerID: ownerID,
                 from: active.startedAt.addingTimeInterval(-1),
@@ -395,29 +444,7 @@ final class GymCapabilityController {
         _ response: AIInterpretGymPhotoResponse,
         allowedExerciseIDs: Set<String>
     ) -> GymPhotoInterpretationSnapshot {
-        let filteredCandidates = response.exerciseCandidates
-            .filter { allowedExerciseIDs.contains($0.exerciseID) }
-            .map {
-                GymExerciseCandidateSnapshot(
-                    exerciseID: $0.exerciseID,
-                    displayName: GymExerciseCatalog.displayName(for: $0.exerciseID),
-                    confidence: $0.confidence,
-                    reason: $0.reason
-                )
-            }
-        return GymPhotoInterpretationSnapshot(
-            exerciseCandidates: filteredCandidates,
-            detectedWeight: response.detectedWeight.map {
-                GymDetectedWeightSnapshot(
-                    value: $0.value,
-                    unit: $0.unit,
-                    confidence: $0.confidence,
-                    reason: $0.reason
-                )
-            },
-            limitations: response.limitations,
-            requiresConfirmation: response.requiresConfirmation
-        )
+        GymPhotoInterpretationMapper.map(response, allowedExerciseIDs: allowedExerciseIDs)
     }
 
     private func mapInterpretation(_ response: AIInterpretGymPhotoResponse) -> GymPhotoInterpretationSnapshot {

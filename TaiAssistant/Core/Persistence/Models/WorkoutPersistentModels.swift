@@ -11,8 +11,10 @@ final class WorkoutSessionLog {
     var completedAt: Date?
     /// `inProgress` | `completed`
     var statusRaw: String
-    /// JSON-encoded `GymActiveSession` for in-progress restore.
+    /// JSON-encoded session snapshot for in-progress restore.
     var activeSessionJSON: Data?
+    /// JSON-encoded `StrengthWorkoutDebrief` after completion.
+    var debriefJSON: Data?
     @Relationship(deleteRule: .cascade, inverse: \WorkoutSetLog.session) var sets: [WorkoutSetLog]
 
     init(
@@ -23,7 +25,8 @@ final class WorkoutSessionLog {
         startedAt: Date = .now,
         completedAt: Date? = nil,
         statusRaw: String = GymWorkoutSessionStatus.inProgress.rawValue,
-        activeSessionJSON: Data? = nil
+        activeSessionJSON: Data? = nil,
+        debriefJSON: Data? = nil
     ) {
         self.id = id
         self.ownerID = ownerID
@@ -33,6 +36,7 @@ final class WorkoutSessionLog {
         self.completedAt = completedAt
         self.statusRaw = statusRaw
         self.activeSessionJSON = activeSessionJSON
+        self.debriefJSON = debriefJSON
         self.sets = []
     }
 

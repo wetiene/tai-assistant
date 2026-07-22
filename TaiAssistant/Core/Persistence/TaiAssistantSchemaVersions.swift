@@ -25,6 +25,73 @@ enum TaiAssistantSchemaV1: VersionedSchema {
 enum TaiAssistantSchemaV2: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
 
+    @Model
+    final class WorkoutSessionLog {
+        @Attribute(.unique) var id: UUID
+        var ownerID: String
+        var templateID: String
+        var title: String
+        var startedAt: Date
+        var completedAt: Date?
+        var statusRaw: String
+        var activeSessionJSON: Data?
+        @Relationship(deleteRule: .cascade, inverse: \WorkoutSetLog.session) var sets: [WorkoutSetLog]
+
+        init(
+            id: UUID = UUID(),
+            ownerID: String,
+            templateID: String,
+            title: String,
+            startedAt: Date = .now,
+            completedAt: Date? = nil,
+            statusRaw: String = GymWorkoutSessionStatus.inProgress.rawValue,
+            activeSessionJSON: Data? = nil
+        ) {
+            self.id = id
+            self.ownerID = ownerID
+            self.templateID = templateID
+            self.title = title
+            self.startedAt = startedAt
+            self.completedAt = completedAt
+            self.statusRaw = statusRaw
+            self.activeSessionJSON = activeSessionJSON
+            self.sets = []
+        }
+    }
+
+    @Model
+    final class WorkoutSetLog {
+        @Attribute(.unique) var id: UUID
+        var exerciseID: String
+        var exerciseName: String
+        var setNumber: Int
+        var weightValue: Double
+        var weightUnit: String
+        var repetitions: Int
+        var performedAt: Date
+        var session: WorkoutSessionLog?
+
+        init(
+            id: UUID = UUID(),
+            exerciseID: String,
+            exerciseName: String,
+            setNumber: Int,
+            weightValue: Double,
+            weightUnit: String,
+            repetitions: Int,
+            performedAt: Date = .now
+        ) {
+            self.id = id
+            self.exerciseID = exerciseID
+            self.exerciseName = exerciseName
+            self.setNumber = setNumber
+            self.weightValue = weightValue
+            self.weightUnit = weightUnit
+            self.repetitions = repetitions
+            self.performedAt = performedAt
+        }
+    }
+
     static var models: [any PersistentModel.Type] {
         TaiAssistantSchemaV1.models + [
             WorkoutSessionLog.self,
@@ -33,15 +100,13 @@ enum TaiAssistantSchemaV2: VersionedSchema {
     }
 }
 
+/// Historical aliases used by migration tests and legacy container helpers.
+typealias WorkoutSessionLogV2 = TaiAssistantSchemaV2.WorkoutSessionLog
+typealias WorkoutSetLogV2 = TaiAssistantSchemaV2.WorkoutSetLog
+
 /// Adds persisted user workout plans (`GymWorkoutPlan`) — pre-import shape only.
 enum TaiAssistantSchemaV3: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
-
-    static var models: [any PersistentModel.Type] {
-        TaiAssistantSchemaV2.models + [
-            GymWorkoutPlan.self,
-        ]
-    }
 
     /// Historical persisted entity name remains `GymWorkoutPlan` on disk.
     @Model
@@ -76,6 +141,14 @@ enum TaiAssistantSchemaV3: VersionedSchema {
             self.updatedAt = updatedAt
         }
     }
+
+    static var models: [any PersistentModel.Type] {
+        TaiAssistantSchemaV1.models + [
+            TaiAssistantSchemaV2.WorkoutSessionLog.self,
+            TaiAssistantSchemaV2.WorkoutSetLog.self,
+            GymWorkoutPlan.self,
+        ]
+    }
 }
 
 /// Historical alias used by migration tests and legacy container helpers.
@@ -86,13 +159,28 @@ enum TaiAssistantSchemaV4: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(4, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
-        TaiAssistantSchemaV2.models + [
+        TaiAssistantSchemaV1.models + [
+            TaiAssistantSchemaV2.WorkoutSessionLog.self,
+            TaiAssistantSchemaV2.WorkoutSetLog.self,
+            GymWorkoutPlan.self,
+        ]
+    }
+}
+
+/// Adds workout debrief persistence on `WorkoutSessionLog`.
+enum TaiAssistantSchemaV5: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(5, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        TaiAssistantSchemaV1.models + [
+            WorkoutSessionLog.self,
+            WorkoutSetLog.self,
             GymWorkoutPlan.self,
         ]
     }
 }
 
 enum TaiAssistantSchema {
-    static let current = TaiAssistantSchemaV4.self
-    static let currentVersionIdentifier = TaiAssistantSchemaV4.versionIdentifier
+    static let current = TaiAssistantSchemaV5.self
+    static let currentVersionIdentifier = TaiAssistantSchemaV5.versionIdentifier
 }

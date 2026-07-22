@@ -1,8 +1,12 @@
 import XCTest
 @testable import TaiAssistant
 
+/// Shell-routed strength workout conflict integration tests.
+/// Conversation and launch intents delegate to `StrengthWorkoutEntryRouter`; conflict state lives on the router.
 @MainActor
 final class GymWorkoutStartConflictTests: XCTestCase {
+    private let ownerID = "gym.conflict.shell"
+
     override func setUp() {
         super.setUp()
         AIDataProcessingConsentStore.resetForTests()
@@ -14,256 +18,414 @@ final class GymWorkoutStartConflictTests: XCTestCase {
         super.tearDown()
     }
 
-    func testStartingSameActivePlanResumesWithoutConflict() async {
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        XCTAssertNotNil(vm.gym.session)
-        XCTAssertNil(vm.pendingWorkoutStartConflict)
-        XCTAssertFalse(vm.isWorkoutStartConflictDialogPresented)
+    // MARK: - Harness
 
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        XCTAssertNil(vm.pendingWorkoutStartConflict)
-        XCTAssertTrue(vm.gym.hasActiveSession)
+    private final class PresentationCapture {
+        var value: StrengthWorkoutPresentation?
     }
 
-    func testStartingDifferentPlanWhileActivePresentsConflict() async {
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        XCTAssertNotNil(vm.pendingWorkoutStartConflict)
-        XCTAssertTrue(vm.isWorkoutStartConflictDialogPresented)
-        XCTAssertEqual(vm.pendingWorkoutStartConflict?.requestedPlanReference, .starter(.lowerBody))
-        XCTAssertEqual(vm.pendingWorkoutStartConflict?.requestedWorkoutTarget.sectionIndex, 0)
-        XCTAssertEqual(vm.gym.session?.planReference, .starter(.upperBody))
+    private struct ShellRoutedContext {
+        let viewModel: ConversationViewModel
+        let router: StrengthWorkoutEntryRouter
+        let repository: WorkoutRepository
+        let presentation: PresentationCapture
     }
 
-    func testDialogDismissPreservesConflictPayloadUntilResolve() async {
+    private func makeShellRoutedContext(
+        workoutRepository: WorkoutRepository = MockWorkoutRepository(),
+        gymPlanRepository: GymPlanRepository = MockGymPlanRepository()
+    ) -> ShellRoutedContext {
+        let coordinator = StrengthWorkoutCoordinator(
+            workoutRepository: workoutRepository,
+            gymPlanRepository: gymPlanRepository,
+            ownerID: ownerID
+        )
+        let presentation = PresentationCapture()
+        let router = StrengthWorkoutEntryRouter(
+            coordinator: coordinator,
+            gymPlanRepository: gymPlanRepository,
+            ownerID: ownerID,
+            onPresentWorkout: { presentation.value = $0 }
+        )
         let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-
-        vm.isWorkoutStartConflictDialogPresented = false
-        XCTAssertNotNil(vm.pendingWorkoutStartConflict)
-
-        await vm.resolveWorkoutStartConflict(.resumeCurrent)
-        XCTAssertNil(vm.pendingWorkoutStartConflict)
-        XCTAssertFalse(vm.isWorkoutStartConflictDialogPresented)
-        XCTAssertEqual(vm.gym.session?.planReference, .starter(.upperBody))
+        let (vm, _) = ConversationTestSupport.makeViewModel(
+            store: store,
+            workoutRepository: workoutRepository,
+            gymPlanRepository: gymPlanRepository,
+            ownerID: ownerID
+        )
+        vm.strengthWorkoutCoordinator = coordinator
+        vm.onRequestStrengthWorkoutStart = { target, source in
+            Task { await router.requestStart(target: target, source: source) }
+        }
+        vm.onRequestStrengthWorkoutResume = { source in
+            Task { await router.requestResume(source: source) }
+        }
+        vm.onPresentStrengthWorkout = { presentation.value = $0 }
+        return ShellRoutedContext(
+            viewModel: vm,
+            router: router,
+            repository: workoutRepository,
+            presentation: presentation
+        )
     }
 
-    func testResumeConflictKeepsCurrentSession() async {
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        let currentID = vm.gym.session?.sessionID
-
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        await vm.resolveWorkoutStartConflict(.resumeCurrent)
-
-        XCTAssertEqual(vm.gym.session?.sessionID, currentID)
-        XCTAssertNil(vm.pendingWorkoutStartConflict)
-        XCTAssertFalse(vm.isWorkoutStartConflictDialogPresented)
+    private func seedActiveUpperBody(in repository: WorkoutRepository) async throws -> StrengthWorkoutSession {
+        let session = StrengthSessionBuilder.makeSession(
+            plan: GymProgramTemplateLibrary.resolvableStarter(.upperBody),
+            proposals: [],
+            acceptedProposals: [:],
+            historySessions: [],
+            preFlightCompleted: true
+        )
+        try await repository.createSession(
+            WorkoutSessionLog(
+                id: session.sessionID,
+                ownerID: ownerID,
+                templateID: session.planReference.storageKey,
+                title: session.title,
+                statusRaw: GymWorkoutSessionStatus.inProgress.rawValue,
+                activeSessionJSON: try StrengthSessionPersistence.encode(session)
+            )
+        )
+        return session
     }
 
-    func testCancelConflictLeavesCurrentSessionUnchanged() async {
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        let currentID = vm.gym.session?.sessionID
+    private func waitForConflict(on router: StrengthWorkoutEntryRouter) async {
+        for _ in 0..<50 {
+            if router.pendingConflict != nil { return }
+            await Task.yield()
+        }
+    }
 
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        vm.cancelWorkoutStartConflict()
+    private func waitForPresentation(_ capture: PresentationCapture) async {
+        for _ in 0..<50 {
+            if capture.value != nil { return }
+            await Task.yield()
+        }
+    }
 
-        XCTAssertEqual(vm.gym.session?.sessionID, currentID)
-        XCTAssertNil(vm.pendingWorkoutStartConflict)
-        XCTAssertFalse(vm.isWorkoutStartConflictDialogPresented)
+    private func waitForRouterSettlement(
+        router: StrengthWorkoutEntryRouter,
+        presentation: PresentationCapture
+    ) async {
+        for _ in 0..<50 {
+            if router.pendingConflict != nil || presentation.value != nil || router.alertMessage != nil {
+                return
+            }
+            await Task.yield()
+        }
+    }
+
+    private func requestStartAndWait(
+        context: ShellRoutedContext,
+        target: GymPlanWorkoutTarget
+    ) async {
+        await context.viewModel.requestStartGymWorkout(target: target)
+        await waitForRouterSettlement(router: context.router, presentation: context.presentation)
+    }
+
+    // MARK: - Shell routing
+
+    func testStartingSameActivePlanResumesWithoutConflict() async throws {
+        var context = makeShellRoutedContext()
+        let session = try await seedActiveUpperBody(in: context.repository)
+
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0)
+        )
+        await waitForPresentation(context.presentation)
+
+        XCTAssertNil(context.router.pendingConflict)
+        XCTAssertFalse(context.router.isConflictDialogPresented)
+        XCTAssertEqual(context.presentation.value?.resumeSession?.sessionID, session.sessionID)
+    }
+
+    func testStartingDifferentPlanWhileActivePresentsShellConflict() async throws {
+        var context = makeShellRoutedContext()
+        _ = try await seedActiveUpperBody(in: context.repository)
+
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+
+        XCTAssertNotNil(context.router.pendingConflict)
+        XCTAssertTrue(context.router.isConflictDialogPresented)
+        XCTAssertEqual(context.router.pendingConflict?.requestedPlanReference, .starter(.lowerBody))
+        XCTAssertEqual(context.router.pendingConflict?.entrySource, .conversation)
+        XCTAssertFalse(context.viewModel.isWorkoutStartConflictDialogPresented)
+        XCTAssertNil(context.viewModel.pendingWorkoutStartConflict)
+    }
+
+    func testDialogDismissPreservesConflictPayloadUntilResolve() async throws {
+        var context = makeShellRoutedContext()
+        _ = try await seedActiveUpperBody(in: context.repository)
+
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+
+        context.router.isConflictDialogPresented = false
+        XCTAssertNotNil(context.router.pendingConflict)
+
+        await context.router.resolveConflict(.resumeCurrent)
+        XCTAssertNil(context.router.pendingConflict)
+        XCTAssertFalse(context.router.isConflictDialogPresented)
+    }
+
+    func testResumeConflictKeepsCurrentSession() async throws {
+        var context = makeShellRoutedContext()
+        let session = try await seedActiveUpperBody(in: context.repository)
+
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+        await context.router.resolveConflict(.resumeCurrent)
+
+        let active = try await context.repository.fetchInProgressSession(ownerID: ownerID)
+        XCTAssertEqual(active?.id, session.sessionID)
+        XCTAssertNil(context.router.pendingConflict)
+        XCTAssertFalse(context.router.isConflictDialogPresented)
+    }
+
+    func testCancelConflictLeavesCurrentSessionUnchanged() async throws {
+        var context = makeShellRoutedContext()
+        let session = try await seedActiveUpperBody(in: context.repository)
+
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+        context.router.cancelConflict()
+
+        let active = try await context.repository.fetchInProgressSession(ownerID: ownerID)
+        XCTAssertEqual(active?.id, session.sessionID)
+        XCTAssertNil(context.router.pendingConflict)
+        XCTAssertFalse(context.router.isConflictDialogPresented)
     }
 
     func testFinishCurrentAndStartSelectedReplacesActiveSession() async throws {
         let workoutRepo = MockWorkoutRepository()
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store, workoutRepository: workoutRepo)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        let finishedID = vm.gym.session?.sessionID
+        var context = makeShellRoutedContext(workoutRepository: workoutRepo)
+        let upper = try await seedActiveUpperBody(in: context.repository)
 
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        await vm.resolveWorkoutStartConflict(.finishCurrentAndStartSelected)
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+        await context.router.resolveConflict(.finishCurrentAndStartSelected)
 
-        XCTAssertNotEqual(vm.gym.session?.sessionID, finishedID)
-        XCTAssertEqual(vm.gym.session?.planReference, .starter(.lowerBody))
-        XCTAssertNil(vm.pendingWorkoutStartConflict)
-        XCTAssertFalse(vm.isWorkoutStartConflictDialogPresented)
-        let inProgress = try await workoutRepo.fetchInProgressSession(ownerID: "test.user")
-        XCTAssertEqual(inProgress?.id, vm.gym.session?.sessionID)
+        XCTAssertEqual(context.presentation.value?.plan.reference, .starter(.lowerBody))
+        XCTAssertNil(context.router.pendingConflict)
         let completed = try await workoutRepo.fetchSessions(
-            ownerID: "test.user",
+            ownerID: ownerID,
             from: .distantPast,
             to: .distantFuture
-        ).first { $0.id == finishedID }
+        ).first { $0.id == upper.sessionID }
         XCTAssertEqual(completed?.status, .completed)
+        let inProgress = try await workoutRepo.fetchInProgressSession(ownerID: ownerID)
+        XCTAssertNil(inProgress)
     }
 
     func testDiscardCurrentAndStartSelectedAbandonsPreviousSession() async throws {
         let workoutRepo = MockWorkoutRepository()
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store, workoutRepository: workoutRepo)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        let abandonedID = vm.gym.session?.sessionID
+        var context = makeShellRoutedContext(workoutRepository: workoutRepo)
+        let abandoned = try await seedActiveUpperBody(in: context.repository)
 
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        await vm.resolveWorkoutStartConflict(.discardCurrentAndStartSelected)
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+        await context.router.resolveConflict(.discardCurrentAndStartSelected)
 
-        XCTAssertEqual(vm.gym.session?.planReference, .starter(.lowerBody))
-        XCTAssertNil(vm.pendingWorkoutStartConflict)
-        XCTAssertFalse(vm.isWorkoutStartConflictDialogPresented)
-        let abandoned = try await workoutRepo.fetchSessions(
-            ownerID: "test.user",
+        XCTAssertEqual(context.presentation.value?.plan.reference, .starter(.lowerBody))
+        XCTAssertNil(context.router.pendingConflict)
+        let abandonedLog = try await workoutRepo.fetchSessions(
+            ownerID: ownerID,
             from: .distantPast,
             to: .distantFuture
-        ).first { $0.id == abandonedID }
-        XCTAssertNil(abandoned)
-        let inProgress = try await workoutRepo.fetchInProgressSession(ownerID: "test.user")
-        XCTAssertEqual(inProgress?.id, vm.gym.session?.sessionID)
+        ).first { $0.id == abandoned.sessionID }
+        XCTAssertNil(abandonedLog)
     }
 
     func testOnlyOneActiveWorkoutAfterFinishAndStart() async throws {
         let workoutRepo = MockWorkoutRepository()
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store, workoutRepository: workoutRepo)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        await vm.resolveWorkoutStartConflict(.finishCurrentAndStartSelected)
+        var context = makeShellRoutedContext(workoutRepository: workoutRepo)
+        _ = try await seedActiveUpperBody(in: context.repository)
 
-        let inProgress = try await workoutRepo.fetchInProgressSession(ownerID: "test.user")
-        XCTAssertNotNil(inProgress)
-        XCTAssertEqual(inProgress?.id, vm.gym.session?.sessionID)
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+        await context.router.resolveConflict(.finishCurrentAndStartSelected)
+
         let activeCount = try await workoutRepo.fetchSessions(
-            ownerID: "test.user",
+            ownerID: ownerID,
             from: .distantPast,
             to: .distantFuture
         ).filter { $0.status == .inProgress }.count
-        XCTAssertEqual(activeCount, 1)
+        XCTAssertEqual(activeCount, 0)
     }
 
     func testFailedFinishDoesNotCreateNewWorkout() async throws {
         let workoutRepo = FailingCompleteWorkoutRepository()
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store, workoutRepository: workoutRepo)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        let originalID = vm.gym.session?.sessionID
+        var context = makeShellRoutedContext(workoutRepository: workoutRepo)
+        let session = try await seedActiveUpperBody(in: context.repository)
 
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        await vm.resolveWorkoutStartConflict(.finishCurrentAndStartSelected)
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+        await context.router.resolveConflict(.finishCurrentAndStartSelected)
 
-        XCTAssertEqual(vm.gym.session?.sessionID, originalID)
-        XCTAssertEqual(vm.gym.session?.planReference, .starter(.upperBody))
-        XCTAssertNotNil(vm.errorMessage)
-        let inProgress = try await workoutRepo.fetchInProgressSession(ownerID: "test.user")
-        XCTAssertEqual(inProgress?.id, originalID)
+        let active = try await workoutRepo.fetchInProgressSession(ownerID: ownerID)
+        XCTAssertEqual(active?.id, session.sessionID)
+        XCTAssertNotNil(context.router.alertMessage)
+        XCTAssertTrue(context.router.isConflictDialogPresented)
     }
 
     func testFailedStartAfterFinishLeavesRecoverableState() async throws {
         let workoutRepo = MockWorkoutRepository()
         let gymPlanRepo = ThrowingResolveGymPlanRepository()
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(
-            store: store,
+        var context = makeShellRoutedContext(
             workoutRepository: workoutRepo,
             gymPlanRepository: gymPlanRepo
         )
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
+        _ = try await seedActiveUpperBody(in: context.repository)
 
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        await vm.resolveWorkoutStartConflict(.finishCurrentAndStartSelected)
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+        await context.router.resolveConflict(.finishCurrentAndStartSelected)
 
-        XCTAssertNil(vm.gym.session)
-        XCTAssertNil(vm.pendingWorkoutStartConflict)
-        XCTAssertFalse(vm.isWorkoutStartConflictDialogPresented)
-        XCTAssertNotNil(vm.errorMessage)
-        let inProgress = try await workoutRepo.fetchInProgressSession(ownerID: "test.user")
+        XCTAssertNil(context.router.pendingConflict)
+        XCTAssertNotNil(context.router.alertMessage)
+        let inProgress = try await workoutRepo.fetchInProgressSession(ownerID: ownerID)
         XCTAssertNil(inProgress)
     }
 
-    func testPendingSectionIndexIsRetainedWhileDialogShown() async {
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
+    func testPendingSectionIndexIsRetainedWhileAbandonConfirmationShown() async throws {
+        var context = makeShellRoutedContext()
+        _ = try await seedActiveUpperBody(in: context.repository)
 
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
-        vm.requestWorkoutDiscardConfirmation()
+        context.viewModel.startIfNeeded()
+        await requestStartAndWait(
+            context: context,
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
+        )
+        context.router.requestAbandonConfirmation()
 
-        XCTAssertEqual(vm.pendingWorkoutStartConflict?.requestedWorkoutTarget.sectionIndex, 0)
-        XCTAssertTrue(vm.pendingWorkoutDiscardConfirmation)
-        XCTAssertFalse(vm.isWorkoutStartConflictDialogPresented)
+        XCTAssertEqual(context.router.pendingConflict?.requestedWorkoutTarget.sectionIndex, 0)
+        XCTAssertTrue(context.router.isAbandonConfirmationPresented)
+        XCTAssertFalse(context.router.isConflictDialogPresented)
     }
 
     func testDuplicateStartRequestsAreIgnoredWhileInFlight() async {
         let repo = MockGymPlanRepository()
         repo.resolvePlanDelayNanoseconds = 200_000_000
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store, gymPlanRepository: repo)
-        vm.startIfNeeded()
+        var presented: StrengthWorkoutPresentation?
+        let router = StrengthWorkoutEntryRouter(
+            coordinator: StrengthWorkoutCoordinator(
+                workoutRepository: MockWorkoutRepository(),
+                gymPlanRepository: repo,
+                ownerID: ownerID
+            ),
+            gymPlanRepository: repo,
+            ownerID: ownerID,
+            onPresentWorkout: { presented = $0 }
+        )
 
-        async let first: Void = vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
-        async let second: Void = vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0))
+        async let first: Void = router.requestStart(
+            target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0),
+            source: .home
+        )
+        async let second: Void = router.requestStart(
+            target: GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0),
+            source: .home
+        )
         _ = await (first, second)
+        try? await Task.sleep(nanoseconds: 300_000_000)
 
-        XCTAssertTrue(vm.gym.hasActiveSession)
-        XCTAssertEqual(vm.gym.session?.planReference, .starter(.upperBody))
+        XCTAssertEqual(presented?.plan.reference, .starter(.upperBody))
     }
 
-    func testLaunchIntentRoutesThroughConflictFlow() async {
+    func testLaunchIntentRoutesThroughShellConflictFlow() async throws {
         let repo = InMemoryActiveConversationRepository()
-        let session = ConversationTestSupport.makeSession(conversationRepository: repo)
+        let workoutRepo = MockWorkoutRepository()
+        let gymPlanRepo = MockGymPlanRepository()
+        let session = ConversationTestSupport.makeSession(
+            conversationRepository: repo,
+            workoutRepository: workoutRepo,
+            gymPlanRepository: gymPlanRepo,
+            ownerID: ownerID
+        )
+        var presented: StrengthWorkoutPresentation?
+        let coordinator = StrengthWorkoutCoordinator(
+            workoutRepository: workoutRepo,
+            gymPlanRepository: gymPlanRepo,
+            ownerID: ownerID
+        )
+        let router = StrengthWorkoutEntryRouter(
+            coordinator: coordinator,
+            gymPlanRepository: gymPlanRepo,
+            ownerID: ownerID,
+            onPresentWorkout: { presented = $0 }
+        )
+        session.updateStrengthWorkoutEntryRouting(
+            coordinator: coordinator,
+            router: router,
+            onPresent: { presented = $0 }
+        )
         await session.ensureLoaded()
         guard let vm = session.viewModel else {
             return XCTFail("Expected view model")
         }
 
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
+        _ = try await seedActiveUpperBody(in: workoutRepo)
         session.deliver(TaiLaunchIntent(kind: .startGymWorkout(
             GymPlanWorkoutTarget(reference: .starter(.lowerBody), sectionIndex: 0)
         )))
-        await waitForConflict(on: vm)
-        XCTAssertNotNil(vm.pendingWorkoutStartConflict)
-        XCTAssertTrue(vm.isWorkoutStartConflictDialogPresented)
+        await waitForConflict(on: router)
+
+        XCTAssertNotNil(router.pendingConflict)
+        XCTAssertTrue(router.isConflictDialogPresented)
+        XCTAssertEqual(router.pendingConflict?.entrySource, .home)
+        XCTAssertNil(vm.pendingWorkoutStartConflict)
+        XCTAssertNil(presented)
     }
 
-    func testQuickActionStartRoutesThroughConflictFlow() async {
-        let store = ConversationSessionStore()
-        let (vm, _) = ConversationTestSupport.makeViewModel(store: store)
-        vm.startIfNeeded()
-        await vm.requestStartGymWorkout(target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0))
+    func testQuickActionStartRoutesThroughShellConflictFlow() async throws {
+        var context = makeShellRoutedContext()
+        _ = try await seedActiveUpperBody(in: context.repository)
+        context.viewModel.startIfNeeded()
 
-        vm.handleQuickAction(ConversationAllowedQuickAction.gymStartLowerBody.asConversationQuickAction())
-        await waitForConflict(on: vm)
+        context.viewModel.handleQuickAction(
+            ConversationAllowedQuickAction.gymStartLowerBody.asConversationQuickAction()
+        )
+        await waitForConflict(on: context.router)
 
-        XCTAssertNotNil(vm.pendingWorkoutStartConflict)
-        XCTAssertTrue(vm.isWorkoutStartConflictDialogPresented)
-    }
-
-    private func waitForConflict(on vm: ConversationViewModel) async {
-        for _ in 0..<50 {
-            if vm.pendingWorkoutStartConflict != nil { return }
-            await Task.yield()
-        }
+        XCTAssertNotNil(context.router.pendingConflict)
+        XCTAssertTrue(context.router.isConflictDialogPresented)
+        XCTAssertEqual(context.router.pendingConflict?.entrySource, .conversation)
     }
 }
+
+// MARK: - Test doubles
 
 private final class FailingCompleteWorkoutRepository: WorkoutRepository {
     private let base = MockWorkoutRepository()
@@ -288,7 +450,7 @@ private final class FailingCompleteWorkoutRepository: WorkoutRepository {
         try await base.appendSet(set, to: sessionID)
     }
 
-    func completeSession(id: UUID, completedAt: Date) async throws {
+    func completeSession(id: UUID, completedAt: Date, debriefJSON: Data?) async throws {
         throw WorkoutRepositoryError.sessionNotFound(id: id)
     }
 

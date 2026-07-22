@@ -16,6 +16,14 @@ final class ConversationViewModel {
     var onWorkoutSaved: (() -> Void)?
     var onManageGymPlans: (() -> Void)?
     var onPresentGymPlanImportReview: ((GymPlanImportDraft, String?) -> Void)?
+    var onPresentStrengthWorkout: ((StrengthWorkoutPresentation) -> Void)?
+    var strengthWorkoutCoordinator: StrengthWorkoutCoordinator?
+    var onRequestStrengthWorkoutStart: ((GymPlanWorkoutTarget, StrengthWorkoutEntrySource) -> Void)?
+    var onRequestStrengthWorkoutResume: ((StrengthWorkoutEntrySource) -> Void)?
+
+    var usesShellWorkoutEntryRouting: Bool {
+        strengthWorkoutCoordinator != nil && onRequestStrengthWorkoutStart != nil
+    }
 
     private(set) var needsCamera = false
     private(set) var needsGymCamera = false
@@ -66,7 +74,9 @@ final class ConversationViewModel {
         onMealSaved: (() -> Void)? = nil,
         onWorkoutSaved: (() -> Void)? = nil,
         onManageGymPlans: (() -> Void)? = nil,
-        onPresentGymPlanImportReview: ((GymPlanImportDraft, String?) -> Void)? = nil
+        onPresentGymPlanImportReview: ((GymPlanImportDraft, String?) -> Void)? = nil,
+        onPresentStrengthWorkout: ((StrengthWorkoutPresentation) -> Void)? = nil,
+        strengthWorkoutCoordinator: StrengthWorkoutCoordinator? = nil
     ) {
         self.store = store
         self.meal = meal
@@ -80,6 +90,8 @@ final class ConversationViewModel {
         self.onWorkoutSaved = onWorkoutSaved
         self.onManageGymPlans = onManageGymPlans
         self.onPresentGymPlanImportReview = onPresentGymPlanImportReview
+        self.onPresentStrengthWorkout = onPresentStrengthWorkout
+        self.strengthWorkoutCoordinator = strengthWorkoutCoordinator
     }
 
     func startIfNeeded() {
@@ -129,16 +141,8 @@ final class ConversationViewModel {
             )
             return
         }
-        if resume, gym.hasActiveSession {
-            appendOrRefreshWorkoutPlanCard()
-            store.setActivity(GymCapabilityActivityCodec.makeActivity(phase: .active, session: gym.session!))
-            store.setQuickActions(ConversationDefaults.gymActiveQuickActions)
-            store.append(
-                ConversationMessage(
-                    actor: .assistant,
-                    text: "Welcome back — your \(gym.session?.title ?? "workout") is still in progress. Tap Take Photo when you’re ready for the next set."
-                )
-            )
+        if resume {
+            Task { await resumeStrengthWorkoutFromConversation() }
             return
         }
         if let workoutTarget {
@@ -1002,7 +1006,7 @@ final class ConversationViewModel {
         switch resolution {
         case .resumeCurrent:
             pendingWorkoutStartConflict = nil
-            resumeActiveGymWorkout()
+            await resumeStrengthWorkoutFromConversation()
             logWorkoutStartConflictEvent(
                 "resume_completed",
                 activeSessionID: gym.session?.sessionID,
@@ -1038,6 +1042,50 @@ final class ConversationViewModel {
         isStartingWorkout = true
         defer { isStartingWorkout = false }
 
+        if usesShellWorkoutEntryRouting {
+            onRequestStrengthWorkoutStart?(target, .conversation)
+            return
+        }
+
+        if let coordinator = strengthWorkoutCoordinator {
+            do {
+                if let active = try await coordinator.fetchActiveWorkout(),
+                   active.planReference == target.reference {
+                    if let presentation = try await coordinator.buildResumePresentation(source: .conversation) {
+                        onPresentStrengthWorkout?(presentation)
+                    }
+                    return
+                }
+
+                let plan = try await gymPlanRepository.resolvePlan(
+                    reference: target.reference,
+                    sectionIndex: target.sectionIndex,
+                    ownerID: ownerID
+                )
+                if let conflict = try await coordinator.detectStartConflict(
+                    requestedTarget: target,
+                    requestedTitle: plan.title,
+                    entrySource: .conversation
+                ) {
+                    presentWorkoutStartConflict(conflict)
+                    return
+                }
+
+                let presentation = try await coordinator.buildStartPresentation(
+                    request: StrengthWorkoutStartRequest(
+                        target: target,
+                        source: .conversation,
+                        skipPreFlight: false
+                    )
+                )
+                onPresentStrengthWorkout?(presentation)
+            } catch {
+                errorMessage = "Could not start this workout."
+                store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+            }
+            return
+        }
+
         if gym.hasActiveSession, let current = gym.session, current.planReference == target.reference {
             resumeActiveGymWorkout()
             return
@@ -1061,7 +1109,11 @@ final class ConversationViewModel {
                         activePlanReference: active.planReference,
                         requestedPlanReference: target.reference,
                         requestedPlanTitle: plan.title,
-                        requestedWorkoutTarget: target
+                        requestedWorkoutTarget: target,
+                        entrySource: .conversation,
+                        activeProgressSummary: nil,
+                        activeCompletedSets: nil,
+                        activeTotalSets: nil
                     )
                 )
                 return
@@ -1071,6 +1123,36 @@ final class ConversationViewModel {
             errorMessage = "Could not start this workout."
             store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
         }
+    }
+
+    private func resumeStrengthWorkoutFromConversation() async {
+        if usesShellWorkoutEntryRouting {
+            onRequestStrengthWorkoutResume?(.conversation)
+            return
+        }
+        if let coordinator = strengthWorkoutCoordinator,
+           let presentation = try? await coordinator.buildResumePresentation(source: .conversation) {
+            onPresentStrengthWorkout?(presentation)
+            return
+        }
+        if gym.hasActiveSession {
+            appendOrRefreshWorkoutPlanCard()
+            store.setActivity(GymCapabilityActivityCodec.makeActivity(phase: .active, session: gym.session!))
+            store.setQuickActions(ConversationDefaults.gymActiveQuickActions)
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: "Welcome back — your \(gym.session?.title ?? "workout") is still in progress. Tap Take Photo when you’re ready for the next set."
+                )
+            )
+            return
+        }
+        store.append(
+            ConversationMessage(
+                actor: .assistant,
+                text: "I couldn't find an active workout to resume."
+            )
+        )
     }
 
     private func interpretPastedWorkoutPlan(_ text: String) async {
@@ -1136,6 +1218,25 @@ final class ConversationViewModel {
     }
 
     private func finishCurrentAndStartWorkout(target: GymPlanWorkoutTarget) async {
+        if let coordinator = strengthWorkoutCoordinator {
+            do {
+                try await coordinator.finishActiveWorkout()
+                onWorkoutSaved?()
+                let presentation = try await coordinator.buildStartPresentation(
+                    request: StrengthWorkoutStartRequest(
+                        target: target,
+                        source: .conversation,
+                        skipPreFlight: false
+                    )
+                )
+                onPresentStrengthWorkout?(presentation)
+            } catch {
+                errorMessage = "Could not start this workout."
+                store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+            }
+            return
+        }
+
         guard gym.hasActiveSession else {
             await requestStartGymWorkout(target: target)
             return
@@ -1191,6 +1292,24 @@ final class ConversationViewModel {
     }
 
     private func discardCurrentAndStartWorkout(target: GymPlanWorkoutTarget) async {
+        if let coordinator = strengthWorkoutCoordinator {
+            do {
+                try await coordinator.abandonActiveWorkout()
+                let presentation = try await coordinator.buildStartPresentation(
+                    request: StrengthWorkoutStartRequest(
+                        target: target,
+                        source: .conversation,
+                        skipPreFlight: false
+                    )
+                )
+                onPresentStrengthWorkout?(presentation)
+            } catch {
+                errorMessage = "Could not start this workout."
+                store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+            }
+            return
+        }
+
         guard let active = try? await gym.activeSessionSnapshot() else {
             await requestStartGymWorkout(target: target)
             return
@@ -1264,7 +1383,11 @@ final class ConversationViewModel {
                         requestedWorkoutTarget: GymPlanWorkoutTarget(
                             reference: plan.reference,
                             sectionIndex: plan.sectionIndex
-                        )
+                        ),
+                        entrySource: .conversation,
+                        activeProgressSummary: nil,
+                        activeCompletedSets: nil,
+                        activeTotalSets: nil
                     )
                 )
                 store.setActivity(.awaitingUser)
@@ -1283,6 +1406,22 @@ final class ConversationViewModel {
     }
 
     private func interpretGymSetPhoto(_ jpeg: Data) async {
+        if gym.hasActiveStrengthSession {
+            store.append(
+                ConversationMessage(
+                    actor: .user,
+                    text: "📷 Set photo captured"
+                )
+            )
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: "Your workout is active in the strength session. Open it to confirm this set — I won't log it automatically."
+                )
+            )
+            await resumeStrengthWorkoutFromConversation()
+            return
+        }
         guard gym.hasActiveSession else { return }
         store.append(
             ConversationMessage(

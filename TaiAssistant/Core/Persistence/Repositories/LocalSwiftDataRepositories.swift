@@ -349,6 +349,18 @@ final class LocalSwiftDataWorkoutRepository: WorkoutRepository {
         if try context.fetch(clashDescriptor).first != nil {
             throw WorkoutRepositoryError.sessionAlreadyExists(id: session.id)
         }
+        if session.status == .inProgress {
+            let ownerID = session.ownerID
+            let inProgressRaw = GymWorkoutSessionStatus.inProgress.rawValue
+            let activeDescriptor = FetchDescriptor<WorkoutSessionLog>(
+                predicate: #Predicate<WorkoutSessionLog> { log in
+                    log.ownerID == ownerID && log.statusRaw == inProgressRaw
+                }
+            )
+            if let existing = try context.fetch(activeDescriptor).first, existing.id != session.id {
+                throw WorkoutRepositoryError.activeSessionAlreadyExists(existingSessionID: existing.id)
+            }
+        }
         context.insert(session)
         try context.save()
     }
@@ -368,6 +380,7 @@ final class LocalSwiftDataWorkoutRepository: WorkoutRepository {
         existing.completedAt = session.completedAt
         existing.statusRaw = session.statusRaw
         existing.activeSessionJSON = session.activeSessionJSON
+        existing.debriefJSON = session.debriefJSON
         try context.save()
     }
 
@@ -384,7 +397,7 @@ final class LocalSwiftDataWorkoutRepository: WorkoutRepository {
         try context.save()
     }
 
-    func completeSession(id: UUID, completedAt: Date) async throws {
+    func completeSession(id: UUID, completedAt: Date, debriefJSON: Data?) async throws {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<WorkoutSessionLog>(
             predicate: #Predicate<WorkoutSessionLog> { $0.id == id }
@@ -395,6 +408,7 @@ final class LocalSwiftDataWorkoutRepository: WorkoutRepository {
         session.status = .completed
         session.completedAt = completedAt
         session.activeSessionJSON = nil
+        session.debriefJSON = debriefJSON
         try context.save()
     }
 

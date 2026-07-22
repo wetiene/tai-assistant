@@ -82,6 +82,23 @@ struct RuntimeAppConfig {
         navV2Enabled: FeatureFlags.resolveNavV2Enabled()
     )
 
+    /// Isolated config for UI smoke tests — in-memory store, no preview seed pollution.
+    static let uiTestStrengthSmoke = RuntimeAppConfig(
+        assistantName: "Tai",
+        useInMemoryStore: true,
+        isIPhoneOnlyV1: true,
+        localOwnerID: "uitest.strength.user",
+        mealInterpretationProvider: .mock,
+        aiProxyBaseURL: nil,
+        aiProxyBearerToken: nil,
+        aiInterpretMealPath: "/ai/interpret-meal",
+        aiInterpretGoalPath: "/ai/interpret-goal",
+        aiInterpretGymPhotoPath: "/ai/interpret-gym-photo",
+        aiInterpretWorkoutPlanPath: "/ai/interpret-workout-plan",
+        aiCoachPath: "/ai/coach",
+        navV2Enabled: true
+    )
+
     func gymPlanImportRequestContext(
         sourceType: GymPlanImportSourceType,
         sourceTextCharacterCount: Int,

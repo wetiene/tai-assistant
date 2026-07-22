@@ -12,6 +12,7 @@ struct TaiConversationContainerView: View {
     var launchIntent: TaiLaunchIntent?
     var onLaunchIntentConsumed: (() -> Void)? = nil
     var onManageGymPlans: (() -> Void)? = nil
+    var onStartWorkout: ((GymPlanWorkoutTarget) -> Void)? = nil
 
     @State private var isGoalsPresented = false
     @State private var isGymPlansPresented = false
@@ -114,7 +115,7 @@ struct TaiConversationContainerView: View {
                     onStartWorkout: { target in
                         isGymPlansPresented = false
                         pendingGymPlanImportReview = nil
-                        conversationSession.deliver(TaiLaunchIntent(kind: .startGymWorkout(target)))
+                        onStartWorkout?(target)
                     },
                     onDismiss: {
                         isGymPlansPresented = false

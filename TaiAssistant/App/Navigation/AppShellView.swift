@@ -23,6 +23,16 @@ struct AppShellView: View {
     @State private var hasOpenedTai = false
     @State private var isGymPlansPresented = false
     @State private var pendingGymPlanImportReview: (draft: GymPlanImportDraft, sourceText: String?)?
+    @State private var strengthWorkoutPresentation: StrengthWorkoutPresentation?
+    @State private var workoutEntryRouter: StrengthWorkoutEntryRouter?
+
+    private var strengthWorkoutCoordinator: StrengthWorkoutCoordinator {
+        StrengthWorkoutCoordinator(
+            workoutRepository: dependencies.workoutRepository,
+            gymPlanRepository: dependencies.gymPlanRepository,
+            ownerID: config.localOwnerID
+        )
+    }
 
     init(dependencies: AppDependencies, config: RuntimeAppConfig) {
         self.dependencies = dependencies
@@ -64,11 +74,49 @@ struct AppShellView: View {
     // MARK: - Nav V2 (Home | Tai) — structurally two destinations only
 
     private var navV2Shell: some View {
+        Group {
+            if let workoutEntryRouter {
+                navV2TabContent
+                    .strengthWorkoutConflictDialogs(router: workoutEntryRouter)
+                    .alert("Workout unavailable", isPresented: Binding(
+                        get: { workoutEntryRouter.alertMessage != nil },
+                        set: { if !$0 { workoutEntryRouter.alertMessage = nil } }
+                    )) {
+                        Button("OK", role: .cancel) {}
+                    } message: {
+                        Text(workoutEntryRouter.alertMessage ?? "")
+                    }
+            } else {
+                navV2TabContent
+            }
+        }
+        .task {
+            if workoutEntryRouter == nil {
+                let router = StrengthWorkoutEntryRouter(
+                    coordinator: strengthWorkoutCoordinator,
+                    gymPlanRepository: dependencies.gymPlanRepository,
+                    ownerID: config.localOwnerID,
+                    onPresentWorkout: { presentation in
+                        presentStrengthWorkout(presentation)
+                    },
+                    onWorkoutSaved: {
+                        workoutAddedFeedbackTrigger += 1
+                    }
+                )
+                workoutEntryRouter = router
+                wireStrengthWorkoutRouting(router: router)
+            }
+            await dependencies.conversationSession.ensureLoaded()
+        }
+    }
+
+    private var navV2TabContent: some View {
         TabView(selection: $navV2Tab) {
             NavigationStack {
                 HomeBriefingView(
                     mealRepository: dependencies.mealRepository,
                     workoutRepository: dependencies.workoutRepository,
+                    gymPlanRepository: dependencies.gymPlanRepository,
                     goalRepository: dependencies.goalRepository,
                     nutritionDaySelection: dependencies.nutritionDaySelection,
                     ownerID: config.localOwnerID,
@@ -78,7 +126,21 @@ struct AppShellView: View {
                     analytics: dependencies.analytics,
                     onPrimaryAction: handleHomePrimaryAction,
                     onOpenTai: handleOpenTaiFromHome,
-                    onManageGymPlans: { isGymPlansPresented = true }
+                    onManageGymPlans: { isGymPlansPresented = true },
+                    onStartStrengthWorkout: { plan, _, _ in
+                        Task {
+                            await workoutEntryRouter?.requestStart(
+                                target: GymPlanWorkoutTarget(
+                                    reference: plan.reference,
+                                    sectionIndex: plan.sectionIndex
+                                ),
+                                source: .home
+                            )
+                        }
+                    },
+                    onResumeStrengthWorkout: {
+                        Task { await workoutEntryRouter?.requestResume(source: .home) }
+                    }
                 )
             }
             .tabItem { Label(NavV2PrimaryTab.home.title, systemImage: "house.fill") }
@@ -98,7 +160,10 @@ struct AppShellView: View {
                         onLaunchIntentConsumed: {
                             pendingTaiIntent = nil
                         },
-                        onManageGymPlans: { isGymPlansPresented = true }
+                        onManageGymPlans: { isGymPlansPresented = true },
+                        onStartWorkout: { target in
+                            Task { await workoutEntryRouter?.requestStart(target: target, source: .gymPlans) }
+                        }
                     )
                 } else {
                     DSColor.background.ignoresSafeArea()
@@ -109,27 +174,11 @@ struct AppShellView: View {
             }
             .tag(NavV2PrimaryTab.tai)
         }
+        .tint(DSColor.coralEnd)
         .onChange(of: navV2Tab) { _, tab in
             if tab == .tai {
                 hasOpenedTai = true
             }
-        }
-        .task {
-            dependencies.conversationSession.updateOnMealSaved {
-                mealAddedFeedbackTrigger += 1
-            }
-            dependencies.conversationSession.updateOnWorkoutSaved {
-                workoutAddedFeedbackTrigger += 1
-            }
-            dependencies.conversationSession.updateOnManageGymPlans {
-                isGymPlansPresented = true
-            }
-            dependencies.conversationSession.updateOnPresentGymPlanImportReview { draft, sourceText in
-                pendingGymPlanImportReview = (draft, sourceText)
-                isGymPlansPresented = true
-            }
-            // Prefetch Conversation after first frame so Home is not blocked.
-            await dependencies.conversationSession.ensureLoaded()
         }
         .sheet(isPresented: $isGymPlansPresented) {
             NavigationStack {
@@ -146,9 +195,7 @@ struct AppShellView: View {
                     onStartWorkout: { target in
                         isGymPlansPresented = false
                         pendingGymPlanImportReview = nil
-                        pendingTaiIntent = TaiLaunchIntent(kind: .startGymWorkout(target))
-                        hasOpenedTai = true
-                        navV2Tab = .tai
+                        Task { await workoutEntryRouter?.requestStart(target: target, source: .gymPlans) }
                     },
                     onDismiss: {
                         isGymPlansPresented = false
@@ -157,6 +204,53 @@ struct AppShellView: View {
                 )
             }
         }
+        .fullScreenCover(item: $strengthWorkoutPresentation) { presentation in
+            NavigationStack {
+                StrengthWorkoutFlowView(
+                    presentation: presentation,
+                    workoutRepository: dependencies.workoutRepository,
+                    aiService: dependencies.aiService,
+                    ownerID: config.localOwnerID,
+                    onComplete: {
+                        strengthWorkoutPresentation = nil
+                        workoutAddedFeedbackTrigger += 1
+                    },
+                    onLeave: {
+                        strengthWorkoutPresentation = nil
+                    },
+                    onCancel: {
+                        strengthWorkoutPresentation = nil
+                    }
+                )
+            }
+        }
+    }
+
+    private func wireStrengthWorkoutRouting(router: StrengthWorkoutEntryRouter) {
+        dependencies.conversationSession.updateOnMealSaved {
+            mealAddedFeedbackTrigger += 1
+        }
+        dependencies.conversationSession.updateOnWorkoutSaved {
+            workoutAddedFeedbackTrigger += 1
+        }
+        dependencies.conversationSession.updateOnManageGymPlans {
+            isGymPlansPresented = true
+        }
+        dependencies.conversationSession.updateOnPresentGymPlanImportReview { draft, sourceText in
+            pendingGymPlanImportReview = (draft, sourceText)
+            isGymPlansPresented = true
+        }
+        dependencies.conversationSession.updateStrengthWorkoutEntryRouting(
+            coordinator: strengthWorkoutCoordinator,
+            router: router,
+            onPresent: { presentation in
+                presentStrengthWorkout(presentation)
+            }
+        )
+    }
+
+    private func presentStrengthWorkout(_ presentation: StrengthWorkoutPresentation) {
+        strengthWorkoutPresentation = presentation
     }
 
     // MARK: - Legacy shell (flag off)
@@ -259,6 +353,22 @@ struct AppShellView: View {
         switch destination {
         case .manageGymPlans:
             isGymPlansPresented = true
+        case .startGymWorkout(let templateID):
+            Task {
+                await workoutEntryRouter?.requestStart(
+                    target: GymPlanWorkoutTarget(reference: .starter(templateID), sectionIndex: 0),
+                    source: .home
+                )
+            }
+        case .startGymWorkoutPlan(let reference):
+            Task {
+                await workoutEntryRouter?.requestStart(
+                    target: GymPlanWorkoutTarget(reference: reference, sectionIndex: 0),
+                    source: .home
+                )
+            }
+        case .resumeGymWorkout:
+            Task { await workoutEntryRouter?.requestResume(source: .home) }
         default:
             pendingTaiIntent = TaiLaunchIntent.fromHomeDestination(
                 destination,

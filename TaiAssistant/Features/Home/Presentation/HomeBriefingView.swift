@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeBriefingView: View {
     let mealRepository: MealRepository
     let workoutRepository: WorkoutRepository
+    let gymPlanRepository: GymPlanRepository
     let goalRepository: GoalRepository
     @Bindable var nutritionDaySelection: NutritionDaySelection
     let ownerID: String
@@ -14,8 +15,14 @@ struct HomeBriefingView: View {
     var onPrimaryAction: ((RecommendationActionDestination) -> Void)? = nil
     var onOpenTai: (() -> Void)? = nil
     var onManageGymPlans: (() -> Void)? = nil
+    var onStartStrengthWorkout: ((GymResolvablePlan, [StrengthProgressionProposal], [WorkoutSessionLog]) -> Void)? = nil
+    var onResumeStrengthWorkout: (() -> Void)? = nil
 
     @State private var briefing: DailyCoachBriefing?
+    @State private var strengthCardState: StrengthTrainingCardState?
+    @State private var resolvedPlannedWorkout: GymResolvablePlan?
+    @State private var strengthHistorySessions: [WorkoutSessionLog] = []
+    @State private var inProgressStrengthSession: StrengthWorkoutSession?
     @State private var historicalSummary: HomeHistoricalDaySummary?
     @State private var displayedMeals: [HomeMealSummary] = []
     @State private var displayedWorkouts: [HomeWorkoutSummary] = []
@@ -67,7 +74,16 @@ struct HomeBriefingView: View {
                 }
 
                 if isViewingToday, let briefing {
-                    briefingHero(briefing)
+                    if briefing.recommendation.destination != .reviewGoal {
+                        briefingHero(briefing)
+                    }
+                    if let strengthCardState {
+                        StrengthTrainingCardView(
+                            state: strengthCardState,
+                            onResume: { resumeStrengthWorkout() },
+                            onStart: { startStrengthWorkout() }
+                        )
+                    }
                     focusCard(briefing)
                     compactProgress(briefing.progress, isToday: true)
                     mealsSection
@@ -416,12 +432,58 @@ struct HomeBriefingView: View {
             historicalSummary = result.historicalSummary
             displayedMeals = result.mealSummaries
             displayedWorkouts = try await loadWorkoutSummaries(for: requestedDay)
+            if viewingToday {
+                try await loadStrengthTrainingCard()
+            } else {
+                strengthCardState = nil
+            }
         } catch {
             guard generation == loadGeneration,
                   requestedDay == nutritionDaySelection.selectedDay else { return }
             loadError = HomeNutritionDayFormatting.loadErrorMessage(isToday: viewingToday)
         }
         isLoading = false
+    }
+
+    private func loadStrengthTrainingCard() async throws {
+        let allSessions = try await workoutRepository.fetchSessions(
+            ownerID: ownerID,
+            from: Calendar.current.date(byAdding: .year, value: -1, to: .now) ?? .distantPast,
+            to: .now.addingTimeInterval(86400)
+        )
+        strengthHistorySessions = allSessions
+
+        let inProgress = try await workoutRepository.fetchInProgressSession(ownerID: ownerID)
+        let inProgressStrength = StrengthSessionPersistence.decodeStrength(from: inProgress?.activeSessionJSON)
+
+        let library = try await gymPlanRepository.fetchLibrary(ownerID: ownerID)
+        let planned = try await StrengthTrainingBriefingBuilder.resolvePlannedWorkout(
+            library: library,
+            gymPlanRepository: gymPlanRepository,
+            ownerID: ownerID
+        )
+        resolvedPlannedWorkout = planned
+
+        strengthCardState = StrengthTrainingBriefingBuilder.buildCardState(
+            inProgressSession: inProgressStrength,
+            plannedWorkout: planned,
+            historySessions: allSessions
+        )
+        inProgressStrengthSession = inProgressStrength
+    }
+
+    private func startStrengthWorkout() {
+        guard let plan = resolvedPlannedWorkout else { return }
+        let proposals = StrengthSessionBuilder.proposals(
+            for: plan,
+            historySessions: strengthHistorySessions
+        )
+        onStartStrengthWorkout?(plan, proposals, strengthHistorySessions)
+    }
+
+    private func resumeStrengthWorkout() {
+        guard inProgressStrengthSession != nil else { return }
+        onResumeStrengthWorkout?()
     }
 
     private func loadWorkoutSummaries(for day: NutritionDay) async throws -> [HomeWorkoutSummary] {
@@ -467,10 +529,22 @@ struct HomeBriefingView: View {
                                 .font(.caption)
                                 .foregroundStyle(DSColor.textSecondary)
                         }
-                        ForEach(workout.setLines, id: \.self) { line in
-                            Text(line)
+                        if let debriefSummary = workout.debriefSummary {
+                            Text(debriefSummary)
                                 .font(.caption)
-                                .foregroundStyle(DSColor.textSecondary)
+                                .foregroundStyle(DSColor.coralEnd)
+                        }
+                        ForEach(workout.exerciseLines) { exercise in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(exercise.exerciseName)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(DSColor.textPrimary)
+                                ForEach(exercise.setLines, id: \.self) { line in
+                                    Text(line)
+                                        .font(.caption)
+                                        .foregroundStyle(DSColor.textSecondary)
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, DSSpacing.xs)
@@ -581,23 +655,43 @@ struct HomeWorkoutSummary: Identifiable {
     let id: UUID
     let title: String
     let setCount: Int
-    let setLines: [String]
+    let exerciseLines: [HomeWorkoutExerciseSummary]
+    let debriefSummary: String?
 
     init(session: WorkoutSessionLog) {
         id = session.id
         title = session.title
-        let sortedSets = session.sets.sorted {
-            if $0.exerciseName != $1.exerciseName { return $0.exerciseName < $1.exerciseName }
-            return $0.setNumber < $1.setNumber
+        setCount = session.sets.count
+        debriefSummary = {
+            guard let debrief = StrengthSessionPersistence.decodeDebrief(from: session.debriefJSON),
+                  let win = debrief.wins.first else { return nil }
+            return "\(win.exerciseName): \(win.detail)"
+        }()
+
+        let grouped = Dictionary(grouping: session.sets.sorted { $0.setNumber < $1.setNumber }) {
+            $0.exerciseID
         }
-        setCount = sortedSets.count
-        setLines = sortedSets.map { set in
-            let weight = set.weightValue.truncatingRemainder(dividingBy: 1) == 0
-                ? String(format: "%.0f", set.weightValue)
-                : String(format: "%.1f", set.weightValue)
-            return "\(set.exerciseName) · \(weight) \(set.weightUnit) × \(set.repetitions)"
+        exerciseLines = grouped.keys.sorted().compactMap { exerciseID in
+            guard let sets = grouped[exerciseID]?.sorted(by: { $0.setNumber < $1.setNumber }),
+                  let name = sets.first?.exerciseName else { return nil }
+            return HomeWorkoutExerciseSummary(
+                exerciseID: exerciseID,
+                exerciseName: name,
+                setLines: sets.map { set in
+                    let weight = set.weightValue.formattedWorkoutWeight
+                    return "\(weight) \(set.weightUnit) × \(set.repetitions)"
+                }
+            )
         }
     }
+}
+
+struct HomeWorkoutExerciseSummary: Identifiable {
+    let exerciseID: String
+    let exerciseName: String
+    let setLines: [String]
+
+    var id: String { exerciseID }
 }
 
 struct HomeMealRestorePayload {
@@ -690,6 +784,7 @@ struct HomeMealItemRestorePayload {
     HomeBriefingView(
         mealRepository: MockMealRepository(),
         workoutRepository: MockWorkoutRepository(),
+        gymPlanRepository: MockGymPlanRepository(),
         goalRepository: MockGoalRepository(),
         nutritionDaySelection: NutritionDaySelection(),
         ownerID: "preview.user",
@@ -798,4 +893,10 @@ private func previewBriefingCanvas(_ briefing: DailyCoachBriefing) -> some View 
         .padding(DSSpacing.lg)
     }
     .background(DSColor.background.ignoresSafeArea())
+}
+
+private extension Double {
+    var formattedWorkoutWeight: String {
+        truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", self) : String(format: "%.1f", self)
+    }
 }

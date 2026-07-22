@@ -149,11 +149,57 @@
 		A100000000000000000000BD /* SwiftDataStoreInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000BD /* SwiftDataStoreInspector.swift */; };
 		A100000000000000000000BE /* GymPlanImportError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000BE /* GymPlanImportError.swift */; };
 		A100000000000000000000BF /* AIProxyCallDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000BF /* AIProxyCallDiagnostics.swift */; };
-		A100000000000000000000C0 /* GymPlanImportHTTPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C0 /* GymPlanImportHTTPTests.swift */; };
+		A100000000000000000000C0 /* StrengthSessionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C0 /* StrengthSessionModels.swift */; };
+		A100000000000000000000C1 /* StrengthExerciseHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C1 /* StrengthExerciseHistory.swift */; };
+		A100000000000000000000C2 /* StrengthWeightIncrement.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C2 /* StrengthWeightIncrement.swift */; };
+		A100000000000000000000C3 /* StrengthProgressionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C3 /* StrengthProgressionEngine.swift */; };
+		A100000000000000000000C4 /* StrengthSessionBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C4 /* StrengthSessionBuilder.swift */; };
+		A100000000000000000000C5 /* StrengthCoachingMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C5 /* StrengthCoachingMessages.swift */; };
+		A100000000000000000000C6 /* StrengthDebriefBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C6 /* StrengthDebriefBuilder.swift */; };
+		A100000000000000000000C7 /* StrengthSessionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C7 /* StrengthSessionPersistence.swift */; };
+		A100000000000000000000C8 /* StrengthTrainingBriefingBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C8 /* StrengthTrainingBriefingBuilder.swift */; };
+		A100000000000000000000C9 /* StrengthWorkoutController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C9 /* StrengthWorkoutController.swift */; };
+		A100000000000000000000CA /* StrengthTrainingCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000CA /* StrengthTrainingCardView.swift */; };
+		A100000000000000000000CB /* StrengthPreFlightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000CB /* StrengthPreFlightView.swift */; };
+		A100000000000000000000CC /* StrengthActiveWorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000CC /* StrengthActiveWorkoutView.swift */; };
+		A100000000000000000000CD /* StrengthDebriefView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000CD /* StrengthDebriefView.swift */; };
+		A100000000000000000000CE /* StrengthWorkoutFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000CE /* StrengthWorkoutFlowView.swift */; };
+		A100000000000000000000CF /* StrengthProgressionEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000CF /* StrengthProgressionEngineTests.swift */; };
+		A100000000000000000000D0 /* StrengthSessionBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D0 /* StrengthSessionBuilderTests.swift */; };
+		A100000000000000000000D1 /* StrengthWorkoutPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D1 /* StrengthWorkoutPersistenceTests.swift */; };
+		A100000000000000000000D2 /* StrengthDebriefBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D2 /* StrengthDebriefBuilderTests.swift */; };
+		A100000000000000000000D3 /* StrengthWorkoutCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D3 /* StrengthWorkoutCoordinator.swift */; };
+		A100000000000000000000D4 /* StrengthSessionInvariants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D4 /* StrengthSessionInvariants.swift */; };
+		A100000000000000000000D5 /* StrengthSessionPlanEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D5 /* StrengthSessionPlanEditorView.swift */; };
+		A100000000000000000000D6 /* StrengthWorkoutCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D6 /* StrengthWorkoutCoordinatorTests.swift */; };
+		A100000000000000000000D7 /* StrengthPreFlightEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D7 /* StrengthPreFlightEditingTests.swift */; };
+		A100000000000000000000D8 /* StrengthWorkoutEntryRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D8 /* StrengthWorkoutEntryRoutingTests.swift */; };
+		A100000000000000000000E1 /* StrengthWorkoutEntryRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E1 /* StrengthWorkoutEntryRouter.swift */; };
+		A100000000000000000000E2 /* StrengthWorkoutDurationEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E2 /* StrengthWorkoutDurationEstimator.swift */; };
+		A100000000000000000000E3 /* StrengthWorkoutConflictDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E3 /* StrengthWorkoutConflictDialogs.swift */; };
+		A100000000000000000000E4 /* StrengthWorkoutEntryRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E4 /* StrengthWorkoutEntryRouterTests.swift */; };
+		A100000000000000000000E5 /* StrengthWorkoutDurationEstimatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E5 /* StrengthWorkoutDurationEstimatorTests.swift */; };
+		A100000000000000000000E6 /* StrengthSessionPersistenceEncodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E6 /* StrengthSessionPersistenceEncodingTests.swift */; };
+		A100000000000000000000E7 /* StrengthWorkoutConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E7 /* StrengthWorkoutConcurrencyTests.swift */; };
+		A100000000000000000000E8 /* StrengthSessionNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E8 /* StrengthSessionNavigation.swift */; };
+		A100000000000000000000E9 /* StrengthSetFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E9 /* StrengthSetFormatting.swift */; };
+		A100000000000000000000EA /* StrengthGymPhotoAssistService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000EA /* StrengthGymPhotoAssistService.swift */; };
+		A100000000000000000000EB /* GymPhotoInterpretationMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000EB /* GymPhotoInterpretationMapper.swift */; };
+		A100000000000000000000EC /* StrengthActiveWorkoutSupportingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000EC /* StrengthActiveWorkoutSupportingViews.swift */; };
+		A100000000000000000000ED /* StrengthActiveWorkoutFlexibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000ED /* StrengthActiveWorkoutFlexibilityTests.swift */; };
+		A100000000000000000000F1 /* StrengthWorkoutSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000F2 /* StrengthWorkoutSmokeTests.swift */; };
+		A100000000000000000000E0 /* GymPlanImportHTTPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E0 /* GymPlanImportHTTPTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		A00000000000000000000055 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A00000000000000000000020;
+			remoteInfo = TaiAssistant;
+		};
+		A000000000000000000000F8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A00000000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -310,7 +356,47 @@
 		A200000000000000000000BD /* SwiftDataStoreInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataStoreInspector.swift; sourceTree = "<group>"; };
 		A200000000000000000000BE /* GymPlanImportError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportError.swift; sourceTree = "<group>"; };
 		A200000000000000000000BF /* AIProxyCallDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProxyCallDiagnostics.swift; sourceTree = "<group>"; };
-		A200000000000000000000C0 /* GymPlanImportHTTPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportHTTPTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000C0 /* StrengthSessionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSessionModels.swift; sourceTree = "<group>"; };
+		A200000000000000000000C1 /* StrengthExerciseHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthExerciseHistory.swift; sourceTree = "<group>"; };
+		A200000000000000000000C2 /* StrengthWeightIncrement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWeightIncrement.swift; sourceTree = "<group>"; };
+		A200000000000000000000C3 /* StrengthProgressionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthProgressionEngine.swift; sourceTree = "<group>"; };
+		A200000000000000000000C4 /* StrengthSessionBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSessionBuilder.swift; sourceTree = "<group>"; };
+		A200000000000000000000C5 /* StrengthCoachingMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthCoachingMessages.swift; sourceTree = "<group>"; };
+		A200000000000000000000C6 /* StrengthDebriefBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthDebriefBuilder.swift; sourceTree = "<group>"; };
+		A200000000000000000000C7 /* StrengthSessionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSessionPersistence.swift; sourceTree = "<group>"; };
+		A200000000000000000000C8 /* StrengthTrainingBriefingBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthTrainingBriefingBuilder.swift; sourceTree = "<group>"; };
+		A200000000000000000000C9 /* StrengthWorkoutController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutController.swift; sourceTree = "<group>"; };
+		A200000000000000000000CA /* StrengthTrainingCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthTrainingCardView.swift; sourceTree = "<group>"; };
+		A200000000000000000000CB /* StrengthPreFlightView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthPreFlightView.swift; sourceTree = "<group>"; };
+		A200000000000000000000CC /* StrengthActiveWorkoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthActiveWorkoutView.swift; sourceTree = "<group>"; };
+		A200000000000000000000CD /* StrengthDebriefView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthDebriefView.swift; sourceTree = "<group>"; };
+		A200000000000000000000CE /* StrengthWorkoutFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutFlowView.swift; sourceTree = "<group>"; };
+		A200000000000000000000CF /* StrengthProgressionEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthProgressionEngineTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000D0 /* StrengthSessionBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSessionBuilderTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000D1 /* StrengthWorkoutPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutPersistenceTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000D2 /* StrengthDebriefBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthDebriefBuilderTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000D3 /* StrengthWorkoutCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutCoordinator.swift; sourceTree = "<group>"; };
+		A200000000000000000000D4 /* StrengthSessionInvariants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSessionInvariants.swift; sourceTree = "<group>"; };
+		A200000000000000000000D5 /* StrengthSessionPlanEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSessionPlanEditorView.swift; sourceTree = "<group>"; };
+		A200000000000000000000D6 /* StrengthWorkoutCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutCoordinatorTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000D7 /* StrengthPreFlightEditingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthPreFlightEditingTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000D8 /* StrengthWorkoutEntryRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutEntryRoutingTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000E1 /* StrengthWorkoutEntryRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutEntryRouter.swift; sourceTree = "<group>"; };
+		A200000000000000000000E2 /* StrengthWorkoutDurationEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutDurationEstimator.swift; sourceTree = "<group>"; };
+		A200000000000000000000E3 /* StrengthWorkoutConflictDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutConflictDialogs.swift; sourceTree = "<group>"; };
+		A200000000000000000000E4 /* StrengthWorkoutEntryRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutEntryRouterTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000E5 /* StrengthWorkoutDurationEstimatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutDurationEstimatorTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000E6 /* StrengthSessionPersistenceEncodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSessionPersistenceEncodingTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000E7 /* StrengthWorkoutConcurrencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutConcurrencyTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000E8 /* StrengthSessionNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSessionNavigation.swift; sourceTree = "<group>"; };
+		A200000000000000000000E9 /* StrengthSetFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthSetFormatting.swift; sourceTree = "<group>"; };
+		A200000000000000000000EA /* StrengthGymPhotoAssistService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthGymPhotoAssistService.swift; sourceTree = "<group>"; };
+		A200000000000000000000EB /* GymPhotoInterpretationMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPhotoInterpretationMapper.swift; sourceTree = "<group>"; };
+		A200000000000000000000EC /* StrengthActiveWorkoutSupportingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthActiveWorkoutSupportingViews.swift; sourceTree = "<group>"; };
+		A200000000000000000000ED /* StrengthActiveWorkoutFlexibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthActiveWorkoutFlexibilityTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000F1 /* TaiAssistantUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TaiAssistantUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A200000000000000000000F2 /* StrengthWorkoutSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrengthWorkoutSmokeTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000E0 /* GymPlanImportHTTPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportHTTPTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -322,6 +408,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A00000000000000000000067 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A000000000000000000000F6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -340,6 +433,7 @@
 				A00000000000000000000005 /* TaiAssistant/Core */,
 				A00000000000000000000006 /* TaiAssistant/Features */,
 				A00000000000000000000060 /* TaiAssistantTests */,
+				A000000000000000000000F3 /* TaiAssistantUITests */,
 				A00000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -349,6 +443,7 @@
 			children = (
 				A20000000000000000000030 /* TaiAssistant.app */,
 				A2000000000000000000004A /* TaiAssistantTests.xctest */,
+				A200000000000000000000F1 /* TaiAssistantUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -609,9 +704,29 @@
 				A200000000000000000000A6 /* GymPlansRepositoryTests.swift */,
 				A200000000000000000000A8 /* GymWorkoutStartConflictTests.swift */,
 				A200000000000000000000B6 /* GymPlanImportTests.swift */,
-				A200000000000000000000C0 /* GymPlanImportHTTPTests.swift */,
+				A200000000000000000000CF /* StrengthProgressionEngineTests.swift */,
+				A200000000000000000000D0 /* StrengthSessionBuilderTests.swift */,
+				A200000000000000000000D1 /* StrengthWorkoutPersistenceTests.swift */,
+				A200000000000000000000D2 /* StrengthDebriefBuilderTests.swift */,
+				A200000000000000000000D6 /* StrengthWorkoutCoordinatorTests.swift */,
+				A200000000000000000000D7 /* StrengthPreFlightEditingTests.swift */,
+				A200000000000000000000D8 /* StrengthWorkoutEntryRoutingTests.swift */,
+				A200000000000000000000E4 /* StrengthWorkoutEntryRouterTests.swift */,
+				A200000000000000000000E5 /* StrengthWorkoutDurationEstimatorTests.swift */,
+				A200000000000000000000E6 /* StrengthSessionPersistenceEncodingTests.swift */,
+				A200000000000000000000E7 /* StrengthWorkoutConcurrencyTests.swift */,
+				A200000000000000000000ED /* StrengthActiveWorkoutFlexibilityTests.swift */,
+				A200000000000000000000E0 /* GymPlanImportHTTPTests.swift */,
 			);
 			path = TaiAssistantTests;
+			sourceTree = "<group>";
+		};
+		A000000000000000000000F3 /* TaiAssistantUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A200000000000000000000F2 /* StrengthWorkoutSmokeTests.swift */,
+			);
+			path = TaiAssistantUITests;
 			sourceTree = "<group>";
 		};
 		A00000000000000000000061 /* Analytics */ = {
@@ -774,9 +889,34 @@
 			path = Gym;
 			sourceTree = "<group>";
 		};
+		A000000000000000000000C0 /* Strength */ = {
+			isa = PBXGroup;
+			children = (
+				A200000000000000000000C0 /* StrengthSessionModels.swift */,
+				A200000000000000000000C1 /* StrengthExerciseHistory.swift */,
+				A200000000000000000000C2 /* StrengthWeightIncrement.swift */,
+				A200000000000000000000C3 /* StrengthProgressionEngine.swift */,
+				A200000000000000000000C4 /* StrengthSessionBuilder.swift */,
+				A200000000000000000000C5 /* StrengthCoachingMessages.swift */,
+				A200000000000000000000C6 /* StrengthDebriefBuilder.swift */,
+				A200000000000000000000C7 /* StrengthSessionPersistence.swift */,
+				A200000000000000000000C8 /* StrengthTrainingBriefingBuilder.swift */,
+				A200000000000000000000C9 /* StrengthWorkoutController.swift */,
+				A200000000000000000000D3 /* StrengthWorkoutCoordinator.swift */,
+				A200000000000000000000D4 /* StrengthSessionInvariants.swift */,
+				A200000000000000000000E1 /* StrengthWorkoutEntryRouter.swift */,
+				A200000000000000000000E2 /* StrengthWorkoutDurationEstimator.swift */,
+				A200000000000000000000E8 /* StrengthSessionNavigation.swift */,
+				A200000000000000000000E9 /* StrengthSetFormatting.swift */,
+				A200000000000000000000EA /* StrengthGymPhotoAssistService.swift */,
+			);
+			path = Strength;
+			sourceTree = "<group>";
+		};
 		A0000000000000000000007D /* Domain */ = {
 			isa = PBXGroup;
 			children = (
+				A000000000000000000000C0 /* Strength */,
 				A20000000000000000000090 /* GymExerciseCatalog.swift */,
 				A20000000000000000000091 /* GymProgramTemplate.swift */,
 				A20000000000000000000092 /* GymWorkoutSessionState.swift */,
@@ -787,13 +927,30 @@
 				A200000000000000000000B2 /* GymPlanImportMapper.swift */,
 				A200000000000000000000B9 /* GymPlanImportImageSupport.swift */,
 				A200000000000000000000A7 /* GymWorkoutStartConflict.swift */,
+				A200000000000000000000EB /* GymPhotoInterpretationMapper.swift */,
 			);
 			path = Domain;
+			sourceTree = "<group>";
+		};
+		A000000000000000000000C1 /* Strength */ = {
+			isa = PBXGroup;
+			children = (
+				A200000000000000000000CA /* StrengthTrainingCardView.swift */,
+				A200000000000000000000CB /* StrengthPreFlightView.swift */,
+				A200000000000000000000CC /* StrengthActiveWorkoutView.swift */,
+				A200000000000000000000EC /* StrengthActiveWorkoutSupportingViews.swift */,
+				A200000000000000000000CD /* StrengthDebriefView.swift */,
+				A200000000000000000000CE /* StrengthWorkoutFlowView.swift */,
+				A200000000000000000000D5 /* StrengthSessionPlanEditorView.swift */,
+				A200000000000000000000E3 /* StrengthWorkoutConflictDialogs.swift */,
+			);
+			path = Strength;
 			sourceTree = "<group>";
 		};
 		A0000000000000000000007E /* Presentation */ = {
 			isa = PBXGroup;
 			children = (
+				A000000000000000000000C1 /* Strength */,
 				A200000000000000000000A4 /* GymPlansView.swift */,
 				A200000000000000000000A5 /* GymPlanEditorView.swift */,
 				A200000000000000000000B3 /* GymPlanImportSourceViews.swift */,
@@ -858,6 +1015,23 @@
 			productReference = A2000000000000000000004A /* TaiAssistantTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		A000000000000000000000F4 /* TaiAssistantUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A000000000000000000000F9 /* Build configuration list for PBXNativeTarget "TaiAssistantUITests" */;
+			buildPhases = (
+				A000000000000000000000F5 /* Sources */,
+				A000000000000000000000F6 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A000000000000000000000F7 /* PBXTargetDependency */,
+			);
+			name = TaiAssistantUITests;
+			productName = TaiAssistantUITests;
+			productReference = A200000000000000000000F1 /* TaiAssistantUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -872,6 +1046,10 @@
 						CreatedOnToolsVersion = 16.0;
 					};
 					A00000000000000000000050 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A00000000000000000000020;
+					};
+					A000000000000000000000F4 = {
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = A00000000000000000000020;
 					};
@@ -892,6 +1070,7 @@
 			targets = (
 				A00000000000000000000020 /* TaiAssistant */,
 				A00000000000000000000050 /* TaiAssistantTests */,
+				A000000000000000000000F4 /* TaiAssistantUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -1019,6 +1198,32 @@
 				A100000000000000000000A3 /* LocalSwiftDataGymPlanRepository.swift in Sources */,
 				A100000000000000000000A4 /* GymPlansView.swift in Sources */,
 				A100000000000000000000A5 /* GymPlanEditorView.swift in Sources */,
+				A100000000000000000000C0 /* StrengthSessionModels.swift in Sources */,
+				A100000000000000000000C1 /* StrengthExerciseHistory.swift in Sources */,
+				A100000000000000000000C2 /* StrengthWeightIncrement.swift in Sources */,
+				A100000000000000000000C3 /* StrengthProgressionEngine.swift in Sources */,
+				A100000000000000000000C4 /* StrengthSessionBuilder.swift in Sources */,
+				A100000000000000000000C5 /* StrengthCoachingMessages.swift in Sources */,
+				A100000000000000000000C6 /* StrengthDebriefBuilder.swift in Sources */,
+				A100000000000000000000C7 /* StrengthSessionPersistence.swift in Sources */,
+				A100000000000000000000C8 /* StrengthTrainingBriefingBuilder.swift in Sources */,
+				A100000000000000000000C9 /* StrengthWorkoutController.swift in Sources */,
+				A100000000000000000000D3 /* StrengthWorkoutCoordinator.swift in Sources */,
+				A100000000000000000000D4 /* StrengthSessionInvariants.swift in Sources */,
+				A100000000000000000000E1 /* StrengthWorkoutEntryRouter.swift in Sources */,
+				A100000000000000000000E2 /* StrengthWorkoutDurationEstimator.swift in Sources */,
+				A100000000000000000000CA /* StrengthTrainingCardView.swift in Sources */,
+				A100000000000000000000CB /* StrengthPreFlightView.swift in Sources */,
+				A100000000000000000000CC /* StrengthActiveWorkoutView.swift in Sources */,
+				A100000000000000000000CD /* StrengthDebriefView.swift in Sources */,
+				A100000000000000000000CE /* StrengthWorkoutFlowView.swift in Sources */,
+				A100000000000000000000D5 /* StrengthSessionPlanEditorView.swift in Sources */,
+				A100000000000000000000E3 /* StrengthWorkoutConflictDialogs.swift in Sources */,
+				A100000000000000000000E8 /* StrengthSessionNavigation.swift in Sources */,
+				A100000000000000000000E9 /* StrengthSetFormatting.swift in Sources */,
+				A100000000000000000000EA /* StrengthGymPhotoAssistService.swift in Sources */,
+				A100000000000000000000EB /* GymPhotoInterpretationMapper.swift in Sources */,
+				A100000000000000000000EC /* StrengthActiveWorkoutSupportingViews.swift in Sources */,
 				A100000000000000000000B0 /* GymPlanExerciseReference.swift in Sources */,
 				A100000000000000000000B1 /* GymPlanImportModels.swift in Sources */,
 				A100000000000000000000BE /* GymPlanImportError.swift in Sources */,
@@ -1059,8 +1264,28 @@
 				A100000000000000000000BD /* SwiftDataStoreInspector.swift in Sources */,
 				A100000000000000000000A6 /* GymPlansRepositoryTests.swift in Sources */,
 				A100000000000000000000A8 /* GymWorkoutStartConflictTests.swift in Sources */,
+				A100000000000000000000CF /* StrengthProgressionEngineTests.swift in Sources */,
+				A100000000000000000000D0 /* StrengthSessionBuilderTests.swift in Sources */,
+				A100000000000000000000D1 /* StrengthWorkoutPersistenceTests.swift in Sources */,
+				A100000000000000000000D2 /* StrengthDebriefBuilderTests.swift in Sources */,
+				A100000000000000000000D6 /* StrengthWorkoutCoordinatorTests.swift in Sources */,
+				A100000000000000000000D7 /* StrengthPreFlightEditingTests.swift in Sources */,
+				A100000000000000000000D8 /* StrengthWorkoutEntryRoutingTests.swift in Sources */,
+				A100000000000000000000E4 /* StrengthWorkoutEntryRouterTests.swift in Sources */,
+				A100000000000000000000E5 /* StrengthWorkoutDurationEstimatorTests.swift in Sources */,
+				A100000000000000000000E6 /* StrengthSessionPersistenceEncodingTests.swift in Sources */,
+				A100000000000000000000E7 /* StrengthWorkoutConcurrencyTests.swift in Sources */,
+				A100000000000000000000ED /* StrengthActiveWorkoutFlexibilityTests.swift in Sources */,
 				A100000000000000000000B6 /* GymPlanImportTests.swift in Sources */,
-				A100000000000000000000C0 /* GymPlanImportHTTPTests.swift in Sources */,
+				A100000000000000000000E0 /* GymPlanImportHTTPTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A000000000000000000000F5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A100000000000000000000F1 /* StrengthWorkoutSmokeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1071,6 +1296,11 @@
 			isa = PBXTargetDependency;
 			target = A00000000000000000000020 /* TaiAssistant */;
 			targetProxy = A00000000000000000000055 /* PBXContainerItemProxy */;
+		};
+		A000000000000000000000F7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A00000000000000000000020 /* TaiAssistant */;
+			targetProxy = A000000000000000000000F8 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1305,6 +1535,40 @@
 			};
 			name = Release;
 		};
+		A000000000000000000000FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.william.taiassistant.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = TaiAssistant;
+			};
+			name = Debug;
+		};
+		A000000000000000000000FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.william.taiassistant.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = TaiAssistant;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1331,6 +1595,15 @@
 			buildConfigurations = (
 				A00000000000000000000057 /* Debug */,
 				A00000000000000000000058 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A000000000000000000000F9 /* Build configuration list for PBXNativeTarget "TaiAssistantUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A000000000000000000000FA /* Debug */,
+				A000000000000000000000FB /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -8,13 +8,21 @@ struct TaiAssistantApp: App {
     private let modelContainer: ModelContainer
 
     init() {
-        let config = RuntimeAppConfig.default
+        let config: RuntimeAppConfig
+        if ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke") {
+            config = .uiTestStrengthSmoke
+        } else {
+            config = .default
+        }
         self.config = config
         let container = AppModelContainerFactory.makeContainer(
             inMemory: config.useInMemoryStore,
-            includePreviewSeedData: config.useInMemoryStore,
+            includePreviewSeedData: false,
             ownerID: config.localOwnerID
         )
+        if ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke") {
+            try? PreviewSeedData.seedIfNeeded(in: container, ownerID: config.localOwnerID)
+        }
         self.modelContainer = container
         self.dependencies = AppDependencies.live(modelContainer: container, config: config)
     }

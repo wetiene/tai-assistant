@@ -65,4 +65,11 @@ enum AppModelContainerFactory {
     let configuration = ModelConfiguration(url: storeURL)
     return try ModelContainer(for: schema, configurations: [configuration])
   }
+
+  /// Opens a V4 store for migration tests (workouts without debrief persistence).
+  static func makeLegacyV4Container(storeURL: URL) throws -> ModelContainer {
+    let schema = Schema(versionedSchema: TaiAssistantSchemaV4.self)
+    let configuration = ModelConfiguration(url: storeURL)
+    return try ModelContainer(for: schema, configurations: [configuration])
+  }
 }

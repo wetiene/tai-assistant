@@ -22,6 +22,9 @@ final class ActiveConversationSessionController {
     private var onWorkoutSaved: (() -> Void)?
     private var onManageGymPlans: (() -> Void)?
     private var onPresentGymPlanImportReview: ((GymPlanImportDraft, String?) -> Void)?
+    private var onPresentStrengthWorkout: ((StrengthWorkoutPresentation) -> Void)?
+    private var strengthWorkoutCoordinator: StrengthWorkoutCoordinator?
+    private weak var strengthWorkoutEntryRouter: StrengthWorkoutEntryRouter?
     private var loadTask: Task<Void, Never>?
     private var didLoad = false
     private var persistCoordinator: ConversationPersistCoordinator?
@@ -68,6 +71,35 @@ final class ActiveConversationSessionController {
     func updateOnPresentGymPlanImportReview(_ handler: ((GymPlanImportDraft, String?) -> Void)?) {
         onPresentGymPlanImportReview = handler
         viewModel?.onPresentGymPlanImportReview = handler
+    }
+
+    func updateStrengthWorkoutEntryRouting(
+        coordinator: StrengthWorkoutCoordinator,
+        router: StrengthWorkoutEntryRouter,
+        onPresent: @escaping (StrengthWorkoutPresentation) -> Void
+    ) {
+        strengthWorkoutCoordinator = coordinator
+        strengthWorkoutEntryRouter = router
+        onPresentStrengthWorkout = onPresent
+        viewModel?.strengthWorkoutCoordinator = coordinator
+        viewModel?.onPresentStrengthWorkout = onPresent
+        viewModel?.onRequestStrengthWorkoutStart = { [weak router] target, source in
+            Task { await router?.requestStart(target: target, source: source) }
+        }
+        viewModel?.onRequestStrengthWorkoutResume = { [weak router] source in
+            Task { await router?.requestResume(source: source) }
+        }
+    }
+
+    /// Retained for tests and legacy wiring.
+    func updateStrengthWorkoutRouting(
+        coordinator: StrengthWorkoutCoordinator,
+        onPresent: @escaping (StrengthWorkoutPresentation) -> Void
+    ) {
+        strengthWorkoutCoordinator = coordinator
+        onPresentStrengthWorkout = onPresent
+        viewModel?.strengthWorkoutCoordinator = coordinator
+        viewModel?.onPresentStrengthWorkout = onPresent
     }
 
     /// Idempotent: first call starts restore; later calls await the same load.
@@ -172,7 +204,9 @@ final class ActiveConversationSessionController {
                 onMealSaved: onMealSaved,
                 onWorkoutSaved: onWorkoutSaved,
                 onManageGymPlans: onManageGymPlans,
-                onPresentGymPlanImportReview: onPresentGymPlanImportReview
+                onPresentGymPlanImportReview: onPresentGymPlanImportReview,
+                onPresentStrengthWorkout: onPresentStrengthWorkout,
+                strengthWorkoutCoordinator: strengthWorkoutCoordinator
             )
             let beforeSeed = store.active
             vm.startIfNeeded()
@@ -206,9 +240,17 @@ final class ActiveConversationSessionController {
         case .focusComposer:
             viewModel.startIfNeeded()
         case .startGymWorkout(let target):
-            viewModel.applyGymIntent(workoutTarget: target)
+            if let router = strengthWorkoutEntryRouter {
+                Task { await router.requestStart(target: target, source: .home) }
+            } else {
+                viewModel.applyGymIntent(workoutTarget: target)
+            }
         case .resumeGymWorkout:
-            viewModel.applyGymIntent(resume: true)
+            if let router = strengthWorkoutEntryRouter {
+                Task { await router.requestResume(source: .home) }
+            } else {
+                viewModel.applyGymIntent(resume: true)
+            }
         case .manageGymPlans:
             viewModel.onManageGymPlans?()
         }

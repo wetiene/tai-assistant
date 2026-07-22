@@ -11,13 +11,15 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
         XCTAssertEqual(TaiAssistantSchemaV2.versionIdentifier, Schema.Version(2, 0, 0))
         XCTAssertEqual(TaiAssistantSchemaV3.versionIdentifier, Schema.Version(3, 0, 0))
         XCTAssertEqual(TaiAssistantSchemaV4.versionIdentifier, Schema.Version(4, 0, 0))
-        XCTAssertEqual(TaiAssistantSchema.currentVersionIdentifier, TaiAssistantSchemaV4.versionIdentifier)
+        XCTAssertEqual(TaiAssistantSchemaV5.versionIdentifier, Schema.Version(5, 0, 0))
+        XCTAssertEqual(TaiAssistantSchema.currentVersionIdentifier, TaiAssistantSchemaV5.versionIdentifier)
 
         let identifiers = [
             TaiAssistantSchemaV1.versionIdentifier,
             TaiAssistantSchemaV2.versionIdentifier,
             TaiAssistantSchemaV3.versionIdentifier,
             TaiAssistantSchemaV4.versionIdentifier,
+            TaiAssistantSchemaV5.versionIdentifier,
         ]
         XCTAssertEqual(Set(identifiers).count, identifiers.count)
     }
@@ -231,7 +233,7 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
             )
         )
 
-        let completedSession = WorkoutSessionLog(
+        let completedSession = WorkoutSessionLogV2(
             id: completedSessionID,
             ownerID: ownerID,
             templateID: GymProgramTemplateID.upperBody.rawValue,
@@ -241,7 +243,7 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
             statusRaw: GymWorkoutSessionStatus.completed.rawValue,
             activeSessionJSON: nil
         )
-        let completedSet = WorkoutSetLog(
+        let completedSet = WorkoutSetLogV2(
             exerciseID: GymExerciseID.supineChestPress.rawValue,
             exerciseName: GymExerciseID.supineChestPress.displayName,
             setNumber: 1,
@@ -266,7 +268,7 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
             status: .inProgress
         )
         let activeJSON = try JSONEncoder().encode(activeSnapshot)
-        let activeSession = WorkoutSessionLog(
+        let activeSession = WorkoutSessionLogV2(
             id: activeSessionID,
             ownerID: ownerID,
             templateID: GymProgramTemplateID.lowerBody.rawValue,
@@ -391,7 +393,7 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
             )
         )
 
-        let completedSession = WorkoutSessionLog(
+        let completedSession = WorkoutSessionLogV2(
             id: completedSessionID,
             ownerID: ownerID,
             templateID: GymProgramTemplateID.upperBody.rawValue,
@@ -401,7 +403,7 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
             statusRaw: GymWorkoutSessionStatus.completed.rawValue,
             activeSessionJSON: nil
         )
-        let completedSet = WorkoutSetLog(
+        let completedSet = WorkoutSetLogV2(
             exerciseID: GymExerciseID.supineChestPress.rawValue,
             exerciseName: GymExerciseID.supineChestPress.displayName,
             setNumber: 1,
@@ -426,7 +428,7 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
             status: .inProgress
         )
         let activeJSON = try JSONEncoder().encode(activeSnapshot)
-        let activeSession = WorkoutSessionLog(
+        let activeSession = WorkoutSessionLogV2(
             id: activeSessionID,
             ownerID: ownerID,
             templateID: GymProgramTemplateID.lowerBody.rawValue,
@@ -533,5 +535,182 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
         XCTAssertEqual(summariesAfterReopen.count, 2)
         let libraryAfterReopen = try await gymPlanRepo.fetchLibrary(ownerID: ownerID)
         XCTAssertEqual(libraryAfterReopen.activePlan?.reference, importedReference)
+    }
+
+    func testV4AndV5SchemasHaveDistinctVersionIdentifiersAndModels() {
+        XCTAssertNotEqual(
+            TaiAssistantSchemaV4.versionIdentifier,
+            TaiAssistantSchemaV5.versionIdentifier
+        )
+        XCTAssertTrue(TaiAssistantSchemaV4.models.contains { $0 == TaiAssistantSchemaV2.WorkoutSessionLog.self })
+        XCTAssertTrue(TaiAssistantSchemaV5.models.contains { $0 == WorkoutSessionLog.self })
+        XCTAssertFalse(TaiAssistantSchemaV4.models.contains { $0 == WorkoutSessionLog.self })
+    }
+
+    func testV4StoreMigratesToV5PreservingWorkoutsAndEnablingDebrief() async throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tai-v4v5-\(UUID().uuidString).sqlite")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: storeURL.appendingPathExtension("wal"))
+            try? FileManager.default.removeItem(at: storeURL.appendingPathExtension("shm"))
+        }
+
+        let completedSessionID = UUID()
+        let v4Container = try AppModelContainerFactory.makeLegacyV4Container(storeURL: storeURL)
+        let v4Context = ModelContext(v4Container)
+
+        let completedSession = WorkoutSessionLogV2(
+            id: completedSessionID,
+            ownerID: ownerID,
+            templateID: GymProgramTemplateID.upperBody.rawValue,
+            title: "Upper Body",
+            startedAt: .now.addingTimeInterval(-3600),
+            completedAt: .now.addingTimeInterval(-1800),
+            statusRaw: GymWorkoutSessionStatus.completed.rawValue,
+            activeSessionJSON: nil
+        )
+        let completedSet = WorkoutSetLogV2(
+            exerciseID: GymExerciseID.supineChestPress.rawValue,
+            exerciseName: GymExerciseID.supineChestPress.displayName,
+            setNumber: 1,
+            weightValue: 60,
+            weightUnit: "kg",
+            repetitions: 10
+        )
+        completedSet.session = completedSession
+        completedSession.sets = [completedSet]
+        v4Context.insert(completedSession)
+        try v4Context.save()
+
+        let migratedContainer = AppModelContainerFactory.makeContainer(inMemory: false, storeURL: storeURL)
+        let workoutRepo = LocalSwiftDataWorkoutRepository(container: migratedContainer)
+        let bounds = NutritionDay.today().queryBounds()
+        let sessions = try await workoutRepo.fetchSessions(
+            ownerID: ownerID,
+            from: bounds.start.addingTimeInterval(-7200),
+            to: bounds.end
+        )
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.id, completedSessionID)
+        XCTAssertNil(sessions.first?.debriefJSON)
+
+        var migratedSession = sessions.first!
+        migratedSession.debriefJSON = try StrengthSessionPersistence.encodeDebrief(
+            StrengthWorkoutDebrief(
+                sessionID: completedSessionID,
+                generatedAt: .now,
+                durationSeconds: 1800,
+                exercisesCompleted: 1,
+                exercisesSkipped: 0,
+                totalWorkingSets: 1,
+                wins: [],
+                watchItems: [],
+                nextTimeRecommendations: []
+            )
+        )
+        try await workoutRepo.updateSession(migratedSession)
+
+        let persisted = try await workoutRepo.fetchSessions(
+            ownerID: ownerID,
+            from: bounds.start.addingTimeInterval(-7200),
+            to: bounds.end
+        ).first
+        XCTAssertNotNil(persisted?.debriefJSON)
+        XCTAssertEqual(StrengthSessionPersistence.decodeDebrief(from: persisted?.debriefJSON)?.sessionID, completedSessionID)
+
+        _ = AppModelContainerFactory.makeContainer(inMemory: false, storeURL: storeURL)
+    }
+
+    func testV4ActiveLegacySessionMigratesToV5AndRestores() async throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tai-v4-active-\(UUID().uuidString).sqlite")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: storeURL.appendingPathExtension("wal"))
+            try? FileManager.default.removeItem(at: storeURL.appendingPathExtension("shm"))
+        }
+
+        let activeSessionID = UUID()
+        let v4Container = try AppModelContainerFactory.makeLegacyV4Container(storeURL: storeURL)
+        let v4Context = ModelContext(v4Container)
+
+        let activePlan = GymProgramTemplateLibrary.resolvableStarter(.lowerBody)
+        let activeSnapshot = GymActiveSession(
+            sessionID: activeSessionID,
+            planReference: .starter(.lowerBody),
+            title: activePlan.title,
+            exercises: activePlan.exercises,
+            prescription: activePlan.prescription,
+            currentExerciseIndex: 0,
+            currentSetNumber: 1,
+            startedAt: .now.addingTimeInterval(-300),
+            status: .inProgress
+        )
+        let activeJSON = try JSONEncoder().encode(activeSnapshot)
+        v4Context.insert(
+            WorkoutSessionLogV2(
+                id: activeSessionID,
+                ownerID: ownerID,
+                templateID: GymProgramTemplateID.lowerBody.rawValue,
+                title: "Lower Body",
+                startedAt: activeSnapshot.startedAt,
+                statusRaw: GymWorkoutSessionStatus.inProgress.rawValue,
+                activeSessionJSON: activeJSON
+            )
+        )
+        try v4Context.save()
+
+        let migratedContainer = AppModelContainerFactory.makeContainer(inMemory: false, storeURL: storeURL)
+        let workoutRepo = LocalSwiftDataWorkoutRepository(container: migratedContainer)
+        let inProgress = try await workoutRepo.fetchInProgressSession(ownerID: ownerID)
+        XCTAssertEqual(inProgress?.id, activeSessionID)
+        let restored = StrengthSessionPersistence.decodeStrength(from: inProgress?.activeSessionJSON)
+        XCTAssertEqual(restored?.sessionID, activeSessionID)
+        XCTAssertEqual(restored?.origin, .conversation)
+    }
+
+    func testV5StrengthSnapshotRoundTripPreservesProposals() throws {
+        let proposal = StrengthProgressionProposal(
+            exerciseID: GymExerciseID.supineChestPress.rawValue,
+            exerciseName: "Chest Press",
+            currentWeight: 40,
+            proposedWeight: 42.5,
+            decision: .increase,
+            repRangeLower: 8,
+            repRangeUpper: 10,
+            reasoning: StrengthProgressionReasoning(
+                observation: "obs",
+                rule: "rule",
+                recommendation: "rec",
+                targetRepsLabel: "8–10",
+                fallback: "fb"
+            ),
+            confidence: .high,
+            weightUnit: "kg"
+        )
+        var session = StrengthSessionBuilder.makeSession(
+            plan: GymProgramTemplateLibrary.resolvableStarter(.upperBody),
+            proposals: [proposal],
+            acceptedProposals: [
+                proposal.exerciseID: StrengthAcceptedProposal(
+                    exerciseID: proposal.exerciseID,
+                    decision: .accepted,
+                    weight: 42.5,
+                    weightUnit: "kg",
+                    originalProposal: proposal
+                ),
+            ],
+            historySessions: [],
+            origin: .home,
+            preFlightCompleted: true
+        )
+        session.preFlightProposals = [proposal]
+
+        let data = try XCTUnwrap(StrengthSessionPersistence.encode(session))
+        let restored = try XCTUnwrap(StrengthSessionPersistence.decodeStrength(from: data))
+        XCTAssertEqual(restored.preFlightProposals?.count, 1)
+        XCTAssertEqual(restored.acceptedProposals[proposal.exerciseID]?.weight, 42.5)
+        XCTAssertTrue(restored.preFlightCompleted)
     }
 }
