@@ -88,6 +88,16 @@
 		A10000000000000000000080 /* ConversationRuntimeProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000080 /* ConversationRuntimeProbe.swift */; };
 		A10000000000000000000081 /* MealCardPayloadCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000081 /* MealCardPayloadCache.swift */; };
 		A10000000000000000000082 /* ConversationRuntimeStabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000082 /* ConversationRuntimeStabilityTests.swift */; };
+		A10000000000000000000083 /* NutritionDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000083 /* NutritionDay.swift */; };
+		A10000000000000000000084 /* NutritionDaySelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000084 /* NutritionDaySelection.swift */; };
+		A10000000000000000000085 /* NutritionDayAggregation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000085 /* NutritionDayAggregation.swift */; };
+		A10000000000000000000086 /* MealLog+NutritionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000086 /* MealLog+NutritionSemantics.swift */; };
+		A10000000000000000000087 /* MealRepository+NutritionDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000087 /* MealRepository+NutritionDay.swift */; };
+		A10000000000000000000088 /* HomeNutritionDayLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000088 /* HomeNutritionDayLoader.swift */; };
+		A10000000000000000000089 /* NutritionDayFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000089 /* NutritionDayFoundationTests.swift */; };
+		A1000000000000000000008A /* HomeHistoricalDayPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008A /* HomeHistoricalDayPresenter.swift */; };
+		A1000000000000000000008B /* HomeDayNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008B /* HomeDayNavigationBar.swift */; };
+		A1000000000000000000008C /* HomeDayNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008C /* HomeDayNavigationTests.swift */; };
 		A1000000000000000000006E /* ConversationAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006E /* ConversationAttachmentStore.swift */; };
 		A1000000000000000000006F /* ConversationPersistCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006F /* ConversationPersistCoordinator.swift */; };
 		A10000000000000000000077 /* ConversationMealIntentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000077 /* ConversationMealIntentClassifier.swift */; };
@@ -198,6 +208,16 @@
 		A20000000000000000000080 /* ConversationRuntimeProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRuntimeProbe.swift; sourceTree = "<group>"; };
 		A20000000000000000000081 /* MealCardPayloadCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCardPayloadCache.swift; sourceTree = "<group>"; };
 		A20000000000000000000082 /* ConversationRuntimeStabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRuntimeStabilityTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000083 /* NutritionDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionDay.swift; sourceTree = "<group>"; };
+		A20000000000000000000084 /* NutritionDaySelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionDaySelection.swift; sourceTree = "<group>"; };
+		A20000000000000000000085 /* NutritionDayAggregation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionDayAggregation.swift; sourceTree = "<group>"; };
+		A20000000000000000000086 /* MealLog+NutritionSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealLog+NutritionSemantics.swift"; sourceTree = "<group>"; };
+		A20000000000000000000087 /* MealRepository+NutritionDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealRepository+NutritionDay.swift"; sourceTree = "<group>"; };
+		A20000000000000000000088 /* HomeNutritionDayLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeNutritionDayLoader.swift; sourceTree = "<group>"; };
+		A20000000000000000000089 /* NutritionDayFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionDayFoundationTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000008A /* HomeHistoricalDayPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeHistoricalDayPresenter.swift; sourceTree = "<group>"; };
+		A2000000000000000000008B /* HomeDayNavigationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDayNavigationBar.swift; sourceTree = "<group>"; };
+		A2000000000000000000008C /* HomeDayNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDayNavigationTests.swift; sourceTree = "<group>"; };
 		A2000000000000000000006E /* ConversationAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAttachmentStore.swift; sourceTree = "<group>"; };
 		A2000000000000000000006F /* ConversationPersistCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPersistCoordinator.swift; sourceTree = "<group>"; };
 		A20000000000000000000077 /* ConversationMealIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMealIntentClassifier.swift; sourceTree = "<group>"; };
@@ -285,6 +305,7 @@
 				A00000000000000000000019 /* Goals/Presentation */,
 				A00000000000000000000063 /* Home */,
 				A0000000000000000000001B /* MealCapture/Presentation */,
+				A00000000000000000000083 /* Nutrition */,
 			);
 			path = TaiAssistant/Features;
 			sourceTree = "<group>";
@@ -390,6 +411,7 @@
 				A20000000000000000000012 /* GoalRepository.swift */,
 				A20000000000000000000013 /* HealthService.swift */,
 				A20000000000000000000014 /* MealRepository.swift */,
+				A20000000000000000000087 /* MealRepository+NutritionDay.swift */,
 				A20000000000000000000015 /* PersistenceRepositories.swift */,
 				A20000000000000000000061 /* ActiveConversationRepository.swift */,
 			);
@@ -483,6 +505,8 @@
 				A2000000000000000000006B /* ConversationPerformanceProbeTests.swift */,
 				A2000000000000000000006D /* HomeOptimisticDeleteTests.swift */,
 				A20000000000000000000082 /* ConversationRuntimeStabilityTests.swift */,
+				A20000000000000000000089 /* NutritionDayFoundationTests.swift */,
+				A2000000000000000000008C /* HomeDayNavigationTests.swift */,
 			);
 			path = TaiAssistantTests;
 			sourceTree = "<group>";
@@ -526,6 +550,8 @@
 				A20000000000000000000040 /* CoachBriefingModels.swift */,
 				A20000000000000000000042 /* CoachBriefingInputFactory.swift */,
 				A20000000000000000000041 /* DailyCoachBriefingBuilder.swift */,
+				A20000000000000000000088 /* HomeNutritionDayLoader.swift */,
+				A2000000000000000000008A /* HomeHistoricalDayPresenter.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -535,8 +561,28 @@
 			children = (
 				A20000000000000000000043 /* HomeBriefingView.swift */,
 				A20000000000000000000044 /* RecommendationWhySheet.swift */,
+				A2000000000000000000008B /* HomeDayNavigationBar.swift */,
 			);
 			path = Presentation;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000083 /* Nutrition */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000084 /* Domain */,
+			);
+			path = Nutrition;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000084 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000083 /* NutritionDay.swift */,
+				A20000000000000000000084 /* NutritionDaySelection.swift */,
+				A20000000000000000000085 /* NutritionDayAggregation.swift */,
+				A20000000000000000000086 /* MealLog+NutritionSemantics.swift */,
+			);
+			path = Domain;
 			sourceTree = "<group>";
 		};
 		A00000000000000000000070 /* Conversation */ = {
@@ -788,6 +834,14 @@
 				A10000000000000000000073 /* LiveTaiCapabilityController.swift in Sources */,
 				A10000000000000000000074 /* LiveTaiWhySheet.swift in Sources */,
 				A1000000000000000000006F /* ConversationPersistCoordinator.swift in Sources */,
+				A10000000000000000000083 /* NutritionDay.swift in Sources */,
+				A10000000000000000000084 /* NutritionDaySelection.swift in Sources */,
+				A10000000000000000000085 /* NutritionDayAggregation.swift in Sources */,
+				A10000000000000000000086 /* MealLog+NutritionSemantics.swift in Sources */,
+				A10000000000000000000087 /* MealRepository+NutritionDay.swift in Sources */,
+				A10000000000000000000088 /* HomeNutritionDayLoader.swift in Sources */,
+				A1000000000000000000008A /* HomeHistoricalDayPresenter.swift in Sources */,
+				A1000000000000000000008B /* HomeDayNavigationBar.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -809,6 +863,8 @@
 				A1000000000000000000006B /* ConversationPerformanceProbeTests.swift in Sources */,
 				A1000000000000000000006D /* HomeOptimisticDeleteTests.swift in Sources */,
 				A10000000000000000000082 /* ConversationRuntimeStabilityTests.swift in Sources */,
+				A10000000000000000000089 /* NutritionDayFoundationTests.swift in Sources */,
+				A1000000000000000000008C /* HomeDayNavigationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

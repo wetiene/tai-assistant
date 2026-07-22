@@ -7,10 +7,10 @@ enum CoachBriefingInputFactory {
         displayName: String? = nil,
         goal: GoalProfile?,
         targets: DailyTargets?,
-        todaysMeals: [MealLog],
+        meals: [MealLog],
         assistantName: String
     ) -> CoachBriefingInput {
-        let items = todaysMeals.flatMap(\.items)
+        let totals = NutritionDayAggregation.macroTotals(from: meals)
         let macroTargets: CoachMacroTargets? = targets.map {
             CoachMacroTargets(
                 calories: $0.calories,
@@ -26,18 +26,36 @@ enum CoachBriefingInputFactory {
             displayName: displayName,
             hasActiveGoal: goal != nil,
             targets: macroTargets,
-            todayMealCount: todaysMeals.count,
-            caloriesConsumed: items.reduce(0) { $0 + $1.calories },
-            proteinGramsConsumed: items.reduce(0) { $0 + $1.proteinGrams },
-            carbsGramsConsumed: items.reduce(0) { $0 + $1.carbsGrams },
-            fatGramsConsumed: items.reduce(0) { $0 + $1.fatGrams },
+            todayMealCount: totals.mealCount,
+            caloriesConsumed: totals.calories,
+            proteinGramsConsumed: totals.proteinGrams,
+            carbsGramsConsumed: totals.carbsGrams,
+            fatGramsConsumed: totals.fatGrams,
+            assistantName: assistantName
+        )
+    }
+
+    static func make(
+        now: Date = .now,
+        calendar: Calendar = .current,
+        displayName: String? = nil,
+        goal: GoalProfile?,
+        targets: DailyTargets?,
+        todaysMeals: [MealLog],
+        assistantName: String
+    ) -> CoachBriefingInput {
+        make(
+            now: now,
+            calendar: calendar,
+            displayName: displayName,
+            goal: goal,
+            targets: targets,
+            meals: todaysMeals,
             assistantName: assistantName
         )
     }
 
     static func dayBounds(for date: Date, calendar: Calendar = .current) -> (start: Date, end: Date) {
-        let start = calendar.startOfDay(for: date)
-        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400)
-        return (start, end)
+        NutritionDay(containing: date, calendar: calendar).queryBounds(calendar: calendar)
     }
 }

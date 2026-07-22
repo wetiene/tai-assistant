@@ -3,30 +3,45 @@ import SwiftUI
 struct HomeBriefingView: View {
     let mealRepository: MealRepository
     let goalRepository: GoalRepository
+    @Bindable var nutritionDaySelection: NutritionDaySelection
     let ownerID: String
     let assistantName: String
     var displayName: String? = nil
     var mealAddedFeedbackTrigger: Int = 0
     var analytics: any AnalyticsClient = NoOpAnalyticsClient()
     var onPrimaryAction: ((RecommendationActionDestination) -> Void)? = nil
+    var onOpenTai: (() -> Void)? = nil
 
     @State private var briefing: DailyCoachBriefing?
-    @State private var todaysMeals: [HomeMealSummary] = []
+    @State private var historicalSummary: HomeHistoricalDaySummary?
+    @State private var displayedMeals: [HomeMealSummary] = []
     @State private var cachedGoal: GoalProfile?
     @State private var cachedTargets: DailyTargets?
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var showsMealAddedFeedback = false
     @State private var isWhyPresented = false
+    @State private var isDatePickerPresented = false
+    @State private var datePickerDraft = Date.now
     @State private var pendingUndoMeal: HomeMealRestorePayload?
     @State private var actionError: String?
     @State private var addFeedbackDismissTask: Task<Void, Never>?
     @State private var undoDismissTask: Task<Void, Never>?
+    @State private var loadGeneration: UInt64 = 0
+
+    private var isViewingToday: Bool {
+        nutritionDaySelection.isSelectedDayToday
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.xl) {
+                dayNavigationBar
                 header
+
+                if !isViewingToday {
+                    viewingHistoryBadge
+                }
 
                 if let loadError {
                     inlineFeedback(message: loadError, icon: "exclamationmark.triangle.fill", tint: DSColor.destructiveCoral)
@@ -47,18 +62,23 @@ struct HomeBriefingView: View {
                     inlineFeedback(message: actionError, icon: "exclamationmark.triangle.fill", tint: DSColor.destructiveCoral)
                 }
 
-                if let briefing {
+                if isViewingToday, let briefing {
                     briefingHero(briefing)
                     focusCard(briefing)
-                    compactProgress(briefing.progress)
-                    recentCheckIns
+                    compactProgress(briefing.progress, isToday: true)
+                    mealsSection
                     if let note = briefing.dataSufficiencyNote {
                         Text(note)
                             .font(.caption)
                             .foregroundStyle(DSColor.textSecondary)
                     }
+                } else if let historicalSummary {
+                    historicalSummaryCard(historicalSummary)
+                    compactProgress(historicalSummary.progress, isToday: false)
+                    mealsSection
+                    historicalTaiCard
                 } else if isLoading {
-                    ProgressView("Preparing today’s briefing…")
+                    ProgressView(HomeNutritionDayFormatting.loadingMessage(isToday: isViewingToday))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
@@ -80,6 +100,11 @@ struct HomeBriefingView: View {
             showMealAddedFeedback()
             Task { await loadHome() }
         }
+        .onChange(of: nutritionDaySelection.selectedDay) { _, _ in
+            briefing = nil
+            historicalSummary = nil
+            Task { await loadHome() }
+        }
         .sheet(isPresented: $isWhyPresented) {
             if let recommendation = briefing?.recommendation {
                 RecommendationWhySheet(
@@ -89,6 +114,49 @@ struct HomeBriefingView: View {
                 )
             }
         }
+        .sheet(isPresented: $isDatePickerPresented) {
+            HomeNutritionDayPickerSheet(
+                selectedDate: $datePickerDraft,
+                maximumDate: .now,
+                onCancel: { isDatePickerPresented = false },
+                onConfirm: {
+                    nutritionDaySelection.select(containing: datePickerDraft)
+                    isDatePickerPresented = false
+                }
+            )
+        }
+    }
+
+    private var dayNavigationBar: some View {
+        HomeDayNavigationBar(
+            title: HomeNutritionDayFormatting.pickerLabel(
+                for: nutritionDaySelection.selectedDay
+            ),
+            canGoForward: nutritionDaySelection.canSelectNextDay,
+            showsTodayShortcut: !isViewingToday,
+            onPreviousDay: { nutritionDaySelection.selectPreviousDay() },
+            onNextDay: { _ = nutritionDaySelection.selectNextDay() },
+            onSelectDate: {
+                datePickerDraft = nutritionDaySelection.selectedDay.start
+                isDatePickerPresented = true
+            },
+            onSelectToday: { nutritionDaySelection.selectToday() }
+        )
+    }
+
+    private var viewingHistoryBadge: some View {
+        Label("Viewing history", systemImage: "clock.arrow.circlepath")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(DSColor.textSecondary)
+            .padding(.horizontal, DSSpacing.md)
+            .padding(.vertical, DSSpacing.xs)
+            .background(DSColor.surface)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(DSColor.cardStroke, lineWidth: 1)
+            )
+            .accessibilityLabel("Viewing a past nutrition day")
     }
 
     private var header: some View {
@@ -96,11 +164,18 @@ struct HomeBriefingView: View {
             Text(assistantName)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(DSColor.coralEnd)
-            Text(briefing?.greeting ?? timeFallbackGreeting)
+            Text(headerGreeting)
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(DSColor.textPrimary)
                 .accessibilityAddTraits(.isHeader)
         }
+    }
+
+    private var headerGreeting: String {
+        if let historicalSummary {
+            return historicalSummary.navigationTitle
+        }
+        return briefing?.greeting ?? timeFallbackGreeting
     }
 
     private var timeFallbackGreeting: String {
@@ -115,6 +190,22 @@ struct HomeBriefingView: View {
                 .foregroundStyle(DSColor.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             Text(briefing.body)
+                .font(.body)
+                .foregroundStyle(DSColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func historicalSummaryCard(_ summary: HomeHistoricalDaySummary) -> some View {
+        VStack(alignment: .leading, spacing: DSSpacing.md) {
+            Text(summary.headline)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(DSColor.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(summary.body)
                 .font(.body)
                 .foregroundStyle(DSColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -156,10 +247,34 @@ struct HomeBriefingView: View {
         }
     }
 
+    private var historicalTaiCard: some View {
+        PrimaryCard(cornerRadius: 24, useWarmBackground: true) {
+            Text("Tai")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DSColor.coralEnd)
+            Text("Ask about this day")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(DSColor.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Open Tai with this day’s context. Meal logging for past days is coming soon.")
+                .font(.subheadline)
+                .foregroundStyle(DSColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                onOpenTai?()
+            } label: {
+                Text("Open Tai")
+            }
+            .buttonStyle(CoralGradientButtonStyle())
+            .accessibilityHint("Opens Tai with the selected day’s context")
+        }
+    }
+
     @ViewBuilder
-    private func compactProgress(_ progress: NutritionProgressSnapshot) -> some View {
+    private func compactProgress(_ progress: NutritionProgressSnapshot, isToday: Bool) -> some View {
         VStack(alignment: .leading, spacing: DSSpacing.md) {
-            Text("Today’s progress")
+            Text(HomeNutritionDayFormatting.progressSectionTitle(isToday: isToday))
                 .font(.headline)
                 .foregroundStyle(DSColor.textPrimary)
 
@@ -194,10 +309,10 @@ struct HomeBriefingView: View {
         .accessibilityLabel("\(label) \(value)")
     }
 
-    private var recentCheckIns: some View {
+    private var mealsSection: some View {
         VStack(alignment: .leading, spacing: DSSpacing.md) {
             HStack {
-                Text("Recent check-ins")
+                Text(HomeNutritionDayFormatting.mealsSectionTitle(isToday: isViewingToday))
                     .font(.headline)
                     .foregroundStyle(DSColor.textPrimary)
                 Spacer()
@@ -210,12 +325,12 @@ struct HomeBriefingView: View {
                 }
             }
 
-            if todaysMeals.isEmpty {
-                Text("No meals logged today yet.")
+            if displayedMeals.isEmpty {
+                Text(HomeNutritionDayFormatting.emptyMealsMessage(isToday: isViewingToday))
                     .font(.subheadline)
                     .foregroundStyle(DSColor.textSecondary)
             } else {
-                ForEach(todaysMeals) { meal in
+                ForEach(displayedMeals) { meal in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(meal.label)
@@ -256,33 +371,34 @@ struct HomeBriefingView: View {
 
     @MainActor
     private func loadHome() async {
-        isLoading = briefing == nil
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let requestedDay = nutritionDaySelection.selectedDay
+        let viewingToday = requestedDay.isToday()
+
+        isLoading = briefing == nil && historicalSummary == nil
         loadError = nil
         do {
-            let bounds = CoachBriefingInputFactory.dayBounds(for: .now)
-            let meals = try await mealRepository.fetchMealLogs(ownerID: ownerID, from: bounds.start, to: bounds.end)
-            let goals = try await goalRepository.fetchGoalProfiles(ownerID: ownerID)
-            let goal = goals.sorted { $0.updatedAt > $1.updatedAt }.first
-            var targets: DailyTargets?
-            if let goal {
-                targets = try await goalRepository.fetchDailyTargets(goalProfileID: goal.id)
-            }
-
-            let input = CoachBriefingInputFactory.make(
+            let result = try await HomeNutritionDayLoader.load(
+                day: requestedDay,
+                ownerID: ownerID,
+                mealRepository: mealRepository,
+                goalRepository: goalRepository,
                 displayName: displayName,
-                goal: goal,
-                targets: targets,
-                todaysMeals: meals,
                 assistantName: assistantName
             )
-            cachedGoal = goal
-            cachedTargets = targets
-            briefing = DailyCoachBriefingBuilder.build(input)
-            todaysMeals = meals
-                .sorted { $0.eatenAt > $1.eatenAt }
-                .map { HomeMealSummary(meal: $0) }
+            guard generation == loadGeneration,
+                  requestedDay == nutritionDaySelection.selectedDay else { return }
+
+            cachedGoal = result.goal
+            cachedTargets = result.targets
+            briefing = result.todayBriefing
+            historicalSummary = result.historicalSummary
+            displayedMeals = result.mealSummaries
         } catch {
-            loadError = "Couldn’t load today’s briefing. Pull to refresh."
+            guard generation == loadGeneration,
+                  requestedDay == nutritionDaySelection.selectedDay else { return }
+            loadError = HomeNutritionDayFormatting.loadErrorMessage(isToday: viewingToday)
         }
         isLoading = false
     }
@@ -305,8 +421,8 @@ struct HomeBriefingView: View {
 
     private func deleteMeal(_ meal: HomeMealSummary) {
         pendingUndoMeal = meal.restorePayload
-        todaysMeals.removeAll { $0.id == meal.id }
-        recomputeBriefingFromLocalMeals()
+        displayedMeals.removeAll { $0.id == meal.id }
+        recomputeDisplayedContentFromLocalMeals()
         undoDismissTask?.cancel()
         undoDismissTask = Task {
             do {
@@ -331,9 +447,9 @@ struct HomeBriefingView: View {
         undoDismissTask?.cancel()
         pendingUndoMeal = nil
         let restored = HomeMealSummary(meal: payload.makeMealLog())
-        todaysMeals.insert(restored, at: 0)
-        todaysMeals.sort { $0.eatenAt > $1.eatenAt }
-        recomputeBriefingFromLocalMeals()
+        displayedMeals.insert(restored, at: 0)
+        displayedMeals.sort { $0.eatenAt > $1.eatenAt }
+        recomputeDisplayedContentFromLocalMeals()
         do {
             try await mealRepository.createMealLog(payload.makeMealLog())
         } catch {
@@ -342,17 +458,27 @@ struct HomeBriefingView: View {
         }
     }
 
-    /// Immediate local recompute so progress chips update without waiting on disk/reload.
-    private func recomputeBriefingFromLocalMeals() {
-        let mealLogs = todaysMeals.map { $0.restorePayload.makeMealLog() }
+    /// Immediate local recompute so totals update without waiting on disk/reload.
+    private func recomputeDisplayedContentFromLocalMeals() {
+        let mealLogs = displayedMeals.map { $0.restorePayload.makeMealLog() }
+        let day = nutritionDaySelection.selectedDay
+        let referenceNow = day.isToday() ? Date.now : day.defaultOccurrenceTimestamp()
         let input = CoachBriefingInputFactory.make(
+            now: referenceNow,
             displayName: displayName,
             goal: cachedGoal,
             targets: cachedTargets,
-            todaysMeals: mealLogs,
+            meals: mealLogs,
             assistantName: assistantName
         )
-        briefing = DailyCoachBriefingBuilder.build(input)
+
+        if day.isToday() {
+            briefing = DailyCoachBriefingBuilder.build(input)
+            historicalSummary = nil
+        } else {
+            historicalSummary = HomeHistoricalDayPresenter.make(day: day, input: input)
+            briefing = nil
+        }
     }
 }
 
@@ -465,6 +591,7 @@ struct HomeMealItemRestorePayload {
     HomeBriefingView(
         mealRepository: MockMealRepository(),
         goalRepository: MockGoalRepository(),
+        nutritionDaySelection: NutritionDaySelection(),
         ownerID: "preview.user",
         assistantName: "Tai"
     )

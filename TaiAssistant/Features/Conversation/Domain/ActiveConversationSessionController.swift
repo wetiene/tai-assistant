@@ -155,7 +155,8 @@ final class ActiveConversationSessionController {
     }
 
     private func apply(_ intent: TaiLaunchIntent, to viewModel: ConversationViewModel) {
-        switch intent {
+        // `intent.dayContext` is wired for later historical-logging slices; meal capture still defaults to today.
+        switch intent.kind {
         case .openConversation:
             viewModel.startIfNeeded()
         case .startMealCapture:

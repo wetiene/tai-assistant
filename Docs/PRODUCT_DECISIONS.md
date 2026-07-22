@@ -195,4 +195,22 @@ For each decision:
 
 ---
 
+## 2026-07-22
+
+### Meal artifact date semantics and nutrition-day bucketing
+
+- **Date:** 2026-07-22
+- **Decision:** Confirmed meals use `MealLog.eatenAt` as the authoritative occurrence timestamp. Nutrition-day membership, ordering, Home aggregation, and repository day queries are derived from `eatenAt` using device-local `Calendar.current` day bounds (`startOfDay` through next midnight, half-open). `MealLog.createdAt` is the immutable audit timestamp for when the meal was first confirmed and persisted. `MealLog.updatedAt` is the last user-driven modification timestamp. Do not add stored `effectiveDate`, `recordedAt`, or `consumedAt` fields, and do not rename existing SwiftData fields for this feature.
+- **Reason:** Historical day navigation and backdated logging require one occurrence timestamp and clear audit fields without schema migration or duplicate day columns that can drift.
+- **Future review:** Revisit only if timezone-aware bucketing or explicit user time-zone preferences ship beyond device-local `Calendar.current`.
+
+### Selected nutrition day is ephemeral UI context
+
+- **Date:** 2026-07-22
+- **Decision:** The app-scoped selected nutrition day defaults to Today on launch, is not persisted in this slice, and cannot be set to a future calendar day. Tai launch intents may carry optional `NutritionDayContext` without creating per-day Conversations.
+- **Reason:** Home historical browsing and Tai historical logging need shared, lightweight context while preserving one active Conversation.
+- **Future review:** After historical logging ships, assess whether restoring the last selected day across launches improves usability.
+
+---
+
 ## Future decisions

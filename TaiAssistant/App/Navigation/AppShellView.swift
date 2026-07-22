@@ -66,11 +66,13 @@ struct AppShellView: View {
                 HomeBriefingView(
                     mealRepository: dependencies.mealRepository,
                     goalRepository: dependencies.goalRepository,
+                    nutritionDaySelection: dependencies.nutritionDaySelection,
                     ownerID: config.localOwnerID,
                     assistantName: config.assistantName,
                     mealAddedFeedbackTrigger: mealAddedFeedbackTrigger,
                     analytics: dependencies.analytics,
-                    onPrimaryAction: handleHomePrimaryAction
+                    onPrimaryAction: handleHomePrimaryAction,
+                    onOpenTai: handleOpenTaiFromHome
                 )
             }
             .tabItem { Label(NavV2PrimaryTab.home.title, systemImage: "house.fill") }
@@ -210,7 +212,19 @@ struct AppShellView: View {
     }
 
     private func handleHomePrimaryAction(_ destination: RecommendationActionDestination) {
-        pendingTaiIntent = TaiLaunchIntent.fromHomeDestination(destination)
+        pendingTaiIntent = TaiLaunchIntent.fromHomeDestination(
+            destination,
+            dayContext: dependencies.nutritionDaySelection.dayContext()
+        )
+        hasOpenedTai = true
+        navV2Tab = .tai
+    }
+
+    private func handleOpenTaiFromHome() {
+        pendingTaiIntent = TaiLaunchIntent(
+            kind: .openConversation,
+            dayContext: dependencies.nutritionDaySelection.dayContext()
+        )
         hasOpenedTai = true
         navV2Tab = .tai
     }

@@ -257,6 +257,10 @@ enum DailyCoachBriefingBuilder {
 
     // MARK: - Helpers
 
+    static func progressSnapshot(from input: CoachBriefingInput) -> NutritionProgressSnapshot {
+        makeProgress(from: input)
+    }
+
     static func makeGreeting(now: Date, calendar: Calendar, displayName: String?) -> String {
         let hour = calendar.component(.hour, from: now)
         let timeGreeting: String

@@ -107,6 +107,8 @@ final class LocalSwiftDataMealRepository: MealRepository {
             throw MealRepositoryError.mealLogNotFound(id: meal.id)
         }
 
+        MealLogWriteSemantics.assertCreatedAtImmutableOnUpdate(existing: existing, incoming: meal)
+
         // Top-level truth on the persisted row only.
         existing.eatenAt = meal.eatenAt
         existing.timing = meal.timing

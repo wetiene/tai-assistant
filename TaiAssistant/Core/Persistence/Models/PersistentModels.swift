@@ -97,11 +97,14 @@ final class MealLog {
     var ownerID: String
     var visibility: VisibilityScope
     var sharingGroupID: String?
+    /// When the meal occurred. Determines nutrition-day membership, ordering, and displayed meal time.
     var eatenAt: Date
     var timing: MealTiming
     var notes: String
     var alcoholStandardDrinks: Double
+    /// When this meal was first confirmed and persisted. Immutable after creation.
     var createdAt: Date
+    /// When this meal was last modified through an approved user action.
     var updatedAt: Date
     @Relationship(deleteRule: .cascade, inverse: \MealItem.mealLog) var items: [MealItem]
 

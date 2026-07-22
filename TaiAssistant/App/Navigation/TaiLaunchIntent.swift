@@ -2,20 +2,34 @@ import Foundation
 
 /// Typed intents from Home (or shell) into the single active Tai Conversation.
 /// Logging is a capability inside Conversation — never a navigation destination.
-enum TaiLaunchIntent: Equatable, Sendable {
-    /// Switch to Tai and show the active Conversation as-is.
-    case openConversation
-    /// Begin meal capture / logging inside the active Conversation.
-    case startMealCapture
-    /// Focus the composer for a free-form question.
-    case focusComposer
+struct TaiLaunchIntent: Equatable, Sendable {
+    let kind: Kind
+    let dayContext: NutritionDayContext?
 
-    static func fromHomeDestination(_ destination: RecommendationActionDestination) -> TaiLaunchIntent {
+    enum Kind: Equatable, Sendable {
+        case openConversation
+        case startMealCapture
+        case focusComposer
+    }
+
+    static let openConversation = TaiLaunchIntent(kind: .openConversation)
+    static let startMealCapture = TaiLaunchIntent(kind: .startMealCapture)
+    static let focusComposer = TaiLaunchIntent(kind: .focusComposer)
+
+    init(kind: Kind, dayContext: NutritionDayContext? = nil) {
+        self.kind = kind
+        self.dayContext = dayContext
+    }
+
+    static func fromHomeDestination(
+        _ destination: RecommendationActionDestination,
+        dayContext: NutritionDayContext? = nil
+    ) -> TaiLaunchIntent {
         switch destination {
         case .checkInMeal:
-            return .startMealCapture
+            return TaiLaunchIntent(kind: .startMealCapture, dayContext: dayContext)
         case .reviewGoal:
-            return .openConversation
+            return TaiLaunchIntent(kind: .openConversation, dayContext: dayContext)
         }
     }
 }

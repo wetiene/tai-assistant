@@ -15,6 +15,7 @@ struct AppDependencies {
     let weightLogRepository: WeightLogRepository
     let appConfigRepository: AppConfigRepository
     let analytics: any AnalyticsClient
+    let nutritionDaySelection: NutritionDaySelection
 
     /// True while Ask Tai uses local mock guidance instead of live AI.
     var isAskTaiPreview: Bool {
@@ -51,7 +52,8 @@ struct AppDependencies {
             alcoholPlanRepository: persistence.makeAlcoholPlanRepository(),
             weightLogRepository: persistence.makeWeightLogRepository(),
             appConfigRepository: persistence.makeAppConfigRepository(),
-            analytics: makeAnalyticsClient()
+            analytics: makeAnalyticsClient(),
+            nutritionDaySelection: NutritionDaySelection()
         )
     }
 
@@ -86,7 +88,8 @@ struct AppDependencies {
             alcoholPlanRepository: MockAlcoholPlanRepository(),
             weightLogRepository: MockWeightLogRepository(),
             appConfigRepository: MockAppConfigRepository(),
-            analytics: NoOpAnalyticsClient()
+            analytics: NoOpAnalyticsClient(),
+            nutritionDaySelection: NutritionDaySelection()
         )
     }
 
