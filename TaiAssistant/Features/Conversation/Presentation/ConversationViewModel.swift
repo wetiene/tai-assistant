@@ -17,6 +17,8 @@ final class ConversationViewModel {
 
     /// Last Live Tai ask retained for Retry without duplicating the user turn.
     private(set) var pendingLiveTaiRetryAsk: String?
+    /// Selected nutrition day for historical meal logging (from Home launch context).
+    private(set) var nutritionDayContext: NutritionDayContext?
     /// Original text awaiting clarify → Log meal / Ask about it (no duplicate user turn).
     private(set) var pendingClarificationText: String?
     /// Evidence for the most recent Live Tai reply (Why sheet).
@@ -57,8 +59,15 @@ final class ConversationViewModel {
         seedGreeting()
     }
 
+    func setNutritionDayContext(_ context: NutritionDayContext?) {
+        nutritionDayContext = context
+    }
+
     /// Deep-link from Home: open Tai ready for meal logging.
-    func applyMealIntent() {
+    func applyMealIntent(dayContext: NutritionDayContext? = nil) {
+        if let dayContext {
+            setNutritionDayContext(dayContext)
+        }
         startIfNeeded()
         clearTargetedMealRefinement()
         meal.beginCollecting()
@@ -66,7 +75,7 @@ final class ConversationViewModel {
         store.append(
             ConversationMessage(
                 actor: .assistant,
-                text: "Let’s log a meal. Take a photo or describe what you ate."
+                text: Self.mealCapturePrompt(for: nutritionDayContext)
             )
         )
         store.setQuickActions(Self.defaultQuickActions.filter {
@@ -475,7 +484,12 @@ final class ConversationViewModel {
         store.setActivity(.processing(reason: "interpreting_meal"))
         store.setQuickActions([])
 
-        let outcome = await meal.interpret(userText: userText, photoJPEG: photoJPEG, targetDraftID: nil)
+        let outcome = await meal.interpret(
+            userText: userText,
+            photoJPEG: photoJPEG,
+            targetDraftID: nil,
+            captureNutritionDay: captureNutritionDayForNewDrafts()
+        )
         switch outcome {
         case .failure(let message):
             errorMessage = message
@@ -510,7 +524,12 @@ final class ConversationViewModel {
         store.setActivity(.processing(reason: "interpreting_meal"))
         store.setQuickActions([])
 
-        let outcome = await meal.interpret(userText: userText, photoJPEG: nil, targetDraftID: draftID)
+        let outcome = await meal.interpret(
+            userText: userText,
+            photoJPEG: nil,
+            targetDraftID: draftID,
+            captureNutritionDay: captureNutritionDayForNewDrafts()
+        )
         switch outcome {
         case .failure(let message):
             errorMessage = message
@@ -578,7 +597,7 @@ final class ConversationViewModel {
             store.append(
                 ConversationMessage(
                     actor: .assistant,
-                    text: "Logged \(draft.label). Nice work — anything else I can help with?"
+                    text: Self.loggedMealConfirmation(label: draft.label, nutritionDay: draft.nutritionDay)
                 )
             )
 
@@ -704,5 +723,25 @@ final class ConversationViewModel {
                 )
             }
         }
+    }
+
+    private static func mealCapturePrompt(for context: NutritionDayContext?) -> String {
+        guard let day = context?.day, !day.isToday() else {
+            return "Let’s log a meal. Take a photo or describe what you ate."
+        }
+        let label = HomeNutritionDayFormatting.navigationTitle(for: day)
+        return "Let’s log a meal for \(label). Take a photo or describe what you ate."
+    }
+
+    private func captureNutritionDayForNewDrafts() -> NutritionDay {
+        nutritionDayContext?.day ?? .today()
+    }
+
+    private static func loggedMealConfirmation(label: String, nutritionDay: NutritionDay) -> String {
+        if !nutritionDay.isToday() {
+            let dayLabel = HomeNutritionDayFormatting.navigationTitle(for: nutritionDay)
+            return "Logged \(label) for \(dayLabel). Nice work — anything else I can help with?"
+        }
+        return "Logged \(label). Nice work — anything else I can help with?"
     }
 }

@@ -12,6 +12,11 @@ struct NutritionDay: Equatable, Sendable, Hashable {
         self.start = calendar.startOfDay(for: date)
     }
 
+    /// Preserves an already-normalized nutrition-day start (e.g. from persisted draft snapshots).
+    init(normalizedStart: Date) {
+        self.start = normalizedStart
+    }
+
     static func today(calendar: Calendar = .current, now: Date = .now) -> NutritionDay {
         NutritionDay(containing: now, calendar: calendar)
     }
@@ -38,7 +43,31 @@ struct NutritionDay: Equatable, Sendable, Hashable {
         start > calendar.startOfDay(for: now)
     }
 
-    /// Default `MealLog.eatenAt` when logging against this day (used by later historical-logging slices).
+    /// Resolves `MealLog.eatenAt` when confirming a meal against this nutrition day.
+    ///
+    /// - Today: prefers an AI guess on today's calendar day, otherwise `now`.
+    /// - Historical: prefers an AI guess on this day, otherwise timing-based defaults via
+    ///   `defaultOccurrenceTimestamp(timing:)`.
+    func resolveOccurrenceTimestamp(
+        aiGuess: Date?,
+        timing: MealTiming = .other,
+        calendar: Calendar = .current,
+        now: Date = .now
+    ) -> Date {
+        if isToday(calendar: calendar, now: now) {
+            if let aiGuess, contains(aiGuess, calendar: calendar) {
+                return aiGuess
+            }
+            return now
+        }
+
+        if let aiGuess, contains(aiGuess, calendar: calendar) {
+            return aiGuess
+        }
+        return defaultOccurrenceTimestamp(timing: timing, calendar: calendar, now: now)
+    }
+
+    /// Default `MealLog.eatenAt` when logging against this day.
     func defaultOccurrenceTimestamp(
         timing: MealTiming = .other,
         calendar: Calendar = .current,

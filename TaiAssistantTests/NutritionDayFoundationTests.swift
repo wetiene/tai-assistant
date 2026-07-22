@@ -160,4 +160,32 @@ final class NutritionDayFoundationTests: XCTestCase {
         let dinnerHour = calendar.component(.hour, from: dinnerDefault)
         XCTAssertEqual(dinnerHour, 19)
     }
+
+    func testResolveOccurrenceTimestampPrefersOnDayAIGuessForHistoricalDay() {
+        let pastDay = NutritionDay(containing: july10Morning, calendar: calendar)
+        let onDayGuess = calendar.date(from: DateComponents(year: 2026, month: 7, day: 10, hour: 13, minute: 15))!
+
+        let resolved = pastDay.resolveOccurrenceTimestamp(
+            aiGuess: onDayGuess,
+            timing: .lunch,
+            calendar: calendar,
+            now: july11Afternoon
+        )
+
+        XCTAssertEqual(resolved, onDayGuess)
+    }
+
+    func testResolveOccurrenceTimestampFallsBackToTimingDefaultWhenAIGuessIsToday() {
+        let pastDay = NutritionDay(containing: july10Morning, calendar: calendar)
+
+        let resolved = pastDay.resolveOccurrenceTimestamp(
+            aiGuess: july11Afternoon,
+            timing: .dinner,
+            calendar: calendar,
+            now: july11Afternoon
+        )
+
+        XCTAssertTrue(pastDay.contains(resolved, calendar: calendar))
+        XCTAssertEqual(calendar.component(.hour, from: resolved), 19)
+    }
 }

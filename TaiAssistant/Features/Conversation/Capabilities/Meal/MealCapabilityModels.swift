@@ -94,12 +94,22 @@ struct MealEstimateSnapshot: Codable, Equatable, Sendable {
     var items: [MealEstimateItemSnapshot]
     var isUserConfirmed: Bool
     var macrosNeedReview: Bool
+    /// Normalized start-of-day for the draft's immutable nutrition day. Nil on legacy card payloads.
+    var nutritionDayStart: Date?
+
+    var nutritionDay: NutritionDay {
+        if let nutritionDayStart {
+            return NutritionDay(normalizedStart: nutritionDayStart)
+        }
+        return NutritionDay(containing: eatenAt)
+    }
 
     init(draft: CheckInMealDraft) {
         id = draft.id
         label = draft.label
         timingRaw = draft.timing.rawValue
         eatenAt = draft.eatenAt
+        nutritionDayStart = draft.nutritionDay.start
         calories = draft.calories
         proteinGrams = draft.proteinGrams
         carbsGrams = draft.carbsGrams
@@ -117,6 +127,7 @@ struct MealEstimateSnapshot: Codable, Equatable, Sendable {
             label: label,
             timing: MealTiming(rawValue: timingRaw) ?? .other,
             eatenAt: eatenAt,
+            nutritionDay: nutritionDay,
             calories: calories,
             proteinGrams: proteinGrams,
             carbsGrams: carbsGrams,

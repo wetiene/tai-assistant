@@ -252,22 +252,33 @@ struct HomeBriefingView: View {
             Text("Tai")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(DSColor.coralEnd)
-            Text("Ask about this day")
+            Text("Log a meal for this day")
                 .font(.title3.weight(.bold))
                 .foregroundStyle(DSColor.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Open Tai with this day’s context. Meal logging for past days is coming soon.")
+            Text("Describe or photograph what you ate. Tai will save it to this nutrition day.")
                 .font(.subheadline)
                 .foregroundStyle(DSColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {
+                analytics.track(.checkInMealSelected)
+                onPrimaryAction?(.checkInMeal)
+            } label: {
+                Text("Log a meal")
+            }
+            .buttonStyle(CoralGradientButtonStyle())
+            .accessibilityHint("Opens Tai to log a meal for the selected day")
+
+            Button {
                 onOpenTai?()
             } label: {
                 Text("Open Tai")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(DSColor.coralEnd)
             }
-            .buttonStyle(CoralGradientButtonStyle())
-            .accessibilityHint("Opens Tai with the selected day’s context")
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens Tai with this day’s context")
         }
     }
 

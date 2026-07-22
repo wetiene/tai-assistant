@@ -56,6 +56,8 @@ struct CheckInMealDraft: Identifiable {
     var label: String
     var timing: MealTiming
     var eatenAt: Date
+    /// Immutable nutrition day this draft logs against. Set at first interpretation, never retargeted.
+    let nutritionDay: NutritionDay
     var calories: Int
     var proteinGrams: Int
     var carbsGrams: Int
@@ -71,6 +73,42 @@ struct CheckInMealDraft: Identifiable {
     var originalAILabel: String? = nil
     /// Label text that current macro estimate is based on.
     var lastMacroEstimateBasis: String? = nil
+
+    init(
+        id: UUID = UUID(),
+        label: String,
+        timing: MealTiming,
+        eatenAt: Date,
+        nutritionDay: NutritionDay = .today(),
+        calories: Int,
+        proteinGrams: Int,
+        carbsGrams: Int,
+        fatGrams: Int,
+        confidence: Double,
+        alternatives: [String],
+        items: [CheckInMealItemDraft],
+        isUserConfirmed: Bool = false,
+        macrosNeedReview: Bool = false,
+        originalAILabel: String? = nil,
+        lastMacroEstimateBasis: String? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.timing = timing
+        self.eatenAt = eatenAt
+        self.nutritionDay = nutritionDay
+        self.calories = calories
+        self.proteinGrams = proteinGrams
+        self.carbsGrams = carbsGrams
+        self.fatGrams = fatGrams
+        self.confidence = confidence
+        self.alternatives = alternatives
+        self.items = items
+        self.isUserConfirmed = isUserConfirmed
+        self.macrosNeedReview = macrosNeedReview
+        self.originalAILabel = originalAILabel
+        self.lastMacroEstimateBasis = lastMacroEstimateBasis
+    }
 }
 
 extension CheckInMealDraft {
@@ -113,12 +151,13 @@ struct CheckInInterpretationResult {
 }
 
 extension CheckInMealDraft {
-    init(aiMeal: AIInterpretedMeal, now: Date = .now) {
+    init(aiMeal: AIInterpretedMeal, now: Date = .now, nutritionDay: NutritionDay? = nil) {
         let parsedEatenAt = ISO8601DateFormatter().date(from: aiMeal.eatenAtGuessISO8601 ?? "")
         self.id = UUID()
         self.label = aiMeal.label
         self.timing = MealTiming(rawValue: aiMeal.timing.lowercased()) ?? .other
         self.eatenAt = parsedEatenAt ?? now
+        self.nutritionDay = nutritionDay ?? .today(now: now)
         self.calories = aiMeal.calories
         self.proteinGrams = Int(aiMeal.proteinGrams.rounded())
         self.carbsGrams = Int(aiMeal.carbsGrams.rounded())

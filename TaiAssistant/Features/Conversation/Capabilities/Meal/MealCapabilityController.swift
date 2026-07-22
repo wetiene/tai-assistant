@@ -63,13 +63,17 @@ final class MealCapabilityController {
 
     /// Run AI interpretation using the existing Check In interpreter (unchanged backend).
     /// - Parameter targetDraftID: When set (targeted meal refinement), only that draft is re-estimated.
+    /// - Parameter captureNutritionDay: Nutrition day stamped onto newly created drafts only.
     func interpret(
         userText: String,
         photoJPEG: Data?,
-        targetDraftID: UUID? = nil
+        targetDraftID: UUID? = nil,
+        captureNutritionDay: NutritionDay? = nil
     ) async -> MealInterpretationOutcome {
         clearError()
         phase = .interpreting
+        let captureDay = captureNutritionDay ?? .today()
+        let priorNutritionDays = Dictionary(uniqueKeysWithValues: currentDrafts.map { ($0.id, $0.nutritionDay) })
         if let photoJPEG {
             engine.session.selectedPhotoData = photoJPEG
         }
@@ -86,7 +90,12 @@ final class MealCapabilityController {
             return .failure(error)
         }
 
-        let drafts = currentDrafts
+        let drafts = stampAndNormalizeDrafts(
+            currentDrafts,
+            priorNutritionDays: priorNutritionDays,
+            captureDay: captureDay
+        )
+        engine.session.interpretedMeals = drafts
         guard !drafts.isEmpty else {
             let message = "I couldn’t estimate that meal. Try another photo or a bit more detail."
             lastError = message
@@ -133,7 +142,7 @@ final class MealCapabilityController {
             return .failure(.validationFailed("Confirm this estimate looks right before logging it."))
         }
 
-        let draft = payload.draft.asCheckInDraft()
+        let draft = normalizeDraft(payload.draft.asCheckInDraft())
         if let validationError = Self.validateDraftForPersistence(draft) {
             lastError = validationError
             return .failure(.validationFailed(validationError))
@@ -274,9 +283,13 @@ final class MealCapabilityController {
     // MARK: - Private
 
     private func persistSingleDraft(_ draft: CheckInMealDraft) async throws {
+        let eatenAt = draft.nutritionDay.resolveOccurrenceTimestamp(
+            aiGuess: draft.eatenAt,
+            timing: draft.timing
+        )
         let mealLog = MealLog(
             ownerID: ownerID,
-            eatenAt: draft.eatenAt,
+            eatenAt: eatenAt,
             timing: draft.timing,
             notes: draft.label
         )
@@ -293,6 +306,67 @@ final class MealCapabilityController {
             )
         }
         try await mealRepository.createMealLog(mealLog)
+    }
+
+    private func normalizeDraft(_ draft: CheckInMealDraft, now: Date = .now) -> CheckInMealDraft {
+        let eatenAt = draft.nutritionDay.resolveOccurrenceTimestamp(
+            aiGuess: draft.eatenAt,
+            timing: draft.timing,
+            now: now
+        )
+        guard eatenAt != draft.eatenAt else { return draft }
+        return CheckInMealDraft(
+            id: draft.id,
+            label: draft.label,
+            timing: draft.timing,
+            eatenAt: eatenAt,
+            nutritionDay: draft.nutritionDay,
+            calories: draft.calories,
+            proteinGrams: draft.proteinGrams,
+            carbsGrams: draft.carbsGrams,
+            fatGrams: draft.fatGrams,
+            confidence: draft.confidence,
+            alternatives: draft.alternatives,
+            items: draft.items,
+            isUserConfirmed: draft.isUserConfirmed,
+            macrosNeedReview: draft.macrosNeedReview,
+            originalAILabel: draft.originalAILabel,
+            lastMacroEstimateBasis: draft.lastMacroEstimateBasis
+        )
+    }
+
+    private func stampAndNormalizeDrafts(
+        _ drafts: [CheckInMealDraft],
+        priorNutritionDays: [UUID: NutritionDay],
+        captureDay: NutritionDay,
+        now: Date = .now
+    ) -> [CheckInMealDraft] {
+        drafts.map { draft in
+            let day = priorNutritionDays[draft.id] ?? captureDay
+            let resolved = day.resolveOccurrenceTimestamp(
+                aiGuess: draft.eatenAt,
+                timing: draft.timing,
+                now: now
+            )
+            return CheckInMealDraft(
+                id: draft.id,
+                label: draft.label,
+                timing: draft.timing,
+                eatenAt: resolved,
+                nutritionDay: day,
+                calories: draft.calories,
+                proteinGrams: draft.proteinGrams,
+                carbsGrams: draft.carbsGrams,
+                fatGrams: draft.fatGrams,
+                confidence: draft.confidence,
+                alternatives: draft.alternatives,
+                items: draft.items,
+                isUserConfirmed: draft.isUserConfirmed,
+                macrosNeedReview: draft.macrosNeedReview,
+                originalAILabel: draft.originalAILabel,
+                lastMacroEstimateBasis: draft.lastMacroEstimateBasis
+            )
+        }
     }
 
     private func refreshPhaseAfterDraftChange() {
