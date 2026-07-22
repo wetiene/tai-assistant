@@ -45,6 +45,7 @@ struct ConversationMessageRenderer: View {
     let message: ConversationMessage
     var onQuickAction: (ConversationQuickAction) -> Void
     var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
+    var onMealCardLoggingDayChange: (UUID, Date) -> Void
     var onWhy: (() -> Void)? = nil
 
     var body: some View {
@@ -120,6 +121,9 @@ struct ConversationMessageRenderer: View {
                     isInteractive: card.isInteractive,
                     onAction: { action in
                         onMealCardAction(action, card.id)
+                    },
+                    onLoggingDayChange: { date in
+                        onMealCardLoggingDayChange(card.id, date)
                     }
                 )
             }

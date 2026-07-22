@@ -4,8 +4,19 @@ struct MealEstimateCardView: View {
     let payload: MealEstimateCardPayload
     var isInteractive: Bool
     var onAction: (MealCapabilityID.CardAction) -> Void
+    var onLoggingDayChange: (Date) -> Void
+
+    @State private var isDatePickerPresented = false
+    @State private var pickerDraftDate = Date.now
 
     private var draft: MealEstimateSnapshot { payload.draft }
+    private var loggingDay: NutritionDay { draft.nutritionDay }
+    private var loggingDateLabel: String {
+        MealEstimateCardFormatting.loggingDateLabel(for: loggingDay)
+    }
+    private var canEditLoggingDay: Bool {
+        isInteractive && !payload.isLogged
+    }
 
     var body: some View {
         PrimaryCard(cornerRadius: 20) {
@@ -48,6 +59,8 @@ struct MealEstimateCardView: View {
                         .foregroundStyle(DSColor.textSecondary)
                 }
 
+                loggingDateRow
+
                 if isInteractive && !payload.isLogged {
                     actions
                 }
@@ -56,6 +69,58 @@ struct MealEstimateCardView: View {
         .frame(maxWidth: 340, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Meal estimate, \(draft.label), \(draft.calories) calories")
+        .sheet(isPresented: $isDatePickerPresented) {
+            HomeNutritionDayPickerSheet(
+                selectedDate: $pickerDraftDate,
+                maximumDate: .now,
+                onCancel: { isDatePickerPresented = false },
+                onConfirm: {
+                    onLoggingDayChange(pickerDraftDate)
+                    isDatePickerPresented = false
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var loggingDateRow: some View {
+        if canEditLoggingDay {
+            Button {
+                pickerDraftDate = loggingDay.start
+                isDatePickerPresented = true
+            } label: {
+                loggingDateLabelContent
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Logging date, \(loggingDateLabel)")
+            .accessibilityHint("Opens date picker to change which day this meal is logged to")
+        } else {
+            loggingDateLabelContent
+                .accessibilityLabel("Logging date, \(loggingDateLabel)")
+        }
+    }
+
+    private var loggingDateLabelContent: some View {
+        HStack(spacing: DSSpacing.xs) {
+            Image(systemName: "calendar")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DSColor.textSecondary)
+            Text(loggingDateLabel)
+                .font(.caption)
+                .foregroundStyle(DSColor.textSecondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+            if canEditLoggingDay {
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(DSColor.textSecondary.opacity(0.8))
+            }
+        }
+        .padding(.vertical, DSSpacing.xs)
+        .padding(.horizontal, DSSpacing.sm)
+        .background(DSColor.warmSurface.opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     @ViewBuilder
@@ -95,7 +160,7 @@ struct MealEstimateCardView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(CoralGradientButtonStyle())
-                .accessibilityHint("Save this meal to today")
+                .accessibilityHint("Save this meal")
             }
         }
         .padding(.top, DSSpacing.xs)

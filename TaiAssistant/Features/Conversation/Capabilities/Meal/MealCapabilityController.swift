@@ -255,6 +255,45 @@ final class MealCapabilityController {
         refreshPhaseAfterDraftChange()
     }
 
+    /// Updates the nutrition day for a single in-session draft. Returns nil when the draft is not loaded.
+    func applyLoggingDayChange(draftID: UUID, to day: NutritionDay, now: Date = .now) -> CheckInMealDraft? {
+        guard let index = engine.session.interpretedMeals.firstIndex(where: { $0.id == draftID }) else {
+            return nil
+        }
+        let updated = Self.draft(
+            engine.session.interpretedMeals[index],
+            retargetedTo: day,
+            now: now
+        )
+        engine.session.interpretedMeals[index] = updated
+        return updated
+    }
+
+    static func draft(
+        _ draft: CheckInMealDraft,
+        retargetedTo day: NutritionDay,
+        now: Date = .now
+    ) -> CheckInMealDraft {
+        CheckInMealDraft(
+            id: draft.id,
+            label: draft.label,
+            timing: draft.timing,
+            eatenAt: day.resolveOccurrenceTimestamp(aiGuess: draft.eatenAt, timing: draft.timing, now: now),
+            nutritionDay: day,
+            calories: draft.calories,
+            proteinGrams: draft.proteinGrams,
+            carbsGrams: draft.carbsGrams,
+            fatGrams: draft.fatGrams,
+            confidence: draft.confidence,
+            alternatives: draft.alternatives,
+            items: draft.items,
+            isUserConfirmed: draft.isUserConfirmed,
+            macrosNeedReview: draft.macrosNeedReview,
+            originalAILabel: draft.originalAILabel,
+            lastMacroEstimateBasis: draft.lastMacroEstimateBasis
+        )
+    }
+
     static func validateDraftForPersistence(_ draft: CheckInMealDraft) -> String? {
         let name = draft.label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {

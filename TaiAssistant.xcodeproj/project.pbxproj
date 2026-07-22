@@ -63,6 +63,7 @@
 		A10000000000000000000052 /* MealCapabilityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000052 /* MealCapabilityModels.swift */; };
 		A10000000000000000000053 /* MealCapabilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000053 /* MealCapabilityController.swift */; };
 		A10000000000000000000054 /* MealEstimateCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000054 /* MealEstimateCardView.swift */; };
+		A1000000000000000000008E /* MealEstimateCardFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008E /* MealEstimateCardFormatting.swift */; };
 		A10000000000000000000055 /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000055 /* ConversationViewModel.swift */; };
 		A10000000000000000000056 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000056 /* ConversationView.swift */; };
 		A10000000000000000000057 /* ConversationComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000057 /* ConversationComposerView.swift */; };
@@ -99,6 +100,7 @@
 		A1000000000000000000008B /* HomeDayNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008B /* HomeDayNavigationBar.swift */; };
 		A1000000000000000000008C /* HomeDayNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008C /* HomeDayNavigationTests.swift */; };
 		A1000000000000000000008D /* HistoricalMealLoggingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008D /* HistoricalMealLoggingTests.swift */; };
+		A1000000000000000000008F /* MealEstimateCardUXTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008F /* MealEstimateCardUXTests.swift */; };
 		A1000000000000000000006E /* ConversationAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006E /* ConversationAttachmentStore.swift */; };
 		A1000000000000000000006F /* ConversationPersistCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006F /* ConversationPersistCoordinator.swift */; };
 		A10000000000000000000077 /* ConversationMealIntentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000077 /* ConversationMealIntentClassifier.swift */; };
@@ -184,6 +186,7 @@
 		A20000000000000000000052 /* MealCapabilityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCapabilityModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000053 /* MealCapabilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCapabilityController.swift; sourceTree = "<group>"; };
 		A20000000000000000000054 /* MealEstimateCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEstimateCardView.swift; sourceTree = "<group>"; };
+		A2000000000000000000008E /* MealEstimateCardFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEstimateCardFormatting.swift; sourceTree = "<group>"; };
 		A20000000000000000000055 /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000056 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
 		A20000000000000000000057 /* ConversationComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationComposerView.swift; sourceTree = "<group>"; };
@@ -220,6 +223,7 @@
 		A2000000000000000000008B /* HomeDayNavigationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDayNavigationBar.swift; sourceTree = "<group>"; };
 		A2000000000000000000008C /* HomeDayNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDayNavigationTests.swift; sourceTree = "<group>"; };
 		A2000000000000000000008D /* HistoricalMealLoggingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoricalMealLoggingTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000008F /* MealEstimateCardUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEstimateCardUXTests.swift; sourceTree = "<group>"; };
 		A2000000000000000000006E /* ConversationAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAttachmentStore.swift; sourceTree = "<group>"; };
 		A2000000000000000000006F /* ConversationPersistCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPersistCoordinator.swift; sourceTree = "<group>"; };
 		A20000000000000000000077 /* ConversationMealIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMealIntentClassifier.swift; sourceTree = "<group>"; };
@@ -510,6 +514,7 @@
 				A20000000000000000000089 /* NutritionDayFoundationTests.swift */,
 				A2000000000000000000008C /* HomeDayNavigationTests.swift */,
 				A2000000000000000000008D /* HistoricalMealLoggingTests.swift */,
+				A2000000000000000000008F /* MealEstimateCardUXTests.swift */,
 			);
 			path = TaiAssistantTests;
 			sourceTree = "<group>";
@@ -646,6 +651,7 @@
 				A20000000000000000000052 /* MealCapabilityModels.swift */,
 				A20000000000000000000053 /* MealCapabilityController.swift */,
 				A20000000000000000000054 /* MealEstimateCardView.swift */,
+				A2000000000000000000008E /* MealEstimateCardFormatting.swift */,
 			);
 			path = Meal;
 			sourceTree = "<group>";
@@ -813,6 +819,7 @@
 				A10000000000000000000052 /* MealCapabilityModels.swift in Sources */,
 				A10000000000000000000053 /* MealCapabilityController.swift in Sources */,
 				A10000000000000000000054 /* MealEstimateCardView.swift in Sources */,
+				A1000000000000000000008E /* MealEstimateCardFormatting.swift in Sources */,
 				A10000000000000000000055 /* ConversationViewModel.swift in Sources */,
 				A10000000000000000000056 /* ConversationView.swift in Sources */,
 				A10000000000000000000057 /* ConversationComposerView.swift in Sources */,
@@ -869,6 +876,7 @@
 				A10000000000000000000089 /* NutritionDayFoundationTests.swift in Sources */,
 				A1000000000000000000008C /* HomeDayNavigationTests.swift in Sources */,
 				A1000000000000000000008D /* HistoricalMealLoggingTests.swift in Sources */,
+				A1000000000000000000008F /* MealEstimateCardUXTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

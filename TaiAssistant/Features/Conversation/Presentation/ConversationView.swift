@@ -18,6 +18,9 @@ struct ConversationView: View {
                 onMealCardAction: { action, cardID in
                     viewModel.handleMealCardAction(action, cardID: cardID)
                 },
+                onMealCardLoggingDayChange: { cardID, date in
+                    viewModel.handleMealCardLoggingDayChange(cardID: cardID, selectedDate: date)
+                },
                 onWhy: {
                     viewModel.showLiveTaiWhy = true
                 }
@@ -113,6 +116,7 @@ private struct ConversationMessageListView: View {
     var reduceMotion: Bool
     var onQuickAction: (ConversationQuickAction) -> Void
     var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
+    var onMealCardLoggingDayChange: (UUID, Date) -> Void
     var onWhy: () -> Void
 
     private var isProcessing: Bool {
@@ -133,6 +137,7 @@ private struct ConversationMessageListView: View {
                             message: message,
                             onQuickAction: onQuickAction,
                             onMealCardAction: onMealCardAction,
+                            onMealCardLoggingDayChange: onMealCardLoggingDayChange,
                             onWhy: onWhy
                         )
                         .id(message.id)

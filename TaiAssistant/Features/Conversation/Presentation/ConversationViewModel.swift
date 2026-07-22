@@ -196,6 +196,7 @@ final class ConversationViewModel {
 
         switch action {
         case .looksRight:
+            guard !payload.refinementAccepted else { return }
             payload.refinementAccepted = true
             meal.markReadyToLog()
             replaceCardPayload(cardID: cardID, payload: payload, interactive: true)
@@ -208,12 +209,6 @@ final class ConversationViewModel {
                     targetedDraftID: targetedMealDraftID
                 ))
             }
-            store.append(
-                ConversationMessage(
-                    actor: .assistant,
-                    text: "Great — tap Log Meal when you’re ready to save it."
-                )
-            )
             store.setQuickActions([])
 
         case .changeSomething:
@@ -238,6 +233,27 @@ final class ConversationViewModel {
             guard payload.refinementAccepted else { return }
             Task { await logMealDraft(cardID: cardID, payload: payload) }
         }
+    }
+
+    func handleMealCardLoggingDayChange(cardID: UUID, selectedDate: Date) {
+        guard let message = store.active.messages.first(where: { $0.card?.id == cardID }),
+              let card = message.card,
+              card.isInteractive,
+              var payload = MealCardCodec.decode(card.payload),
+              !payload.isLogged
+        else { return }
+
+        let candidateDay = NutritionDay(containing: selectedDate)
+        guard !candidateDay.isAfterToday() else { return }
+
+        let updatedDraft = meal.applyLoggingDayChange(draftID: payload.draft.id, to: candidateDay)
+            ?? MealCapabilityController.draft(payload.draft.asCheckInDraft(), retargetedTo: candidateDay)
+
+        payload.draft = MealEstimateSnapshot(draft: updatedDraft)
+        replaceCardPayload(cardID: cardID, payload: payload, interactive: true)
+
+        let remaining = ConversationRestoration.interactiveUnloggedMealPayloads(in: store.active)
+        meal.syncUnloggedDrafts(from: remaining)
     }
 
     func consumeConsentRequest() {
@@ -550,9 +566,6 @@ final class ConversationViewModel {
                     targetedDraftID: draftID
                 ))
                 return
-            }
-            if let note = success.assistantNote {
-                store.append(ConversationMessage(actor: .assistant, text: note))
             }
             replaceInteractiveCard(forDraftID: draftID, draft: updated)
             // Successful refinement clears the target; other pending cards stay unchanged.
