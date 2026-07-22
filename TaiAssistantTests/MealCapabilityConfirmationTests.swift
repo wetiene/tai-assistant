@@ -53,7 +53,7 @@ final class MealCapabilityConfirmationTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
         vm.startIfNeeded()
         await vm.sendComposerWithTestHooks(text: "lunch bowl", photo: nil)
 
@@ -83,7 +83,7 @@ final class MealCapabilityConfirmationTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
         vm.startIfNeeded()
         await vm.sendComposerWithTestHooks(text: "dinner steak", photo: nil)
 

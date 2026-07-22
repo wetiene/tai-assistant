@@ -352,6 +352,14 @@ private struct ScriptedCoachAIService: AIService {
         try await base.interpretGoal(request: request)
     }
 
+    func interpretGymPhoto(request: AIInterpretGymPhotoRequest) async throws -> AIInterpretGymPhotoResponse {
+        try await base.interpretGymPhoto(request: request)
+    }
+
+    func interpretWorkoutPlan(request: AIInterpretWorkoutPlanRequest) async throws -> AIInterpretWorkoutPlanResponse {
+        try await base.interpretWorkoutPlan(request: request)
+    }
+
     func coach(request: AICoachRequest) async throws -> AICoachResponse {
         response
     }

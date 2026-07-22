@@ -206,6 +206,8 @@ final class DailyCoachBriefingBuilderTests: XCTestCase {
             XCTAssertTrue(
                 reason.evidencePoints.contains { $0.lowercased().contains("meal") || $0.lowercased().contains("protein") || $0.lowercased().contains("calorie") }
             )
+        case .startGymWorkout, .startGymWorkoutPlan, .resumeGymWorkout, .manageGymPlans:
+            break
         }
 
         if briefing.recommendation.focusTitle.lowercased().contains("protein") {

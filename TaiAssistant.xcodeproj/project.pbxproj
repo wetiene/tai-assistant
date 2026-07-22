@@ -63,7 +63,6 @@
 		A10000000000000000000052 /* MealCapabilityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000052 /* MealCapabilityModels.swift */; };
 		A10000000000000000000053 /* MealCapabilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000053 /* MealCapabilityController.swift */; };
 		A10000000000000000000054 /* MealEstimateCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000054 /* MealEstimateCardView.swift */; };
-		A1000000000000000000008E /* MealEstimateCardFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008E /* MealEstimateCardFormatting.swift */; };
 		A10000000000000000000055 /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000055 /* ConversationViewModel.swift */; };
 		A10000000000000000000056 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000056 /* ConversationView.swift */; };
 		A10000000000000000000057 /* ConversationComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000057 /* ConversationComposerView.swift */; };
@@ -86,6 +85,17 @@
 		A1000000000000000000006B /* ConversationPerformanceProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006B /* ConversationPerformanceProbeTests.swift */; };
 		A1000000000000000000006C /* ConversationImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006C /* ConversationImageCache.swift */; };
 		A1000000000000000000006D /* HomeOptimisticDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006D /* HomeOptimisticDeleteTests.swift */; };
+		A1000000000000000000006E /* ConversationAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006E /* ConversationAttachmentStore.swift */; };
+		A1000000000000000000006F /* ConversationPersistCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006F /* ConversationPersistCoordinator.swift */; };
+		A10000000000000000000070 /* ConversationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000070 /* ConversationRouting.swift */; };
+		A10000000000000000000071 /* LiveTaiModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000071 /* LiveTaiModels.swift */; };
+		A10000000000000000000072 /* LiveTaiContextAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000072 /* LiveTaiContextAssembler.swift */; };
+		A10000000000000000000073 /* LiveTaiCapabilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000073 /* LiveTaiCapabilityController.swift */; };
+		A10000000000000000000074 /* LiveTaiWhySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000074 /* LiveTaiWhySheet.swift */; };
+		A10000000000000000000075 /* LiveTaiRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000075 /* LiveTaiRoutingTests.swift */; };
+		A10000000000000000000076 /* ConversationTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000076 /* ConversationTestSupport.swift */; };
+		A10000000000000000000077 /* ConversationMealIntentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000077 /* ConversationMealIntentClassifier.swift */; };
+		A10000000000000000000078 /* ConversationMealIntentRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000078 /* ConversationMealIntentRoutingTests.swift */; };
 		A10000000000000000000080 /* ConversationRuntimeProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000080 /* ConversationRuntimeProbe.swift */; };
 		A10000000000000000000081 /* MealCardPayloadCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000081 /* MealCardPayloadCache.swift */; };
 		A10000000000000000000082 /* ConversationRuntimeStabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000082 /* ConversationRuntimeStabilityTests.swift */; };
@@ -100,18 +110,46 @@
 		A1000000000000000000008B /* HomeDayNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008B /* HomeDayNavigationBar.swift */; };
 		A1000000000000000000008C /* HomeDayNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008C /* HomeDayNavigationTests.swift */; };
 		A1000000000000000000008D /* HistoricalMealLoggingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008D /* HistoricalMealLoggingTests.swift */; };
+		A1000000000000000000008E /* MealEstimateCardFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008E /* MealEstimateCardFormatting.swift */; };
 		A1000000000000000000008F /* MealEstimateCardUXTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000008F /* MealEstimateCardUXTests.swift */; };
-		A1000000000000000000006E /* ConversationAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006E /* ConversationAttachmentStore.swift */; };
-		A1000000000000000000006F /* ConversationPersistCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000006F /* ConversationPersistCoordinator.swift */; };
-		A10000000000000000000077 /* ConversationMealIntentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000077 /* ConversationMealIntentClassifier.swift */; };
-		A10000000000000000000070 /* ConversationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000070 /* ConversationRouting.swift */; };
-		A10000000000000000000071 /* LiveTaiModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000071 /* LiveTaiModels.swift */; };
-		A10000000000000000000072 /* LiveTaiContextAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000072 /* LiveTaiContextAssembler.swift */; };
-		A10000000000000000000073 /* LiveTaiCapabilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000073 /* LiveTaiCapabilityController.swift */; };
-		A10000000000000000000074 /* LiveTaiWhySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000074 /* LiveTaiWhySheet.swift */; };
-		A10000000000000000000075 /* LiveTaiRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000075 /* LiveTaiRoutingTests.swift */; };
-		A10000000000000000000078 /* ConversationMealIntentRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000078 /* ConversationMealIntentRoutingTests.swift */; };
-		A10000000000000000000076 /* ConversationTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000076 /* ConversationTestSupport.swift */; };
+		A10000000000000000000090 /* GymExerciseCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000090 /* GymExerciseCatalog.swift */; };
+		A10000000000000000000091 /* GymProgramTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000091 /* GymProgramTemplate.swift */; };
+		A10000000000000000000092 /* GymWorkoutSessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000092 /* GymWorkoutSessionState.swift */; };
+		A10000000000000000000093 /* WorkoutPersistentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000093 /* WorkoutPersistentModels.swift */; };
+		A10000000000000000000094 /* WorkoutRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000094 /* WorkoutRepository.swift */; };
+		A10000000000000000000095 /* GymCapabilityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000095 /* GymCapabilityModels.swift */; };
+		A10000000000000000000096 /* GymCapabilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000096 /* GymCapabilityController.swift */; };
+		A10000000000000000000097 /* GymSetConfirmationCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000097 /* GymSetConfirmationCardView.swift */; };
+		A10000000000000000000098 /* GymWorkoutPlanCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000098 /* GymWorkoutPlanCardView.swift */; };
+		A10000000000000000000099 /* GymSetCardFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000099 /* GymSetCardFormatting.swift */; };
+		A1000000000000000000009A /* ConversationGymIntentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000009A /* ConversationGymIntentClassifier.swift */; };
+		A1000000000000000000009B /* GymCapabilityConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000009B /* GymCapabilityConfirmationTests.swift */; };
+		A1000000000000000000009C /* TaiAssistantSchemaVersions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000009C /* TaiAssistantSchemaVersions.swift */; };
+		A1000000000000000000009D /* TaiAssistantMigrationPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000009D /* TaiAssistantMigrationPlan.swift */; };
+		A1000000000000000000009E /* GymSetCardUXTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000009E /* GymSetCardUXTests.swift */; };
+		A1000000000000000000009F /* WorkoutSchemaMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000009F /* WorkoutSchemaMigrationTests.swift */; };
+		A100000000000000000000A0 /* GymPlanModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A0 /* GymPlanModels.swift */; };
+		A100000000000000000000A1 /* GymPlanPersistentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A1 /* GymPlanPersistentModels.swift */; };
+		A100000000000000000000A2 /* GymPlanRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A2 /* GymPlanRepository.swift */; };
+		A100000000000000000000A3 /* LocalSwiftDataGymPlanRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A3 /* LocalSwiftDataGymPlanRepository.swift */; };
+		A100000000000000000000A4 /* GymPlansView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A4 /* GymPlansView.swift */; };
+		A100000000000000000000A5 /* GymPlanEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A5 /* GymPlanEditorView.swift */; };
+		A100000000000000000000A6 /* GymPlansRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A6 /* GymPlansRepositoryTests.swift */; };
+		A100000000000000000000A7 /* GymWorkoutStartConflict.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A7 /* GymWorkoutStartConflict.swift */; };
+		A100000000000000000000A8 /* GymWorkoutStartConflictTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A8 /* GymWorkoutStartConflictTests.swift */; };
+		A100000000000000000000B0 /* GymPlanExerciseReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B0 /* GymPlanExerciseReference.swift */; };
+		A100000000000000000000B1 /* GymPlanImportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B1 /* GymPlanImportModels.swift */; };
+		A100000000000000000000B2 /* GymPlanImportMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B2 /* GymPlanImportMapper.swift */; };
+		A100000000000000000000B3 /* GymPlanImportSourceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B3 /* GymPlanImportSourceViews.swift */; };
+		A100000000000000000000B4 /* GymPlanImportReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B4 /* GymPlanImportReviewView.swift */; };
+		A100000000000000000000B5 /* MockWorkoutPlanInterpretation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B5 /* MockWorkoutPlanInterpretation.swift */; };
+		A100000000000000000000B6 /* GymPlanImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B6 /* GymPlanImportTests.swift */; };
+		A100000000000000000000B9 /* GymPlanImportImageSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B9 /* GymPlanImportImageSupport.swift */; };
+		A100000000000000000000BC /* SwiftDataContainerDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000BC /* SwiftDataContainerDiagnostics.swift */; };
+		A100000000000000000000BD /* SwiftDataStoreInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000BD /* SwiftDataStoreInspector.swift */; };
+		A100000000000000000000BE /* GymPlanImportError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000BE /* GymPlanImportError.swift */; };
+		A100000000000000000000BF /* AIProxyCallDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000BF /* AIProxyCallDiagnostics.swift */; };
+		A100000000000000000000C0 /* GymPlanImportHTTPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C0 /* GymPlanImportHTTPTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -186,7 +224,6 @@
 		A20000000000000000000052 /* MealCapabilityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCapabilityModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000053 /* MealCapabilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCapabilityController.swift; sourceTree = "<group>"; };
 		A20000000000000000000054 /* MealEstimateCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEstimateCardView.swift; sourceTree = "<group>"; };
-		A2000000000000000000008E /* MealEstimateCardFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEstimateCardFormatting.swift; sourceTree = "<group>"; };
 		A20000000000000000000055 /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000056 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
 		A20000000000000000000057 /* ConversationComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationComposerView.swift; sourceTree = "<group>"; };
@@ -209,6 +246,17 @@
 		A2000000000000000000006B /* ConversationPerformanceProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPerformanceProbeTests.swift; sourceTree = "<group>"; };
 		A2000000000000000000006C /* ConversationImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationImageCache.swift; sourceTree = "<group>"; };
 		A2000000000000000000006D /* HomeOptimisticDeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOptimisticDeleteTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000006E /* ConversationAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAttachmentStore.swift; sourceTree = "<group>"; };
+		A2000000000000000000006F /* ConversationPersistCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPersistCoordinator.swift; sourceTree = "<group>"; };
+		A20000000000000000000070 /* ConversationRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRouting.swift; sourceTree = "<group>"; };
+		A20000000000000000000071 /* LiveTaiModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000072 /* LiveTaiContextAssembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiContextAssembler.swift; sourceTree = "<group>"; };
+		A20000000000000000000073 /* LiveTaiCapabilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiCapabilityController.swift; sourceTree = "<group>"; };
+		A20000000000000000000074 /* LiveTaiWhySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiWhySheet.swift; sourceTree = "<group>"; };
+		A20000000000000000000075 /* LiveTaiRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiRoutingTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000076 /* ConversationTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTestSupport.swift; sourceTree = "<group>"; };
+		A20000000000000000000077 /* ConversationMealIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMealIntentClassifier.swift; sourceTree = "<group>"; };
+		A20000000000000000000078 /* ConversationMealIntentRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMealIntentRoutingTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000080 /* ConversationRuntimeProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRuntimeProbe.swift; sourceTree = "<group>"; };
 		A20000000000000000000081 /* MealCardPayloadCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealCardPayloadCache.swift; sourceTree = "<group>"; };
 		A20000000000000000000082 /* ConversationRuntimeStabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRuntimeStabilityTests.swift; sourceTree = "<group>"; };
@@ -223,18 +271,46 @@
 		A2000000000000000000008B /* HomeDayNavigationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDayNavigationBar.swift; sourceTree = "<group>"; };
 		A2000000000000000000008C /* HomeDayNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDayNavigationTests.swift; sourceTree = "<group>"; };
 		A2000000000000000000008D /* HistoricalMealLoggingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoricalMealLoggingTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000008E /* MealEstimateCardFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEstimateCardFormatting.swift; sourceTree = "<group>"; };
 		A2000000000000000000008F /* MealEstimateCardUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealEstimateCardUXTests.swift; sourceTree = "<group>"; };
-		A2000000000000000000006E /* ConversationAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAttachmentStore.swift; sourceTree = "<group>"; };
-		A2000000000000000000006F /* ConversationPersistCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPersistCoordinator.swift; sourceTree = "<group>"; };
-		A20000000000000000000077 /* ConversationMealIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMealIntentClassifier.swift; sourceTree = "<group>"; };
-		A20000000000000000000070 /* ConversationRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRouting.swift; sourceTree = "<group>"; };
-		A20000000000000000000071 /* LiveTaiModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiModels.swift; sourceTree = "<group>"; };
-		A20000000000000000000072 /* LiveTaiContextAssembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiContextAssembler.swift; sourceTree = "<group>"; };
-		A20000000000000000000073 /* LiveTaiCapabilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiCapabilityController.swift; sourceTree = "<group>"; };
-		A20000000000000000000074 /* LiveTaiWhySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiWhySheet.swift; sourceTree = "<group>"; };
-		A20000000000000000000075 /* LiveTaiRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTaiRoutingTests.swift; sourceTree = "<group>"; };
-		A20000000000000000000078 /* ConversationMealIntentRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMealIntentRoutingTests.swift; sourceTree = "<group>"; };
-		A20000000000000000000076 /* ConversationTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTestSupport.swift; sourceTree = "<group>"; };
+		A20000000000000000000090 /* GymExerciseCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymExerciseCatalog.swift; sourceTree = "<group>"; };
+		A20000000000000000000091 /* GymProgramTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymProgramTemplate.swift; sourceTree = "<group>"; };
+		A20000000000000000000092 /* GymWorkoutSessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymWorkoutSessionState.swift; sourceTree = "<group>"; };
+		A20000000000000000000093 /* WorkoutPersistentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutPersistentModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000094 /* WorkoutRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRepository.swift; sourceTree = "<group>"; };
+		A20000000000000000000095 /* GymCapabilityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymCapabilityModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000096 /* GymCapabilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymCapabilityController.swift; sourceTree = "<group>"; };
+		A20000000000000000000097 /* GymSetConfirmationCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSetConfirmationCardView.swift; sourceTree = "<group>"; };
+		A20000000000000000000098 /* GymWorkoutPlanCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymWorkoutPlanCardView.swift; sourceTree = "<group>"; };
+		A20000000000000000000099 /* GymSetCardFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSetCardFormatting.swift; sourceTree = "<group>"; };
+		A2000000000000000000009A /* ConversationGymIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationGymIntentClassifier.swift; sourceTree = "<group>"; };
+		A2000000000000000000009B /* GymCapabilityConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymCapabilityConfirmationTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000009C /* TaiAssistantSchemaVersions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaiAssistantSchemaVersions.swift; sourceTree = "<group>"; };
+		A2000000000000000000009D /* TaiAssistantMigrationPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaiAssistantMigrationPlan.swift; sourceTree = "<group>"; };
+		A2000000000000000000009E /* GymSetCardUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSetCardUXTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000009F /* WorkoutSchemaMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSchemaMigrationTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000A0 /* GymPlanModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanModels.swift; sourceTree = "<group>"; };
+		A200000000000000000000A1 /* GymPlanPersistentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanPersistentModels.swift; sourceTree = "<group>"; };
+		A200000000000000000000A2 /* GymPlanRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanRepository.swift; sourceTree = "<group>"; };
+		A200000000000000000000A3 /* LocalSwiftDataGymPlanRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSwiftDataGymPlanRepository.swift; sourceTree = "<group>"; };
+		A200000000000000000000A4 /* GymPlansView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlansView.swift; sourceTree = "<group>"; };
+		A200000000000000000000A5 /* GymPlanEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanEditorView.swift; sourceTree = "<group>"; };
+		A200000000000000000000A6 /* GymPlansRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlansRepositoryTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000A7 /* GymWorkoutStartConflict.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymWorkoutStartConflict.swift; sourceTree = "<group>"; };
+		A200000000000000000000A8 /* GymWorkoutStartConflictTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymWorkoutStartConflictTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000B0 /* GymPlanExerciseReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanExerciseReference.swift; sourceTree = "<group>"; };
+		A200000000000000000000B1 /* GymPlanImportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportModels.swift; sourceTree = "<group>"; };
+		A200000000000000000000B2 /* GymPlanImportMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportMapper.swift; sourceTree = "<group>"; };
+		A200000000000000000000B3 /* GymPlanImportSourceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportSourceViews.swift; sourceTree = "<group>"; };
+		A200000000000000000000B4 /* GymPlanImportReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportReviewView.swift; sourceTree = "<group>"; };
+		A200000000000000000000B5 /* MockWorkoutPlanInterpretation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockWorkoutPlanInterpretation.swift; sourceTree = "<group>"; };
+		A200000000000000000000B6 /* GymPlanImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportTests.swift; sourceTree = "<group>"; };
+		A200000000000000000000B9 /* GymPlanImportImageSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportImageSupport.swift; sourceTree = "<group>"; };
+		A200000000000000000000BC /* SwiftDataContainerDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataContainerDiagnostics.swift; sourceTree = "<group>"; };
+		A200000000000000000000BD /* SwiftDataStoreInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataStoreInspector.swift; sourceTree = "<group>"; };
+		A200000000000000000000BE /* GymPlanImportError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportError.swift; sourceTree = "<group>"; };
+		A200000000000000000000BF /* AIProxyCallDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProxyCallDiagnostics.swift; sourceTree = "<group>"; };
+		A200000000000000000000C0 /* GymPlanImportHTTPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymPlanImportHTTPTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -307,6 +383,7 @@
 				A0000000000000000000001D /* CheckIn/Presentation */,
 				A00000000000000000000062 /* Coach */,
 				A00000000000000000000070 /* Conversation */,
+				A0000000000000000000007B /* Gym */,
 				A00000000000000000000018 /* Dashboard/Presentation */,
 				A00000000000000000000019 /* Goals/Presentation */,
 				A00000000000000000000063 /* Home */,
@@ -346,6 +423,9 @@
 			isa = PBXGroup;
 			children = (
 				A2000000000000000000000B /* AppModelContainerFactory.swift */,
+				A200000000000000000000BC /* SwiftDataContainerDiagnostics.swift */,
+				A2000000000000000000009C /* TaiAssistantSchemaVersions.swift */,
+				A2000000000000000000009D /* TaiAssistantMigrationPlan.swift */,
 				A00000000000000000000014 /* Models */,
 				A2000000000000000000000C /* PersistenceService.swift */,
 				A2000000000000000000000D /* PreviewSeedData.swift */,
@@ -390,6 +470,8 @@
 			children = (
 				A2000000000000000000000E /* PersistentModels.swift */,
 				A20000000000000000000060 /* ConversationPersistentModels.swift */,
+				A20000000000000000000093 /* WorkoutPersistentModels.swift */,
+				A200000000000000000000A1 /* GymPlanPersistentModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -398,6 +480,7 @@
 			isa = PBXGroup;
 			children = (
 				A2000000000000000000000F /* LocalSwiftDataRepositories.swift */,
+				A200000000000000000000A3 /* LocalSwiftDataGymPlanRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -406,6 +489,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000010 /* MockServices.swift */,
+				A200000000000000000000B5 /* MockWorkoutPlanInterpretation.swift */,
 			);
 			path = Mocks;
 			sourceTree = "<group>";
@@ -414,9 +498,12 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000011 /* AIService.swift */,
+				A200000000000000000000BF /* AIProxyCallDiagnostics.swift */,
 				A20000000000000000000012 /* GoalRepository.swift */,
 				A20000000000000000000013 /* HealthService.swift */,
 				A20000000000000000000014 /* MealRepository.swift */,
+				A20000000000000000000094 /* WorkoutRepository.swift */,
+				A200000000000000000000A2 /* GymPlanRepository.swift */,
 				A20000000000000000000087 /* MealRepository+NutritionDay.swift */,
 				A20000000000000000000015 /* PersistenceRepositories.swift */,
 				A20000000000000000000061 /* ActiveConversationRepository.swift */,
@@ -515,6 +602,14 @@
 				A2000000000000000000008C /* HomeDayNavigationTests.swift */,
 				A2000000000000000000008D /* HistoricalMealLoggingTests.swift */,
 				A2000000000000000000008F /* MealEstimateCardUXTests.swift */,
+				A2000000000000000000009B /* GymCapabilityConfirmationTests.swift */,
+				A2000000000000000000009E /* GymSetCardUXTests.swift */,
+				A2000000000000000000009F /* WorkoutSchemaMigrationTests.swift */,
+				A200000000000000000000BD /* SwiftDataStoreInspector.swift */,
+				A200000000000000000000A6 /* GymPlansRepositoryTests.swift */,
+				A200000000000000000000A8 /* GymWorkoutStartConflictTests.swift */,
+				A200000000000000000000B6 /* GymPlanImportTests.swift */,
+				A200000000000000000000C0 /* GymPlanImportHTTPTests.swift */,
 			);
 			path = TaiAssistantTests;
 			sourceTree = "<group>";
@@ -574,25 +669,6 @@
 			path = Presentation;
 			sourceTree = "<group>";
 		};
-		A00000000000000000000083 /* Nutrition */ = {
-			isa = PBXGroup;
-			children = (
-				A00000000000000000000084 /* Domain */,
-			);
-			path = Nutrition;
-			sourceTree = "<group>";
-		};
-		A00000000000000000000084 /* Domain */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000083 /* NutritionDay.swift */,
-				A20000000000000000000084 /* NutritionDaySelection.swift */,
-				A20000000000000000000085 /* NutritionDayAggregation.swift */,
-				A20000000000000000000086 /* MealLog+NutritionSemantics.swift */,
-			);
-			path = Domain;
-			sourceTree = "<group>";
-		};
 		A00000000000000000000070 /* Conversation */ = {
 			isa = PBXGroup;
 			children = (
@@ -610,6 +686,7 @@
 				A20000000000000000000050 /* ConversationModels.swift */,
 				A20000000000000000000051 /* ConversationSessionStore.swift */,
 				A20000000000000000000077 /* ConversationMealIntentClassifier.swift */,
+				A2000000000000000000009A /* ConversationGymIntentClassifier.swift */,
 				A20000000000000000000070 /* ConversationRouting.swift */,
 				A20000000000000000000062 /* ConversationSnapshotCodec.swift */,
 				A20000000000000000000063 /* ConversationRestoration.swift */,
@@ -641,6 +718,7 @@
 			children = (
 				A00000000000000000000074 /* Meal */,
 				A0000000000000000000007A /* LiveTai */,
+				A0000000000000000000007C /* Gym */,
 			);
 			path = Capabilities;
 			sourceTree = "<group>";
@@ -673,6 +751,74 @@
 				A20000000000000000000074 /* LiveTaiWhySheet.swift */,
 			);
 			path = LiveTai;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000007B /* Gym */ = {
+			isa = PBXGroup;
+			children = (
+				A0000000000000000000007D /* Domain */,
+				A0000000000000000000007E /* Presentation */,
+			);
+			path = Gym;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000007C /* Gym */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000095 /* GymCapabilityModels.swift */,
+				A20000000000000000000096 /* GymCapabilityController.swift */,
+				A20000000000000000000097 /* GymSetConfirmationCardView.swift */,
+				A20000000000000000000098 /* GymWorkoutPlanCardView.swift */,
+				A20000000000000000000099 /* GymSetCardFormatting.swift */,
+			);
+			path = Gym;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000007D /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000090 /* GymExerciseCatalog.swift */,
+				A20000000000000000000091 /* GymProgramTemplate.swift */,
+				A20000000000000000000092 /* GymWorkoutSessionState.swift */,
+				A200000000000000000000A0 /* GymPlanModels.swift */,
+				A200000000000000000000B0 /* GymPlanExerciseReference.swift */,
+				A200000000000000000000B1 /* GymPlanImportModels.swift */,
+				A200000000000000000000BE /* GymPlanImportError.swift */,
+				A200000000000000000000B2 /* GymPlanImportMapper.swift */,
+				A200000000000000000000B9 /* GymPlanImportImageSupport.swift */,
+				A200000000000000000000A7 /* GymWorkoutStartConflict.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000007E /* Presentation */ = {
+			isa = PBXGroup;
+			children = (
+				A200000000000000000000A4 /* GymPlansView.swift */,
+				A200000000000000000000A5 /* GymPlanEditorView.swift */,
+				A200000000000000000000B3 /* GymPlanImportSourceViews.swift */,
+				A200000000000000000000B4 /* GymPlanImportReviewView.swift */,
+			);
+			path = Presentation;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000083 /* Nutrition */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000084 /* Domain */,
+			);
+			path = Nutrition;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000084 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000083 /* NutritionDay.swift */,
+				A20000000000000000000084 /* NutritionDaySelection.swift */,
+				A20000000000000000000085 /* NutritionDayAggregation.swift */,
+				A20000000000000000000086 /* MealLog+NutritionSemantics.swift */,
+			);
+			path = Domain;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -777,12 +923,16 @@
 				A10000000000000000000009 /* DSColor.swift in Sources */,
 				A1000000000000000000000A /* DSSpacing.swift in Sources */,
 				A1000000000000000000000B /* AppModelContainerFactory.swift in Sources */,
+				A100000000000000000000BC /* SwiftDataContainerDiagnostics.swift in Sources */,
+				A1000000000000000000009C /* TaiAssistantSchemaVersions.swift in Sources */,
+				A1000000000000000000009D /* TaiAssistantMigrationPlan.swift in Sources */,
 				A1000000000000000000000C /* PersistenceService.swift in Sources */,
 				A1000000000000000000000D /* PreviewSeedData.swift in Sources */,
 				A1000000000000000000000E /* PersistentModels.swift in Sources */,
 				A1000000000000000000000F /* LocalSwiftDataRepositories.swift in Sources */,
 				A10000000000000000000010 /* MockServices.swift in Sources */,
 				A10000000000000000000011 /* AIService.swift in Sources */,
+				A100000000000000000000BF /* AIProxyCallDiagnostics.swift in Sources */,
 				A10000000000000000000012 /* GoalRepository.swift in Sources */,
 				A10000000000000000000013 /* HealthService.swift in Sources */,
 				A10000000000000000000014 /* MealRepository.swift in Sources */,
@@ -852,6 +1002,32 @@
 				A10000000000000000000088 /* HomeNutritionDayLoader.swift in Sources */,
 				A1000000000000000000008A /* HomeHistoricalDayPresenter.swift in Sources */,
 				A1000000000000000000008B /* HomeDayNavigationBar.swift in Sources */,
+				A10000000000000000000090 /* GymExerciseCatalog.swift in Sources */,
+				A10000000000000000000091 /* GymProgramTemplate.swift in Sources */,
+				A10000000000000000000092 /* GymWorkoutSessionState.swift in Sources */,
+				A10000000000000000000093 /* WorkoutPersistentModels.swift in Sources */,
+				A10000000000000000000094 /* WorkoutRepository.swift in Sources */,
+				A10000000000000000000095 /* GymCapabilityModels.swift in Sources */,
+				A10000000000000000000096 /* GymCapabilityController.swift in Sources */,
+				A10000000000000000000097 /* GymSetConfirmationCardView.swift in Sources */,
+				A10000000000000000000098 /* GymWorkoutPlanCardView.swift in Sources */,
+				A10000000000000000000099 /* GymSetCardFormatting.swift in Sources */,
+				A1000000000000000000009A /* ConversationGymIntentClassifier.swift in Sources */,
+				A100000000000000000000A0 /* GymPlanModels.swift in Sources */,
+				A100000000000000000000A1 /* GymPlanPersistentModels.swift in Sources */,
+				A100000000000000000000A2 /* GymPlanRepository.swift in Sources */,
+				A100000000000000000000A3 /* LocalSwiftDataGymPlanRepository.swift in Sources */,
+				A100000000000000000000A4 /* GymPlansView.swift in Sources */,
+				A100000000000000000000A5 /* GymPlanEditorView.swift in Sources */,
+				A100000000000000000000B0 /* GymPlanExerciseReference.swift in Sources */,
+				A100000000000000000000B1 /* GymPlanImportModels.swift in Sources */,
+				A100000000000000000000BE /* GymPlanImportError.swift in Sources */,
+				A100000000000000000000B2 /* GymPlanImportMapper.swift in Sources */,
+				A100000000000000000000B3 /* GymPlanImportSourceViews.swift in Sources */,
+				A100000000000000000000B4 /* GymPlanImportReviewView.swift in Sources */,
+				A100000000000000000000B5 /* MockWorkoutPlanInterpretation.swift in Sources */,
+				A100000000000000000000B9 /* GymPlanImportImageSupport.swift in Sources */,
+				A100000000000000000000A7 /* GymWorkoutStartConflict.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -877,6 +1053,14 @@
 				A1000000000000000000008C /* HomeDayNavigationTests.swift in Sources */,
 				A1000000000000000000008D /* HistoricalMealLoggingTests.swift in Sources */,
 				A1000000000000000000008F /* MealEstimateCardUXTests.swift in Sources */,
+				A1000000000000000000009B /* GymCapabilityConfirmationTests.swift in Sources */,
+				A1000000000000000000009E /* GymSetCardUXTests.swift in Sources */,
+				A1000000000000000000009F /* WorkoutSchemaMigrationTests.swift in Sources */,
+				A100000000000000000000BD /* SwiftDataStoreInspector.swift in Sources */,
+				A100000000000000000000A6 /* GymPlansRepositoryTests.swift in Sources */,
+				A100000000000000000000A8 /* GymWorkoutStartConflictTests.swift in Sources */,
+				A100000000000000000000B6 /* GymPlanImportTests.swift in Sources */,
+				A100000000000000000000C0 /* GymPlanImportHTTPTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

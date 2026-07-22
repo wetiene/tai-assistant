@@ -339,6 +339,14 @@ private final class SpyAIService: AIService, @unchecked Sendable {
         try await base.interpretGoal(request: request)
     }
 
+    func interpretGymPhoto(request: AIInterpretGymPhotoRequest) async throws -> AIInterpretGymPhotoResponse {
+        try await base.interpretGymPhoto(request: request)
+    }
+
+    func interpretWorkoutPlan(request: AIInterpretWorkoutPlanRequest) async throws -> AIInterpretWorkoutPlanResponse {
+        try await base.interpretWorkoutPlan(request: request)
+    }
+
     func coach(request: AICoachRequest) async throws -> AICoachResponse {
         coachCallCount += 1
         return try await base.coach(request: request)

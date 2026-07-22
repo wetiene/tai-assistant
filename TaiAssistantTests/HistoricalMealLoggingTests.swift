@@ -105,7 +105,10 @@ final class HistoricalMealLoggingTests: XCTestCase {
         let vm = ConversationViewModel(
             store: store,
             meal: meal,
+            gym: ConversationTestSupport.makeGym(),
             liveTai: ConversationTestSupport.makeLiveTai(),
+            gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
+            ownerID: "historical.log",
             assistantName: "Tai"
         )
 
@@ -237,7 +240,10 @@ final class HistoricalMealLoggingTests: XCTestCase {
         let vm = ConversationViewModel(
             store: ConversationSessionStore(),
             meal: meal,
+            gym: ConversationTestSupport.makeGym(),
             liveTai: ConversationTestSupport.makeLiveTai(),
+            gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
+            ownerID: "historical.log",
             assistantName: "Tai"
         )
 

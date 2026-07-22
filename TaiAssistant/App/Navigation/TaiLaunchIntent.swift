@@ -10,6 +10,9 @@ struct TaiLaunchIntent: Equatable, Sendable {
         case openConversation
         case startMealCapture
         case focusComposer
+        case manageGymPlans
+        case startGymWorkout(GymPlanWorkoutTarget)
+        case resumeGymWorkout
     }
 
     static let openConversation = TaiLaunchIntent(kind: .openConversation)
@@ -30,6 +33,20 @@ struct TaiLaunchIntent: Equatable, Sendable {
             return TaiLaunchIntent(kind: .startMealCapture, dayContext: dayContext)
         case .reviewGoal:
             return TaiLaunchIntent(kind: .openConversation, dayContext: dayContext)
+        case .manageGymPlans:
+            return TaiLaunchIntent(kind: .manageGymPlans, dayContext: dayContext)
+        case .startGymWorkout(let templateID):
+            return TaiLaunchIntent(
+                kind: .startGymWorkout(GymPlanWorkoutTarget(reference: .starter(templateID), sectionIndex: 0)),
+                dayContext: dayContext
+            )
+        case .startGymWorkoutPlan(let reference):
+            return TaiLaunchIntent(
+                kind: .startGymWorkout(GymPlanWorkoutTarget(reference: reference, sectionIndex: 0)),
+                dayContext: dayContext
+            )
+        case .resumeGymWorkout:
+            return TaiLaunchIntent(kind: .resumeGymWorkout, dayContext: dayContext)
         }
     }
 }

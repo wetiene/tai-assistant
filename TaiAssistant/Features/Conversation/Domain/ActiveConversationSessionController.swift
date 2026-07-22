@@ -12,11 +12,16 @@ final class ActiveConversationSessionController {
 
     private let conversationRepository: ActiveConversationRepository
     private let mealRepository: MealRepository
+    private let workoutRepository: WorkoutRepository
+    private let gymPlanRepository: GymPlanRepository
     private let goalRepository: GoalRepository
     private let aiService: AIService
     private let ownerID: String
     private let assistantName: String
     private var onMealSaved: (() -> Void)?
+    private var onWorkoutSaved: (() -> Void)?
+    private var onManageGymPlans: (() -> Void)?
+    private var onPresentGymPlanImportReview: ((GymPlanImportDraft, String?) -> Void)?
     private var loadTask: Task<Void, Never>?
     private var didLoad = false
     private var persistCoordinator: ConversationPersistCoordinator?
@@ -24,24 +29,45 @@ final class ActiveConversationSessionController {
     init(
         conversationRepository: ActiveConversationRepository,
         mealRepository: MealRepository,
+        workoutRepository: WorkoutRepository,
+        gymPlanRepository: GymPlanRepository,
         goalRepository: GoalRepository,
         aiService: AIService,
         ownerID: String,
         assistantName: String,
-        onMealSaved: (() -> Void)? = nil
+        onMealSaved: (() -> Void)? = nil,
+        onWorkoutSaved: (() -> Void)? = nil
     ) {
         self.conversationRepository = conversationRepository
         self.mealRepository = mealRepository
+        self.workoutRepository = workoutRepository
+        self.gymPlanRepository = gymPlanRepository
         self.goalRepository = goalRepository
         self.aiService = aiService
         self.ownerID = ownerID
         self.assistantName = assistantName
         self.onMealSaved = onMealSaved
+        self.onWorkoutSaved = onWorkoutSaved
     }
 
     func updateOnMealSaved(_ handler: (() -> Void)?) {
         onMealSaved = handler
         viewModel?.onMealSaved = handler
+    }
+
+    func updateOnWorkoutSaved(_ handler: (() -> Void)?) {
+        onWorkoutSaved = handler
+        viewModel?.onWorkoutSaved = handler
+    }
+
+    func updateOnManageGymPlans(_ handler: (() -> Void)?) {
+        onManageGymPlans = handler
+        viewModel?.onManageGymPlans = handler
+    }
+
+    func updateOnPresentGymPlanImportReview(_ handler: ((GymPlanImportDraft, String?) -> Void)?) {
+        onPresentGymPlanImportReview = handler
+        viewModel?.onPresentGymPlanImportReview = handler
     }
 
     /// Idempotent: first call starts restore; later calls await the same load.
@@ -120,6 +146,13 @@ final class ActiveConversationSessionController {
             )
             meal.restoreFromConversation(restored)
 
+            let gym = GymCapabilityController(
+                workoutRepository: workoutRepository,
+                aiService: aiService,
+                ownerID: ownerID
+            )
+            await gym.restoreFromConversation(restored)
+
             let liveTai = LiveTaiCapabilityController(
                 mealRepository: mealRepository,
                 goalRepository: goalRepository,
@@ -130,9 +163,16 @@ final class ActiveConversationSessionController {
             let vm = ConversationViewModel(
                 store: store,
                 meal: meal,
+                gym: gym,
                 liveTai: liveTai,
+                gymPlanRepository: gymPlanRepository,
+                aiService: aiService,
+                ownerID: ownerID,
                 assistantName: assistantName,
-                onMealSaved: onMealSaved
+                onMealSaved: onMealSaved,
+                onWorkoutSaved: onWorkoutSaved,
+                onManageGymPlans: onManageGymPlans,
+                onPresentGymPlanImportReview: onPresentGymPlanImportReview
             )
             let beforeSeed = store.active
             vm.startIfNeeded()
@@ -165,6 +205,12 @@ final class ActiveConversationSessionController {
             viewModel.applyMealIntent(dayContext: intent.dayContext)
         case .focusComposer:
             viewModel.startIfNeeded()
+        case .startGymWorkout(let target):
+            viewModel.applyGymIntent(workoutTarget: target)
+        case .resumeGymWorkout:
+            viewModel.applyGymIntent(resume: true)
+        case .manageGymPlans:
+            viewModel.onManageGymPlans?()
         }
     }
 }

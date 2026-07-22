@@ -49,7 +49,8 @@ enum HomeNutritionDayFormatting {
     static func navigationTitle(
         for day: NutritionDay,
         calendar: Calendar = .current,
-        now: Date = .now
+        now: Date = .now,
+        locale: Locale = .current
     ) -> String {
         if day.isToday(calendar: calendar, now: now) {
             return "Today"
@@ -60,18 +61,23 @@ enum HomeNutritionDayFormatting {
             return "Yesterday"
         }
 
-        return day.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        return day.start.formatted(
+            .dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(locale)
+        )
     }
 
     static func pickerLabel(
         for day: NutritionDay,
         calendar: Calendar = .current,
-        now: Date = .now
+        now: Date = .now,
+        locale: Locale = .current
     ) -> String {
         if day.isToday(calendar: calendar, now: now) {
-            return "Today · \(day.start.formatted(.dateTime.month(.abbreviated).day()))"
+            return "Today · \(day.start.formatted(.dateTime.month(.abbreviated).day().locale(locale)))"
         }
-        return day.start.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+        return day.start.formatted(
+            .dateTime.weekday(.wide).month(.abbreviated).day().locale(locale)
+        )
     }
 
     static func mealsSectionTitle(isToday: Bool) -> String {

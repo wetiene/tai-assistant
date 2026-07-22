@@ -8,6 +8,12 @@ enum ConversationInputRoute: Equatable, Sendable {
     case mealRefine(draftID: UUID)
     /// Ambiguous food fragment — ask whether to log or ask about it.
     case clarifyMealOrAsk
+    case gymStart(GymProgramTemplateID)
+    case gymFinish
+    case gymSetPhoto
+    case gymOpenPlanImport
+    case gymImportPasteText(String)
+    case gymShowCurrentProgram
 }
 
 enum ConversationRouter {
@@ -25,8 +31,46 @@ enum ConversationRouter {
         text: String,
         hasPhoto: Bool,
         targetedMealDraftID: UUID?,
-        isExplicitMealCaptureIntent: Bool = false
+        isExplicitMealCaptureIntent: Bool = false,
+        hasActiveGymSession: Bool = false
     ) -> ConversationInputRoute {
+        if hasActiveGymSession {
+            if hasPhoto {
+                return .gymSetPhoto
+            }
+            switch ConversationGymIntentClassifier.classify(text) {
+            case .finishWorkout:
+                return .gymFinish
+            case .startUpperBody, .startLowerBody:
+                return .liveTai
+            case .openPlanImport, .replacePlan:
+                return .gymOpenPlanImport
+            case .pastePlanText(let planText):
+                return .gymImportPasteText(planText)
+            case .showCurrentProgram:
+                return .gymShowCurrentProgram
+            case .general:
+                return .liveTai
+            }
+        }
+
+        switch ConversationGymIntentClassifier.classify(text) {
+        case .startUpperBody:
+            return .gymStart(.upperBody)
+        case .startLowerBody:
+            return .gymStart(.lowerBody)
+        case .finishWorkout:
+            return .liveTai
+        case .openPlanImport, .replacePlan:
+            return .gymOpenPlanImport
+        case .pastePlanText(let planText):
+            return .gymImportPasteText(planText)
+        case .showCurrentProgram:
+            return .gymShowCurrentProgram
+        case .general:
+            break
+        }
+
         if let targetedMealDraftID {
             return .mealRefine(draftID: targetedMealDraftID)
         }
@@ -52,6 +96,14 @@ enum ConversationRouter {
         else { return false }
         return true
     }
+
+    static func isGymActive(_ activity: ConversationActivity) -> Bool {
+        guard case let .capability(capabilityID, phaseID, _) = activity,
+              capabilityID == GymCapabilityID.capability
+        else { return false }
+        return phaseID != GymCapabilityID.Phase.idle.rawValue
+            && phaseID != GymCapabilityID.Phase.completed.rawValue
+    }
 }
 
 // MARK: - Quick-action allowlist
@@ -67,6 +119,12 @@ enum ConversationAllowedQuickAction: String, CaseIterable, Sendable {
     case liveTaiAskAboutIt = "liveTai.askAboutIt"
     case liveTaiRetry = "liveTai.retry"
     case liveTaiWhy = "liveTai.why"
+    case gymStartUpperBody = "gym.startUpperBody"
+    case gymStartLowerBody = "gym.startLowerBody"
+    case gymManagePlans = "gym.managePlans"
+    case gymTakeSetPhoto = "gym.takeSetPhoto"
+    case gymFinishWorkout = "gym.finishWorkout"
+    case gymResumeWorkout = "gym.resumeWorkout"
 
     var title: String {
         switch self {
@@ -78,6 +136,12 @@ enum ConversationAllowedQuickAction: String, CaseIterable, Sendable {
         case .liveTaiAskAboutIt: return "Ask about it"
         case .liveTaiRetry: return "Retry"
         case .liveTaiWhy: return "Why?"
+        case .gymStartUpperBody: return "Upper Body"
+        case .gymStartLowerBody: return "Lower Body"
+        case .gymManagePlans: return "Gym Plans"
+        case .gymTakeSetPhoto: return "Take Photo"
+        case .gymFinishWorkout: return "Finish Workout"
+        case .gymResumeWorkout: return "Resume Workout"
         }
     }
 
@@ -91,6 +155,12 @@ enum ConversationAllowedQuickAction: String, CaseIterable, Sendable {
         case .liveTaiAskAboutIt: return "bubble.left"
         case .liveTaiRetry: return "arrow.clockwise"
         case .liveTaiWhy: return "questionmark.circle"
+        case .gymStartUpperBody: return "figure.strengthtraining.traditional"
+        case .gymStartLowerBody: return "figure.run"
+        case .gymManagePlans: return "list.bullet.rectangle"
+        case .gymTakeSetPhoto: return "camera.fill"
+        case .gymFinishWorkout: return "flag.checkered"
+        case .gymResumeWorkout: return "arrow.clockwise.circle"
         }
     }
 

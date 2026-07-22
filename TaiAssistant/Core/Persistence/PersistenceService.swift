@@ -4,6 +4,8 @@ protocol PersistenceService {
     var container: ModelContainer { get }
     func makeGoalRepository() -> GoalRepository
     func makeMealRepository() -> MealRepository
+    func makeWorkoutRepository() -> WorkoutRepository
+    func makeGymPlanRepository() -> GymPlanRepository
     func makeActiveConversationRepository() -> ActiveConversationRepository
     func makeFineTuneCorrectionRepository() -> FineTuneCorrectionRepository
     func makeRecurringMealRepository() -> RecurringMealRepository
@@ -25,6 +27,14 @@ struct LocalPersistenceService: PersistenceService {
 
     func makeMealRepository() -> MealRepository {
         LocalSwiftDataMealRepository(container: container)
+    }
+
+    func makeWorkoutRepository() -> WorkoutRepository {
+        LocalSwiftDataWorkoutRepository(container: container)
+    }
+
+    func makeGymPlanRepository() -> GymPlanRepository {
+        LocalSwiftDataGymPlanRepository(container: container)
     }
 
     func makeActiveConversationRepository() -> ActiveConversationRepository {

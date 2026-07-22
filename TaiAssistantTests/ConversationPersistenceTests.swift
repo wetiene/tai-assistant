@@ -398,14 +398,14 @@ final class ConversationPersistenceTests: XCTestCase {
             ownerID: ownerID,
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
         vm.startIfNeeded()
         let count = store.active.messages.count
         XCTAssertGreaterThan(count, 0)
 
         let restored = try repo.loadOrCreateActive(ownerID: ownerID)
         let store2 = ConversationSessionStore(seed: restored)
-        let vm2 = ConversationViewModel(store: store2, meal: meal, liveTai: ConversationTestSupport.makeLiveTai(), assistantName: "Tai")
+        let vm2 = ConversationViewModel(store: store2, meal: meal, gym: ConversationTestSupport.makeGym(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
         vm2.startIfNeeded()
         XCTAssertEqual(store2.active.messages.count, count)
     }

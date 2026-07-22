@@ -2,19 +2,23 @@ import SwiftUI
 
 struct HomeBriefingView: View {
     let mealRepository: MealRepository
+    let workoutRepository: WorkoutRepository
     let goalRepository: GoalRepository
     @Bindable var nutritionDaySelection: NutritionDaySelection
     let ownerID: String
     let assistantName: String
     var displayName: String? = nil
     var mealAddedFeedbackTrigger: Int = 0
+    var workoutAddedFeedbackTrigger: Int = 0
     var analytics: any AnalyticsClient = NoOpAnalyticsClient()
     var onPrimaryAction: ((RecommendationActionDestination) -> Void)? = nil
     var onOpenTai: (() -> Void)? = nil
+    var onManageGymPlans: (() -> Void)? = nil
 
     @State private var briefing: DailyCoachBriefing?
     @State private var historicalSummary: HomeHistoricalDaySummary?
     @State private var displayedMeals: [HomeMealSummary] = []
+    @State private var displayedWorkouts: [HomeWorkoutSummary] = []
     @State private var cachedGoal: GoalProfile?
     @State private var cachedTargets: DailyTargets?
     @State private var isLoading = false
@@ -67,6 +71,7 @@ struct HomeBriefingView: View {
                     focusCard(briefing)
                     compactProgress(briefing.progress, isToday: true)
                     mealsSection
+                    workoutsSection
                     if let note = briefing.dataSufficiencyNote {
                         Text(note)
                             .font(.caption)
@@ -76,6 +81,7 @@ struct HomeBriefingView: View {
                     historicalSummaryCard(historicalSummary)
                     compactProgress(historicalSummary.progress, isToday: false)
                     mealsSection
+                    workoutsSection
                     historicalTaiCard
                 } else if isLoading {
                     ProgressView(HomeNutritionDayFormatting.loadingMessage(isToday: isViewingToday))
@@ -98,6 +104,9 @@ struct HomeBriefingView: View {
         }
         .onChange(of: mealAddedFeedbackTrigger) { _, _ in
             showMealAddedFeedback()
+            Task { await loadHome() }
+        }
+        .onChange(of: workoutAddedFeedbackTrigger) { _, _ in
             Task { await loadHome() }
         }
         .onChange(of: nutritionDaySelection.selectedDay) { _, _ in
@@ -406,12 +415,68 @@ struct HomeBriefingView: View {
             briefing = result.todayBriefing
             historicalSummary = result.historicalSummary
             displayedMeals = result.mealSummaries
+            displayedWorkouts = try await loadWorkoutSummaries(for: requestedDay)
         } catch {
             guard generation == loadGeneration,
                   requestedDay == nutritionDaySelection.selectedDay else { return }
             loadError = HomeNutritionDayFormatting.loadErrorMessage(isToday: viewingToday)
         }
         isLoading = false
+    }
+
+    private func loadWorkoutSummaries(for day: NutritionDay) async throws -> [HomeWorkoutSummary] {
+        let bounds = day.queryBounds()
+        let sessions = try await workoutRepository.fetchSessions(
+            ownerID: ownerID,
+            from: bounds.start,
+            to: bounds.end
+        )
+        return sessions
+            .filter { $0.status == .completed || !$0.sets.isEmpty }
+            .map(HomeWorkoutSummary.init)
+    }
+
+    private var workoutsSection: some View {
+        VStack(alignment: .leading, spacing: DSSpacing.md) {
+            HStack {
+                Text("Workouts")
+                    .font(.headline)
+                    .foregroundStyle(DSColor.textPrimary)
+                Spacer()
+                Button("Gym Plans") {
+                    onManageGymPlans?()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DSColor.coralEnd)
+                .buttonStyle(.plain)
+            }
+
+            if displayedWorkouts.isEmpty {
+                Text(isViewingToday ? "No workouts logged today yet." : "No workouts logged for this day.")
+                    .font(.subheadline)
+                    .foregroundStyle(DSColor.textSecondary)
+            } else {
+                ForEach(displayedWorkouts) { workout in
+                    VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                        HStack {
+                            Text(workout.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(DSColor.textPrimary)
+                            Spacer()
+                            Text("\(workout.setCount) sets")
+                                .font(.caption)
+                                .foregroundStyle(DSColor.textSecondary)
+                        }
+                        ForEach(workout.setLines, id: \.self) { line in
+                            Text(line)
+                                .font(.caption)
+                                .foregroundStyle(DSColor.textSecondary)
+                        }
+                    }
+                    .padding(.vertical, DSSpacing.xs)
+                }
+            }
+        }
     }
 
     private func showMealAddedFeedback() {
@@ -493,8 +558,6 @@ struct HomeBriefingView: View {
     }
 }
 
-// MARK: - Meal summaries
-
 struct HomeMealSummary: Identifiable {
     let id: UUID
     let label: String
@@ -509,6 +572,31 @@ struct HomeMealSummary: Identifiable {
         eatenAt = meal.eatenAt
         calories = meal.items.reduce(0) { $0 + $1.calories }
         restorePayload = HomeMealRestorePayload(meal: meal)
+    }
+}
+
+// MARK: - Workout summaries
+
+struct HomeWorkoutSummary: Identifiable {
+    let id: UUID
+    let title: String
+    let setCount: Int
+    let setLines: [String]
+
+    init(session: WorkoutSessionLog) {
+        id = session.id
+        title = session.title
+        let sortedSets = session.sets.sorted {
+            if $0.exerciseName != $1.exerciseName { return $0.exerciseName < $1.exerciseName }
+            return $0.setNumber < $1.setNumber
+        }
+        setCount = sortedSets.count
+        setLines = sortedSets.map { set in
+            let weight = set.weightValue.truncatingRemainder(dividingBy: 1) == 0
+                ? String(format: "%.0f", set.weightValue)
+                : String(format: "%.1f", set.weightValue)
+            return "\(set.exerciseName) · \(weight) \(set.weightUnit) × \(set.repetitions)"
+        }
     }
 }
 
@@ -601,6 +689,7 @@ struct HomeMealItemRestorePayload {
 #Preview("Empty Home") {
     HomeBriefingView(
         mealRepository: MockMealRepository(),
+        workoutRepository: MockWorkoutRepository(),
         goalRepository: MockGoalRepository(),
         nutritionDaySelection: NutritionDaySelection(),
         ownerID: "preview.user",

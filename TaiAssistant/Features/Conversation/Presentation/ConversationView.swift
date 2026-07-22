@@ -13,6 +13,7 @@ struct ConversationView: View {
             ConversationMessageListView(
                 store: viewModel.store,
                 isMealBusy: viewModel.meal.isBusy,
+                isGymBusy: viewModel.gym.isBusy,
                 reduceMotion: reduceMotion,
                 onQuickAction: { viewModel.handleQuickAction($0) },
                 onMealCardAction: { action, cardID in
@@ -20,6 +21,15 @@ struct ConversationView: View {
                 },
                 onMealCardLoggingDayChange: { cardID, date in
                     viewModel.handleMealCardLoggingDayChange(cardID: cardID, selectedDate: date)
+                },
+                onGymPlanTakePhoto: { viewModel.handleGymPlanCardTakePhoto() },
+                onGymPlanFinish: { viewModel.handleGymPlanCardFinish() },
+                onGymManagePlans: { viewModel.onManageGymPlans?() },
+                onGymSetCardAction: { action, cardID, payload in
+                    viewModel.handleGymSetCardAction(action, cardID: cardID, payload: payload)
+                },
+                onGymSetDraftChange: { cardID, payload in
+                    viewModel.handleGymSetDraftChange(cardID: cardID, payload: payload)
                 },
                 onWhy: {
                     viewModel.showLiveTaiWhy = true
@@ -54,6 +64,12 @@ struct ConversationView: View {
                 viewModel.dismissCameraRequest()
             }
         }
+        .onChange(of: viewModel.needsGymCamera) { _, needsGymCamera in
+            if needsGymCamera {
+                isCameraPresented = true
+                viewModel.dismissGymCameraRequest()
+            }
+        }
         .onChange(of: viewModel.needsAIConsent) { _, needsConsent in
             if needsConsent {
                 isConsentPresented = true
@@ -62,7 +78,11 @@ struct ConversationView: View {
         .fullScreenCover(isPresented: $isCameraPresented) {
             CheckInCameraView { image in
                 if let data = CheckInPhotoUploadPreprocessor.prepareMealUploadJPEG(from: image) {
-                    viewModel.handleCapturedPhoto(data)
+                    if viewModel.gym.hasActiveSession {
+                        viewModel.handleGymCapturedPhoto(data)
+                    } else {
+                        viewModel.handleCapturedPhoto(data)
+                    }
                 } else {
                     viewModel.errorMessage = "Could not process this photo. Please try again."
                 }
@@ -106,6 +126,49 @@ struct ConversationView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+        .confirmationDialog(
+            "Workout in progress",
+            isPresented: $viewModel.isWorkoutStartConflictDialogPresented,
+            titleVisibility: .visible
+        ) {
+            if let conflict = viewModel.pendingWorkoutStartConflict {
+                Button("Resume Current Workout") {
+                    Task { await viewModel.resolveWorkoutStartConflict(.resumeCurrent) }
+                }
+                .disabled(viewModel.isResolvingWorkoutStartConflict)
+                Button("Finish Current and Start \(conflict.requestedPlanTitle)") {
+                    Task { await viewModel.resolveWorkoutStartConflict(.finishCurrentAndStartSelected) }
+                }
+                .disabled(viewModel.isResolvingWorkoutStartConflict)
+                Button("Discard Current and Start \(conflict.requestedPlanTitle)", role: .destructive) {
+                    viewModel.requestWorkoutDiscardConfirmation()
+                }
+                .disabled(viewModel.isResolvingWorkoutStartConflict)
+                Button("Cancel", role: .cancel) {
+                    viewModel.cancelWorkoutStartConflict()
+                }
+            }
+        } message: {
+            if let conflict = viewModel.pendingWorkoutStartConflict {
+                Text("You already have \(conflict.activeSessionTitle) in progress. What would you like to do?")
+            }
+        }
+        .alert(
+            "Discard workout?",
+            isPresented: $viewModel.pendingWorkoutDiscardConfirmation
+        ) {
+            Button("Discard and Start", role: .destructive) {
+                Task { await viewModel.resolveWorkoutStartConflict(.discardCurrentAndStartSelected) }
+            }
+            .disabled(viewModel.isResolvingWorkoutStartConflict)
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelWorkoutDiscardConfirmation()
+            }
+        } message: {
+            if let conflict = viewModel.pendingWorkoutStartConflict {
+                Text("This will permanently discard your in-progress \(conflict.activeSessionTitle) workout and start \(conflict.requestedPlanTitle).")
+            }
+        }
     }
 }
 
@@ -113,15 +176,21 @@ struct ConversationView: View {
 private struct ConversationMessageListView: View {
     @Bindable var store: ConversationSessionStore
     var isMealBusy: Bool
+    var isGymBusy: Bool
     var reduceMotion: Bool
     var onQuickAction: (ConversationQuickAction) -> Void
     var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
     var onMealCardLoggingDayChange: (UUID, Date) -> Void
+    var onGymPlanTakePhoto: () -> Void
+    var onGymPlanFinish: () -> Void
+    var onGymManagePlans: () -> Void
+    var onGymSetCardAction: (GymCapabilityID.CardAction, UUID, GymSetConfirmationCardPayload) -> Void
+    var onGymSetDraftChange: (UUID, GymSetConfirmationCardPayload) -> Void
     var onWhy: () -> Void
 
     private var isProcessing: Bool {
         if case .processing = store.active.activity { return true }
-        return isMealBusy
+        return isMealBusy || isGymBusy
     }
 
     var body: some View {
@@ -138,6 +207,11 @@ private struct ConversationMessageListView: View {
                             onQuickAction: onQuickAction,
                             onMealCardAction: onMealCardAction,
                             onMealCardLoggingDayChange: onMealCardLoggingDayChange,
+                            onGymPlanTakePhoto: onGymPlanTakePhoto,
+                            onGymPlanFinish: onGymPlanFinish,
+                            onGymManagePlans: onGymManagePlans,
+                            onGymSetCardAction: onGymSetCardAction,
+                            onGymSetDraftChange: onGymSetDraftChange,
                             onWhy: onWhy
                         )
                         .id(message.id)

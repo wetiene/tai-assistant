@@ -16,6 +16,8 @@ struct RuntimeAppConfig {
     let aiProxyBearerToken: String?
     let aiInterpretMealPath: String
     let aiInterpretGoalPath: String
+    let aiInterpretGymPhotoPath: String
+    let aiInterpretWorkoutPlanPath: String
     let aiCoachPath: String
     /// When true, ships Home / Check In chooser / Coach. When false, restores Dashboard / Check In / Goals.
     let navV2Enabled: Bool
@@ -74,7 +76,30 @@ struct RuntimeAppConfig {
         aiProxyBearerToken: LocalProxyAuth.resolveBearerToken(),
         aiInterpretMealPath: "/ai/interpret-meal",
         aiInterpretGoalPath: "/ai/interpret-goal",
+        aiInterpretGymPhotoPath: "/ai/interpret-gym-photo",
+        aiInterpretWorkoutPlanPath: "/ai/interpret-workout-plan",
         aiCoachPath: "/ai/coach",
         navV2Enabled: FeatureFlags.resolveNavV2Enabled()
     )
+
+    func gymPlanImportRequestContext(
+        sourceType: GymPlanImportSourceType,
+        sourceTextCharacterCount: Int,
+        knownExerciseCount: Int
+    ) -> GymPlanImportRequestContext {
+        let token = aiProxyBearerToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestURL = aiProxyBaseURL.flatMap {
+            URL(string: aiInterpretWorkoutPlanPath, relativeTo: $0)?.absoluteString
+        }
+        return GymPlanImportRequestContext(
+            requestURL: requestURL,
+            sourceType: sourceType,
+            schemaVersion: 1,
+            sourceTextCharacterCount: sourceTextCharacterCount,
+            knownExerciseCount: knownExerciseCount,
+            tokenPresent: !(token?.isEmpty ?? true),
+            tokenLength: token?.count ?? 0,
+            tokenFingerprint: GymPlanImportDiagnostics.tokenFingerprint(for: token)
+        )
+    }
 }

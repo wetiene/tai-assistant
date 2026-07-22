@@ -226,6 +226,36 @@ struct MockAIService: AIService {
             confidence: 0.72
         )
     }
+
+    func interpretGymPhoto(request: AIInterpretGymPhotoRequest) async throws -> AIInterpretGymPhotoResponse {
+        try await Task.sleep(nanoseconds: 250_000_000)
+        let expectedID = request.context?.expectedExerciseID ?? GymExerciseID.legPress.rawValue
+        let displayName = GymExerciseCatalog.displayName(for: expectedID)
+        let unit = request.context?.weightUnitPreference ?? "kg"
+        return AIInterpretGymPhotoResponse(
+            schemaVersion: 1,
+            exerciseCandidates: [
+                AIInterpretGymExerciseCandidate(
+                    exerciseID: expectedID,
+                    confidence: 0.86,
+                    reason: "Machine setup matches \(displayName)"
+                ),
+            ],
+            detectedWeight: AIInterpretGymDetectedWeight(
+                value: unit == "lb" ? 85 : 39,
+                unit: unit,
+                confidence: 0.72,
+                reason: "Selector pin appears aligned with the labeled plate"
+            ),
+            limitations: ["Mock interpretation — confirm exercise and weight before saving."],
+            requiresConfirmation: true
+        )
+    }
+
+    func interpretWorkoutPlan(request: AIInterpretWorkoutPlanRequest) async throws -> AIInterpretWorkoutPlanResponse {
+        try await Task.sleep(nanoseconds: 300_000_000)
+        return MockWorkoutPlanInterpretation.trainerFixtureResponse(for: request)
+    }
 }
 
 struct MockHealthService: HealthService {
@@ -308,6 +338,226 @@ final class MockMealRepository: MealRepository {
             fatGrams: source.fatGrams,
             fiberGrams: source.fiberGrams,
             alcoholGrams: source.alcoholGrams
+        )
+    }
+}
+
+final class MockWorkoutRepository: WorkoutRepository {
+    private var sessions: [WorkoutSessionLog] = []
+
+    func fetchSessions(ownerID: String, from startDate: Date, to endDate: Date) async throws -> [WorkoutSessionLog] {
+        sessions.filter {
+            $0.ownerID == ownerID && $0.startedAt >= startDate && $0.startedAt < endDate
+        }
+    }
+
+    func fetchInProgressSession(ownerID: String) async throws -> WorkoutSessionLog? {
+        sessions.first { $0.ownerID == ownerID && $0.status == .inProgress }
+    }
+
+    func createSession(_ session: WorkoutSessionLog) async throws {
+        if sessions.contains(where: { $0.id == session.id }) {
+            throw WorkoutRepositoryError.sessionAlreadyExists(id: session.id)
+        }
+        sessions.append(session)
+    }
+
+    func updateSession(_ session: WorkoutSessionLog) async throws {
+        guard let index = sessions.firstIndex(where: { $0.id == session.id }) else {
+            throw WorkoutRepositoryError.sessionNotFound(id: session.id)
+        }
+        let existingSets = sessions[index].sets
+        sessions[index] = session
+        if session.sets.isEmpty, !existingSets.isEmpty {
+            sessions[index].sets = existingSets
+        }
+    }
+
+    func appendSet(_ set: WorkoutSetLog, to sessionID: UUID) async throws {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else {
+            throw WorkoutRepositoryError.sessionNotFound(id: sessionID)
+        }
+        set.session = sessions[index]
+        sessions[index].sets.append(set)
+    }
+
+    func completeSession(id: UUID, completedAt: Date) async throws {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else {
+            throw WorkoutRepositoryError.sessionNotFound(id: id)
+        }
+        sessions[index].status = .completed
+        sessions[index].completedAt = completedAt
+        sessions[index].activeSessionJSON = nil
+    }
+
+    func abandonSession(id: UUID) async throws {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else {
+            throw WorkoutRepositoryError.sessionNotFound(id: id)
+        }
+        sessions.remove(at: index)
+    }
+}
+
+final class MockGymPlanRepository: GymPlanRepository {
+    private var customPlans: [UUID: GymPlanDraft] = [:]
+    private var starterOverrides: [GymProgramTemplateID: GymPlanDraft] = [:]
+    /// Test hook: artificial delay before resolving plans to exercise in-flight start guards.
+    var resolvePlanDelayNanoseconds: UInt64 = 0
+
+    func fetchLibrary(ownerID: String) async throws -> GymPlanLibrarySnapshot {
+        let summaries = try await fetchSummaries(ownerID: ownerID)
+        return GymPlanLibrarySnapshot(
+            activePlan: summaries.first { $0.lifecycleStatus == .active },
+            previousPlans: summaries.filter { $0.lifecycleStatus != .active },
+            hasUserPlans: !summaries.isEmpty
+        )
+    }
+
+    func fetchTemplateSummaries() -> [GymPlanSummary] {
+        GymProgramTemplateID.allCases.map { GymProgramTemplateLibrary.starterSummary(for: $0) }
+    }
+
+    func fetchSummaries(ownerID: String) async throws -> [GymPlanSummary] {
+        _ = ownerID
+        return customPlans.map { id, draft in
+            summary(for: .custom(id), draft: draft, isEditedStarter: false)
+        }.sorted { ($0.importedAt ?? .distantPast) > ($1.importedAt ?? .distantPast) }
+    }
+
+    func resolvePlan(reference: GymPlanReference, sectionIndex: Int, ownerID: String) async throws -> GymResolvablePlan {
+        if resolvePlanDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: resolvePlanDelayNanoseconds)
+        }
+        _ = ownerID
+        let draft = try await loadDraft(reference: reference, ownerID: ownerID)
+        guard draft.sections.indices.contains(sectionIndex) else {
+            throw GymPlanRepositoryError.sectionNotFound
+        }
+        let section = draft.sections.sorted { $0.orderIndex < $1.orderIndex }[sectionIndex]
+        return GymResolvablePlan(
+            reference: reference,
+            title: draft.sections.count > 1 ? "\(draft.title) — \(section.name)" : draft.title,
+            sectionName: section.name,
+            sectionIndex: sectionIndex,
+            exercises: section.exercises,
+            prescription: section.prescription ?? draft.prescription,
+            generalInstructions: draft.generalInstructions
+        )
+    }
+
+    func loadDraft(reference: GymPlanReference, ownerID: String) async throws -> GymPlanDraft {
+        _ = ownerID
+        switch reference {
+        case .starter(let templateID):
+            if let override = starterOverrides[templateID] {
+                return override
+            }
+            let starter = GymProgramTemplateLibrary.resolvableStarter(templateID)
+            return GymPlanDraft(
+                reference: reference,
+                title: starter.title,
+                sections: [
+                    GymPlanSectionDraft(
+                        name: starter.title,
+                        orderIndex: 0,
+                        exercises: starter.exercises,
+                        prescription: starter.prescription
+                    )
+                ],
+                prescription: starter.prescription,
+                generalInstructions: starter.generalInstructions,
+                suggestedDurationWeeks: nil,
+                lifecycleStatus: .inactive,
+                importedAt: nil
+            )
+        case .custom(let id):
+            guard let draft = customPlans[id] else { throw GymPlanRepositoryError.planNotFound }
+            return draft
+        }
+    }
+
+    func saveDraft(_ draft: GymPlanDraft, ownerID: String, activation: GymPlanSaveActivation) async throws -> GymPlanReference {
+        _ = ownerID
+        guard !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !draft.exercises.isEmpty else {
+            throw GymPlanRepositoryError.invalidDraft
+        }
+        var saved = draft
+        if activation == .makeActive {
+            for (id, var plan) in customPlans {
+                if plan.lifecycleStatus == .active {
+                    plan.lifecycleStatus = .archived
+                    customPlans[id] = plan
+                }
+            }
+            saved.lifecycleStatus = .active
+        } else if saved.lifecycleStatus != .active {
+            saved.lifecycleStatus = .inactive
+        }
+
+        if let reference = draft.reference {
+            switch reference {
+            case .starter(let templateID):
+                saved.reference = reference
+                starterOverrides[templateID] = saved
+                return reference
+            case .custom(let id):
+                saved.reference = reference
+                customPlans[id] = saved
+                return reference
+            }
+        }
+        let id = UUID()
+        saved.reference = .custom(id)
+        if saved.importedAt == nil { saved.importedAt = .now }
+        customPlans[id] = saved
+        return .custom(id)
+    }
+
+    func duplicatePlan(reference: GymPlanReference, ownerID: String) async throws -> GymPlanReference {
+        var copy = try await loadDraft(reference: reference, ownerID: ownerID)
+        copy.reference = nil
+        copy.title = "Copy of \(copy.title)"
+        copy.lifecycleStatus = .inactive
+        return try await saveDraft(copy, ownerID: ownerID, activation: .saveOnly)
+    }
+
+    func deletePlan(reference: GymPlanReference, ownerID: String) async throws {
+        _ = ownerID
+        switch reference {
+        case .starter:
+            throw GymPlanRepositoryError.cannotDeleteStarter
+        case .custom(let id):
+            customPlans.removeValue(forKey: id)
+        }
+    }
+
+    func archivePlan(reference: GymPlanReference, ownerID: String) async throws {
+        _ = ownerID
+        guard case .custom(let id) = reference, var draft = customPlans[id] else { return }
+        draft.lifecycleStatus = .archived
+        customPlans[id] = draft
+    }
+
+    func resetStarterPlan(templateID: GymProgramTemplateID, ownerID: String) async throws {
+        _ = ownerID
+        starterOverrides.removeValue(forKey: templateID)
+    }
+
+    private func summary(for reference: GymPlanReference, draft: GymPlanDraft, isEditedStarter: Bool) -> GymPlanSummary {
+        GymPlanSummary(
+            reference: reference,
+            title: draft.title,
+            exerciseCount: draft.exercises.count,
+            sectionCount: draft.sections.count,
+            workingSetsPerExercise: draft.prescription.workingSetsPerExercise,
+            repRangeLabel: draft.prescription.repRangeLabel,
+            isStarter: reference.isStarter,
+            isCustom: !reference.isStarter,
+            isEditedStarter: isEditedStarter,
+            lifecycleStatus: draft.lifecycleStatus,
+            importedAt: draft.importedAt,
+            suggestedDurationWeeks: draft.suggestedDurationWeeks,
+            sectionNames: draft.sections.map(\.name)
         )
     }
 }

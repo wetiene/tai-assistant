@@ -4,6 +4,8 @@ import Foundation
 enum ConversationRestoration {
     static let interruptedMealInterpretationMessage = "Meal interpretation was interrupted."
     static let interruptedMealSaveMessage = "Meal save was interrupted. Your meal was not logged — try again when ready."
+    static let interruptedGymInterpretationMessage = "Set photo interpretation was interrupted."
+    static let interruptedGymSaveMessage = "Set save was interrupted. Your set was not logged — try again when ready."
     static let interruptedLiveTaiMessage = "Tai was interrupted while answering. Your question is still here — tap Retry when you’re ready."
 
     /// Returns a healed conversation when activity was left in a non-restorable transient state.
@@ -16,6 +18,10 @@ enum ConversationRestoration {
             let messageText: String
             if reason == "saving_meal" {
                 messageText = interruptedMealSaveMessage
+            } else if reason == "saving_gym_set" {
+                messageText = interruptedGymSaveMessage
+            } else if reason == "interpreting_gym_photo" {
+                messageText = interruptedGymInterpretationMessage
             } else if reason == LiveTaiCapabilityController.processingReason {
                 messageText = interruptedLiveTaiMessage
             } else {

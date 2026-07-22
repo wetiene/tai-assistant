@@ -1,6 +1,19 @@
+import {
+	buildWorkoutPlanSystemPrompt,
+	filterUnknownExerciseIDs,
+	mapProviderStructuredToWorkoutPlanResponse,
+	redactWorkoutPlanRequestForLogging,
+	TAI_WORKOUT_PLAN_RESPONSE_JSON_SCHEMA,
+	validateWorkoutPlanRequest,
+	type TaiInterpretWorkoutPlanRequest,
+	type TaiInterpretWorkoutPlanResponse,
+} from "./interpret-workout-plan";
+
 export interface Env {
 	OPENAI_API_KEY: string;
 	TAI_PROXY_TOKEN: string;
+	/** Set to "1" or "true" in dev to include OpenAI diagnostics in malformed_ai_response payloads. */
+	TAI_PROXY_DEBUG?: string;
 }
 
 const MAX_BODY_BYTES = 4_500_000;
@@ -235,6 +248,119 @@ function extractOutputText(raw: unknown): string | undefined {
 		}
 	}
 	return undefined;
+}
+
+function extractStructuredJsonFromResponse(raw: unknown): unknown | undefined {
+	const text = extractOutputText(raw);
+	if (text !== undefined) {
+		try {
+			return parseJsonFromModelText(text);
+		} catch {
+			// fall through to output_json
+		}
+	}
+	const root = asRecord(raw);
+	if (!root) return undefined;
+	const output = root.output;
+	if (!Array.isArray(output)) return undefined;
+	for (const block of output) {
+		const b = asRecord(block);
+		if (!b || !Array.isArray(b.content)) continue;
+		for (const part of b.content) {
+			const p = asRecord(part);
+			if (!p) continue;
+			if (p.type === "output_json" && p.json !== undefined) {
+				return p.json;
+			}
+		}
+	}
+	return undefined;
+}
+
+type WorkoutPlanMalformedStage =
+	| "openai_body_parse"
+	| "extract_output_text"
+	| "json_parse"
+	| "map_response";
+
+function summarizeOutputTypes(raw: unknown): string[] {
+	const root = asRecord(raw);
+	if (!root || !Array.isArray(root.output)) return [];
+	return root.output.flatMap((block) => {
+		const b = asRecord(block);
+		if (!b) return [];
+		const blockType = readString(b.type) ?? "unknown";
+		const contentTypes = Array.isArray(b.content)
+			? b.content.flatMap((part) => {
+					const p = asRecord(part);
+					return p ? [readString(p.type) ?? "unknown"] : [];
+				})
+			: [];
+		return [`${blockType}(${contentTypes.join("|") || "no-content"})`];
+	});
+}
+
+type WorkoutPlanOpenAIDiagnostics = {
+	openaiHttpStatus: number;
+	contentType: string | null;
+	responsePreview: string;
+	providerError?: string;
+	requestID?: string;
+	model?: string;
+	stage: WorkoutPlanMalformedStage;
+};
+
+function buildWorkoutPlanOpenAIDiagnostics(args: {
+	stage: WorkoutPlanMalformedStage;
+	openAIResponse: Response;
+	responseText: string;
+	requestBody: Record<string, unknown>;
+	raw?: unknown;
+	providerError?: string;
+}): WorkoutPlanOpenAIDiagnostics {
+	const root = args.raw ? asRecord(args.raw) : null;
+	const errorRecord = root?.error ? asRecord(root.error) : null;
+	return {
+		stage: args.stage,
+		openaiHttpStatus: args.openAIResponse.status,
+		contentType: args.openAIResponse.headers.get("Content-Type"),
+		responsePreview: args.responseText.slice(0, 2000),
+		requestID: readString(root?.id) ?? args.openAIResponse.headers.get("x-request-id") ?? undefined,
+		model: readString(root?.model) ?? readString(args.requestBody.model),
+		providerError: args.providerError ?? readString(errorRecord?.message),
+	};
+}
+
+function logWorkoutPlanOpenAIDiagnostics(args: {
+	stage: string;
+	openAIResponse: Response;
+	responseText: string;
+	requestBody: Record<string, unknown>;
+	raw?: unknown;
+	providerError?: string;
+}) {
+	const root = args.raw ? asRecord(args.raw) : null;
+	const errorRecord = root?.error ? asRecord(root.error) : null;
+	console.log(
+		"[interpret-workout-plan] openai_diagnostics",
+		JSON.stringify({
+			stage: args.stage,
+			openaiHttpStatus: args.openAIResponse.status,
+			contentType: args.openAIResponse.headers.get("Content-Type"),
+			responseByteCount: args.responseText.length,
+			requestID: readString(root?.id) ?? args.openAIResponse.headers.get("x-request-id"),
+			model: readString(root?.model) ?? readString(args.requestBody.model),
+			responseFormat: "json_schema",
+			requestPayloadBytes: JSON.stringify(args.requestBody).length,
+			outputTypes: args.raw ? summarizeOutputTypes(args.raw) : [],
+			providerError: args.providerError ?? readString(errorRecord?.message),
+			responsePreview: args.responseText.slice(0, 2000),
+		})
+	);
+}
+
+function isWorkoutPlanDebugEnabled(env: Env): boolean {
+	return env.TAI_PROXY_DEBUG === "1" || env.TAI_PROXY_DEBUG === "true";
 }
 
 function extractFirstRefusal(raw: unknown): string | undefined {
@@ -954,6 +1080,503 @@ async function handleInterpretGoal(request: Request, env: Env): Promise<Response
 	return json({ error: "malformed_ai_response" }, 502);
 }
 
+export type TaiInterpretGymPhotoRequest = {
+	image?: { base64Data?: string; mimeType?: string | null };
+	context?: Record<string, unknown>;
+};
+
+export type TaiInterpretGymPhotoResponse = {
+	schemaVersion: number;
+	exerciseCandidates: Array<{ exerciseID: string; confidence: number; reason: string }>;
+	detectedWeight?: { value: number; unit: string; confidence: number; reason: string } | null;
+	limitations: string[];
+	requiresConfirmation: boolean;
+};
+
+const TAI_GYM_PHOTO_RESPONSE_JSON_SCHEMA = {
+	type: "object",
+	additionalProperties: false,
+	properties: {
+		schemaVersion: { type: "integer" },
+		exerciseCandidates: {
+			type: "array",
+			items: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					exerciseID: { type: "string" },
+					confidence: { type: "number" },
+					reason: { type: "string" },
+				},
+				required: ["exerciseID", "confidence", "reason"],
+			},
+		},
+		detectedWeight: {
+			anyOf: [
+				{ type: "null" },
+				{
+					type: "object",
+					additionalProperties: false,
+					properties: {
+						value: { type: "number" },
+						unit: { type: "string" },
+						confidence: { type: "number" },
+						reason: { type: "string" },
+					},
+					required: ["value", "unit", "confidence", "reason"],
+				},
+			],
+		},
+		limitations: { type: "array", items: { type: "string" } },
+		requiresConfirmation: { type: "boolean" },
+	},
+	required: ["schemaVersion", "exerciseCandidates", "detectedWeight", "limitations", "requiresConfirmation"],
+} as const;
+
+function buildGymPhotoSystemPrompt(): string {
+	return [
+		"You are Tai's gym equipment vision assistant.",
+		"Identify the exercise/machine from the photo and read the selected weight when visible.",
+		"Only choose exerciseID values from allowedExerciseCandidates in context.",
+		"Prefer expectedExerciseID when the image is consistent with the planned workout.",
+		"Return schemaVersion 1 JSON only.",
+		"Never identify people. If weight is unclear, set detectedWeight null and explain in limitations.",
+		"requiresConfirmation must always be true.",
+	].join(" ");
+}
+
+function readAllowedExerciseIDsFromContext(context: Record<string, unknown> | undefined): Set<string> | null {
+	if (!context) return null;
+	const allowed = context.allowedExerciseCandidates;
+	if (!Array.isArray(allowed)) return null;
+	const ids = new Set<string>();
+	for (const item of allowed) {
+		const rec = asRecord(item);
+		const id = rec ? readString(rec.exerciseID) : undefined;
+		if (id) ids.add(id);
+	}
+	return ids.size > 0 ? ids : null;
+}
+
+function filterGymExerciseCandidates(
+	payload: TaiInterpretGymPhotoResponse,
+	allowedExerciseIDs: Set<string> | null
+): TaiInterpretGymPhotoResponse {
+	if (!allowedExerciseIDs) return { ...payload, requiresConfirmation: true };
+	return {
+		...payload,
+		exerciseCandidates: payload.exerciseCandidates.filter((c) => allowedExerciseIDs.has(c.exerciseID)),
+		requiresConfirmation: true,
+	};
+}
+
+function redactGymPhotoRequestForLogging(body: TaiInterpretGymPhotoRequest): Record<string, unknown> {
+	return {
+		hasImage: Boolean(body.image?.base64Data),
+		imageMimeType: body.image?.mimeType ?? null,
+		contextKeys: body.context && typeof body.context === "object" ? Object.keys(body.context) : [],
+	};
+}
+
+function mapProviderStructuredToGymPhotoResponse(providerJson: unknown): TaiInterpretGymPhotoResponse | null {
+	const text = extractOutputText(providerJson);
+	if (text === undefined) return null;
+	let parsed: unknown;
+	try {
+		parsed = parseJsonFromModelText(text);
+	} catch {
+		console.log("[interpret-gym-photo] json_parse_failed");
+		return null;
+	}
+	const root = asRecord(parsed);
+	if (!root) return null;
+	const candidatesRaw = root.exerciseCandidates;
+	if (!Array.isArray(candidatesRaw)) return null;
+	const exerciseCandidates: TaiInterpretGymPhotoResponse["exerciseCandidates"] = [];
+	for (const c of candidatesRaw) {
+		const o = asRecord(c);
+		if (!o) return null;
+		const exerciseID = readString(o.exerciseID);
+		const reason = readString(o.reason);
+		if (exerciseID === undefined || reason === undefined) return null;
+		exerciseCandidates.push({
+			exerciseID,
+			confidence: readFiniteNumber(o.confidence, 0),
+			reason,
+		});
+	}
+	let detectedWeight: TaiInterpretGymPhotoResponse["detectedWeight"] = null;
+	const weightRaw = root.detectedWeight;
+	if (weightRaw !== null && weightRaw !== undefined) {
+		const w = asRecord(weightRaw);
+		if (w) {
+			const unit = readString(w.unit);
+			const reason = readString(w.reason);
+			if (unit !== undefined && reason !== undefined) {
+				detectedWeight = {
+					value: readFiniteNumber(w.value, 0),
+					unit,
+					confidence: readFiniteNumber(w.confidence, 0),
+					reason,
+				};
+			}
+		}
+	}
+	return {
+		schemaVersion: readInt(root.schemaVersion, 1),
+		exerciseCandidates,
+		detectedWeight,
+		limitations: readStringArray(root.limitations, 8),
+		requiresConfirmation: root.requiresConfirmation === true || root.requiresConfirmation === undefined,
+	};
+}
+
+async function interpretGymPhotoWithOpenAI(
+	env: Env,
+	body: TaiInterpretGymPhotoRequest,
+	imageB64: string
+): Promise<
+	| { status: "success"; payload: TaiInterpretGymPhotoResponse }
+	| { status: "ai_provider_error"; openaiHttpStatus: number; openAIDetail?: string }
+	| { status: "malformed_ai_response" }
+> {
+	const mime = body.image?.mimeType?.trim() || "image/jpeg";
+	const ctx = body.context !== undefined ? JSON.stringify(body.context) : "{}";
+	const attempt = async (isRetry: boolean) => {
+		const requestBody = {
+			model: OPENAI_MEAL_MODEL,
+			input: [
+				{ role: "system", content: [{ type: "input_text", text: buildGymPhotoSystemPrompt() }] },
+				{
+					role: "user",
+					content: [
+						{ type: "input_text", text: `Workout context JSON:\n${ctx}` },
+						{ type: "input_image", image_url: `data:${mime};base64,${imageB64}` },
+						...(isRetry
+							? [{ type: "input_text", text: "Return valid JSON matching the schema exactly." }]
+							: []),
+					],
+				},
+			],
+			text: {
+				format: {
+					type: "json_schema",
+					name: "tai_gym_photo_interpretation",
+					schema: TAI_GYM_PHOTO_RESPONSE_JSON_SCHEMA,
+					strict: true,
+				},
+			},
+		};
+		const openAIResponse = await fetch(OPENAI_RESPONSES_URL, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(requestBody),
+		});
+		if (!openAIResponse.ok) {
+			const detail = summarizeOpenAITextError(await openAIResponse.text());
+			return { kind: "http_error" as const, status: openAIResponse.status, openAIDetail: detail };
+		}
+		const raw = await openAIResponse.json();
+		const payload = mapProviderStructuredToGymPhotoResponse(raw);
+		if (!payload) return { kind: "structured_output_failed" as const };
+		return { kind: "ok" as const, payload };
+	};
+
+	let first = await attempt(false);
+	if (first.kind === "ok") return { status: "success", payload: first.payload };
+	if (first.kind === "http_error")
+		return { status: "ai_provider_error", openaiHttpStatus: first.status, openAIDetail: first.openAIDetail };
+	let second = await attempt(true);
+	if (second.kind === "ok") return { status: "success", payload: second.payload };
+	if (second.kind === "http_error")
+		return { status: "ai_provider_error", openaiHttpStatus: second.status, openAIDetail: second.openAIDetail };
+	return { status: "malformed_ai_response" };
+}
+
+async function handleInterpretGymPhoto(request: Request, env: Env): Promise<Response> {
+	if (request.method !== "POST") {
+		return json({ error: "method_not_allowed" }, 405);
+	}
+	const unauthorized = requireProxyAuth(request, env);
+	if (unauthorized) return unauthorized;
+
+	const contentLength = Number(request.headers.get("Content-Length") ?? "0");
+	if (contentLength > MAX_BODY_BYTES) {
+		return json({ error: "payload_too_large" }, 413);
+	}
+
+	let body: TaiInterpretGymPhotoRequest;
+	try {
+		body = (await request.json()) as TaiInterpretGymPhotoRequest;
+	} catch {
+		return json({ error: "invalid_json" }, 400);
+	}
+
+	const imageB64 = body.image?.base64Data;
+	if (!imageB64) {
+		return json({ error: "image_required" }, 400);
+	}
+
+	console.log("[interpret-gym-photo] content_length_header=", contentLength, "request_meta=", JSON.stringify(redactGymPhotoRequestForLogging(body)));
+	const outcome = await interpretGymPhotoWithOpenAI(env, body, imageB64);
+	if (outcome.status === "success") {
+		const allowed = readAllowedExerciseIDsFromContext(
+			body.context && typeof body.context === "object" ? (body.context as Record<string, unknown>) : undefined
+		);
+		const payload = filterGymExerciseCandidates(outcome.payload, allowed);
+		return json(payload, 200);
+	}
+	if (outcome.status === "ai_provider_error") {
+		const payload: Record<string, unknown> = {
+			error: "ai_provider_error",
+			status: outcome.openaiHttpStatus,
+		};
+		if (outcome.openAIDetail) payload.openai_detail = outcome.openAIDetail;
+		return json(payload, 502);
+	}
+	return json({ error: "malformed_ai_response" }, 502);
+}
+
+function readKnownExerciseIDsFromWorkoutPlanContext(
+	context: Record<string, unknown> | undefined
+): Set<string> {
+	const known = context?.knownExercises;
+	if (!Array.isArray(known)) return new Set();
+	const ids = known.flatMap((item) => {
+		const record = asRecord(item);
+		const id = record ? readString(record.id) : undefined;
+		return id ? [id] : [];
+	});
+	return new Set(ids);
+}
+
+async function interpretWorkoutPlanWithOpenAI(
+	env: Env,
+	body: TaiInterpretWorkoutPlanRequest
+): Promise<
+	| { status: "success"; payload: TaiInterpretWorkoutPlanResponse }
+	| { status: "ai_provider_error"; openaiHttpStatus: number; openAIDetail?: string }
+	| {
+			status: "malformed_ai_response";
+			stage: WorkoutPlanMalformedStage;
+			diagnostics?: WorkoutPlanOpenAIDiagnostics;
+	  }
+> {
+	const userBlocks: Array<Record<string, unknown>> = [
+		{ type: "input_text", text: `Workout plan context JSON:\n${JSON.stringify(body.context ?? {})}` },
+	];
+	if (body.source.type === "text") {
+		userBlocks.push({ type: "input_text", text: body.source.text ?? "" });
+	} else {
+		const mime = body.source.attachment?.mimeType?.trim() || "application/octet-stream";
+		const b64 = body.source.attachment?.base64Data ?? "";
+		userBlocks.push({ type: "input_image", image_url: `data:${mime};base64,${b64}` });
+	}
+	const requestBody: Record<string, unknown> = {
+		model: OPENAI_MEAL_MODEL,
+		input: [
+			{ role: "system", content: [{ type: "input_text", text: buildWorkoutPlanSystemPrompt() }] },
+			{ role: "user", content: userBlocks },
+		],
+		text: {
+			format: {
+				type: "json_schema",
+				name: "tai_workout_plan_interpretation",
+				schema: TAI_WORKOUT_PLAN_RESPONSE_JSON_SCHEMA,
+				strict: true,
+			},
+		},
+	};
+	const openAIResponse = await fetch(OPENAI_RESPONSES_URL, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify(requestBody),
+	});
+	const responseText = await openAIResponse.text();
+	if (!openAIResponse.ok) {
+		logWorkoutPlanOpenAIDiagnostics({
+			stage: "openai_http_error",
+			openAIResponse,
+			responseText,
+			requestBody,
+			providerError: summarizeOpenAITextError(responseText),
+		});
+		return {
+			status: "ai_provider_error",
+			openaiHttpStatus: openAIResponse.status,
+			openAIDetail: summarizeOpenAITextError(responseText),
+		};
+	}
+	let raw: unknown;
+	try {
+		raw = JSON.parse(responseText);
+	} catch {
+		logWorkoutPlanOpenAIDiagnostics({
+			stage: "openai_body_parse",
+			openAIResponse,
+			responseText,
+			requestBody,
+			providerError: "openai_body_not_json",
+		});
+		const contentType = openAIResponse.headers.get("Content-Type") ?? "";
+		if (contentType && !contentType.toLowerCase().includes("json")) {
+			return {
+				status: "ai_provider_error",
+				openaiHttpStatus: openAIResponse.status,
+				openAIDetail: summarizeOpenAITextError(responseText),
+			};
+		}
+		return {
+			status: "malformed_ai_response",
+			stage: "openai_body_parse",
+			diagnostics: buildWorkoutPlanOpenAIDiagnostics({
+				stage: "openai_body_parse",
+				openAIResponse,
+				responseText,
+				requestBody,
+				providerError: "openai_body_not_json",
+			}),
+		};
+	}
+
+	logWorkoutPlanOpenAIDiagnostics({
+		stage: "openai_response_received",
+		openAIResponse,
+		responseText,
+		requestBody,
+		raw,
+	});
+
+	const refusal = extractFirstRefusal(raw);
+	if (refusal) {
+		console.log("[interpret-workout-plan] model_refusal=", refusal.slice(0, 200));
+		return {
+			status: "malformed_ai_response",
+			stage: "extract_output_text",
+			diagnostics: buildWorkoutPlanOpenAIDiagnostics({
+				stage: "extract_output_text",
+				openAIResponse,
+				responseText,
+				requestBody,
+				raw,
+				providerError: "model_refusal",
+			}),
+		};
+	}
+
+	const parsed = extractStructuredJsonFromResponse(raw);
+	if (parsed === undefined) {
+		logWorkoutPlanOpenAIDiagnostics({
+			stage: "extract_output_text_failed",
+			openAIResponse,
+			responseText,
+			requestBody,
+			raw,
+		});
+		return {
+			status: "malformed_ai_response",
+			stage: "extract_output_text",
+			diagnostics: buildWorkoutPlanOpenAIDiagnostics({
+				stage: "extract_output_text",
+				openAIResponse,
+				responseText,
+				requestBody,
+				raw,
+				providerError: "missing_structured_output",
+			}),
+		};
+	}
+	const payload = mapProviderStructuredToWorkoutPlanResponse(parsed);
+	if (!payload) {
+		logWorkoutPlanOpenAIDiagnostics({
+			stage: "map_response_failed",
+			openAIResponse,
+			responseText,
+			requestBody,
+			raw,
+		});
+		return {
+			status: "malformed_ai_response",
+			stage: "map_response",
+			diagnostics: buildWorkoutPlanOpenAIDiagnostics({
+				stage: "map_response",
+				openAIResponse,
+				responseText,
+				requestBody,
+				raw,
+				providerError: "schema_mapping_failed",
+			}),
+		};
+	}
+	return { status: "success", payload };
+}
+
+async function handleInterpretWorkoutPlan(request: Request, env: Env): Promise<Response> {
+	if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+	const unauthorized = requireProxyAuth(request, env);
+	if (unauthorized) return unauthorized;
+
+	const contentLength = Number(request.headers.get("Content-Length") ?? "0");
+	if (contentLength > MAX_BODY_BYTES) return json({ error: "payload_too_large" }, 413);
+
+	let body: TaiInterpretWorkoutPlanRequest;
+	try {
+		body = (await request.json()) as TaiInterpretWorkoutPlanRequest;
+	} catch {
+		return json({ error: "invalid_json" }, 400);
+	}
+
+	const validationError = validateWorkoutPlanRequest(body);
+	if (validationError) return json({ error: validationError }, 400);
+
+	console.log(
+		"[interpret-workout-plan] content_length_header=",
+		contentLength,
+		"request_meta=",
+		JSON.stringify(redactWorkoutPlanRequestForLogging(body))
+	);
+
+	const outcome = await interpretWorkoutPlanWithOpenAI(env, body);
+	if (outcome.status === "success") {
+		const known = readKnownExerciseIDsFromWorkoutPlanContext(
+			body.context && typeof body.context === "object" ? (body.context as Record<string, unknown>) : undefined
+		);
+		return json(filterUnknownExerciseIDs(outcome.payload, known), 200);
+	}
+	if (outcome.status === "ai_provider_error") {
+		return json(
+			{
+				error: {
+					code: "provider_error",
+					message: "Workout plan analysis is temporarily unavailable",
+					requestID: crypto.randomUUID(),
+					status: outcome.openaiHttpStatus,
+				},
+			},
+			502
+		);
+	}
+	return json(
+		{
+			error: {
+				code: "malformed_ai_response",
+				message: "Workout plan analysis is temporarily unavailable",
+				requestID: crypto.randomUUID(),
+				...(isWorkoutPlanDebugEnabled(env) && outcome.diagnostics
+					? { debug: outcome.diagnostics }
+					: {}),
+			},
+		},
+		502
+	);
+}
+
 export type TaiCoachRequest = {
 	message: string;
 	context?: Record<string, unknown>;
@@ -1290,6 +1913,12 @@ export default {
 		if (url.pathname === "/ai/interpret-goal") {
 			return handleInterpretGoal(request, env);
 		}
+		if (url.pathname === "/ai/interpret-gym-photo") {
+			return handleInterpretGymPhoto(request, env);
+		}
+		if (url.pathname === "/ai/interpret-workout-plan") {
+			return handleInterpretWorkoutPlan(request, env);
+		}
 		if (url.pathname === "/ai/coach") {
 			return handleCoach(request, env);
 		}
@@ -1302,12 +1931,23 @@ export const __test = {
 	TAI_MEAL_RESPONSE_JSON_SCHEMA,
 	TAI_GOAL_RESPONSE_JSON_SCHEMA,
 	TAI_COACH_RESPONSE_JSON_SCHEMA,
+	TAI_GYM_PHOTO_RESPONSE_JSON_SCHEMA,
+	TAI_WORKOUT_PLAN_RESPONSE_JSON_SCHEMA,
 	buildSystemPrompt,
 	buildGoalSystemPrompt,
 	buildCoachSystemPrompt,
+	buildGymPhotoSystemPrompt,
 	mapProviderStructuredToAppResponse,
 	mapProviderStructuredToGoalResponse,
 	mapProviderStructuredToCoachResponse,
+	mapProviderStructuredToGymPhotoResponse,
+	filterGymExerciseCandidates,
+	readAllowedExerciseIDsFromContext,
+	redactGymPhotoRequestForLogging,
+	redactWorkoutPlanRequestForLogging,
+	validateWorkoutPlanRequest,
+	mapProviderStructuredToWorkoutPlanResponse,
+	filterUnknownExerciseIDs,
 	sanitizeCoachAssistantText,
 	parseMealRefinementFromContext,
 	collectUserTextBlocksForTests,

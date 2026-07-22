@@ -6,6 +6,8 @@ struct AppDependencies {
     let askTaiGuidance: any AskTaiGuidanceService
     let healthService: HealthService
     let mealRepository: MealRepository
+    let workoutRepository: WorkoutRepository
+    let gymPlanRepository: GymPlanRepository
     let goalRepository: GoalRepository
     let conversationRepository: ActiveConversationRepository
     let conversationSession: ActiveConversationSessionController
@@ -29,11 +31,15 @@ struct AppDependencies {
         let persistence = LocalPersistenceService(container: modelContainer)
         let aiService = makeAIService(config: config)
         let mealRepository = persistence.makeMealRepository()
+        let workoutRepository = persistence.makeWorkoutRepository()
+        let gymPlanRepository = persistence.makeGymPlanRepository()
         let goalRepository = persistence.makeGoalRepository()
         let conversationRepository = persistence.makeActiveConversationRepository()
         let conversationSession = ActiveConversationSessionController(
             conversationRepository: conversationRepository,
             mealRepository: mealRepository,
+            workoutRepository: workoutRepository,
+            gymPlanRepository: gymPlanRepository,
             goalRepository: goalRepository,
             aiService: aiService,
             ownerID: config.localOwnerID,
@@ -44,6 +50,8 @@ struct AppDependencies {
             askTaiGuidance: MockAskTaiGuidanceService(),
             healthService: MockHealthService(),
             mealRepository: mealRepository,
+            workoutRepository: workoutRepository,
+            gymPlanRepository: gymPlanRepository,
             goalRepository: goalRepository,
             conversationRepository: conversationRepository,
             conversationSession: conversationSession,
@@ -62,6 +70,8 @@ struct AppDependencies {
     static func mocksOnly(config: RuntimeAppConfig = .default) -> AppDependencies {
         ConversationAttachmentStore.shared = .makeEphemeralForTests()
         let mealRepository = MockMealRepository()
+        let workoutRepository = MockWorkoutRepository()
+        let gymPlanRepository = MockGymPlanRepository()
         let goalRepository = MockGoalRepository()
         let conversationRepository = InMemoryActiveConversationRepository(
             attachmentStore: ConversationAttachmentStore.shared
@@ -70,6 +80,8 @@ struct AppDependencies {
         let conversationSession = ActiveConversationSessionController(
             conversationRepository: conversationRepository,
             mealRepository: mealRepository,
+            workoutRepository: workoutRepository,
+            gymPlanRepository: gymPlanRepository,
             goalRepository: goalRepository,
             aiService: aiService,
             ownerID: config.localOwnerID,
@@ -80,6 +92,8 @@ struct AppDependencies {
             askTaiGuidance: MockAskTaiGuidanceService(),
             healthService: MockHealthService(),
             mealRepository: mealRepository,
+            workoutRepository: workoutRepository,
+            gymPlanRepository: gymPlanRepository,
             goalRepository: goalRepository,
             conversationRepository: conversationRepository,
             conversationSession: conversationSession,
@@ -115,6 +129,8 @@ struct AppDependencies {
                     baseURL: baseURL,
                     interpretMealPath: config.aiInterpretMealPath,
                     interpretGoalPath: config.aiInterpretGoalPath,
+                    interpretGymPhotoPath: config.aiInterpretGymPhotoPath,
+                    interpretWorkoutPlanPath: config.aiInterpretWorkoutPlanPath,
                     coachPath: config.aiCoachPath,
                     proxyBearerToken: config.aiProxyBearerToken
                 )

@@ -17,9 +17,12 @@ struct AppShellView: View {
     @State private var askTaiSeedPrompt: String?
     @State private var isKeyboardVisible = false
     @State private var mealAddedFeedbackTrigger = 0
+    @State private var workoutAddedFeedbackTrigger = 0
     @State private var isAskTaiDeemphasized = false
     @State private var pendingTaiIntent: TaiLaunchIntent?
     @State private var hasOpenedTai = false
+    @State private var isGymPlansPresented = false
+    @State private var pendingGymPlanImportReview: (draft: GymPlanImportDraft, sourceText: String?)?
 
     init(dependencies: AppDependencies, config: RuntimeAppConfig) {
         self.dependencies = dependencies
@@ -65,14 +68,17 @@ struct AppShellView: View {
             NavigationStack {
                 HomeBriefingView(
                     mealRepository: dependencies.mealRepository,
+                    workoutRepository: dependencies.workoutRepository,
                     goalRepository: dependencies.goalRepository,
                     nutritionDaySelection: dependencies.nutritionDaySelection,
                     ownerID: config.localOwnerID,
                     assistantName: config.assistantName,
                     mealAddedFeedbackTrigger: mealAddedFeedbackTrigger,
+                    workoutAddedFeedbackTrigger: workoutAddedFeedbackTrigger,
                     analytics: dependencies.analytics,
                     onPrimaryAction: handleHomePrimaryAction,
-                    onOpenTai: handleOpenTaiFromHome
+                    onOpenTai: handleOpenTaiFromHome,
+                    onManageGymPlans: { isGymPlansPresented = true }
                 )
             }
             .tabItem { Label(NavV2PrimaryTab.home.title, systemImage: "house.fill") }
@@ -83,6 +89,7 @@ struct AppShellView: View {
                     TaiConversationContainerView(
                         conversationSession: dependencies.conversationSession,
                         goalRepository: dependencies.goalRepository,
+                        gymPlanRepository: dependencies.gymPlanRepository,
                         aiService: dependencies.aiService,
                         ownerID: config.localOwnerID,
                         assistantName: config.assistantName,
@@ -90,7 +97,8 @@ struct AppShellView: View {
                         launchIntent: pendingTaiIntent,
                         onLaunchIntentConsumed: {
                             pendingTaiIntent = nil
-                        }
+                        },
+                        onManageGymPlans: { isGymPlansPresented = true }
                     )
                 } else {
                     DSColor.background.ignoresSafeArea()
@@ -110,8 +118,44 @@ struct AppShellView: View {
             dependencies.conversationSession.updateOnMealSaved {
                 mealAddedFeedbackTrigger += 1
             }
+            dependencies.conversationSession.updateOnWorkoutSaved {
+                workoutAddedFeedbackTrigger += 1
+            }
+            dependencies.conversationSession.updateOnManageGymPlans {
+                isGymPlansPresented = true
+            }
+            dependencies.conversationSession.updateOnPresentGymPlanImportReview { draft, sourceText in
+                pendingGymPlanImportReview = (draft, sourceText)
+                isGymPlansPresented = true
+            }
             // Prefetch Conversation after first frame so Home is not blocked.
             await dependencies.conversationSession.ensureLoaded()
+        }
+        .sheet(isPresented: $isGymPlansPresented) {
+            NavigationStack {
+                GymPlansView(
+                    gymPlanRepository: dependencies.gymPlanRepository,
+                    aiService: dependencies.aiService,
+                    ownerID: config.localOwnerID,
+                    importRequestContext: config.gymPlanImportRequestContext(
+                        sourceType: .text,
+                        sourceTextCharacterCount: 0,
+                        knownExerciseCount: GymExerciseID.allCases.count
+                    ),
+                    pendingImportReview: pendingGymPlanImportReview,
+                    onStartWorkout: { target in
+                        isGymPlansPresented = false
+                        pendingGymPlanImportReview = nil
+                        pendingTaiIntent = TaiLaunchIntent(kind: .startGymWorkout(target))
+                        hasOpenedTai = true
+                        navV2Tab = .tai
+                    },
+                    onDismiss: {
+                        isGymPlansPresented = false
+                        pendingGymPlanImportReview = nil
+                    }
+                )
+            }
         }
     }
 
@@ -212,12 +256,17 @@ struct AppShellView: View {
     }
 
     private func handleHomePrimaryAction(_ destination: RecommendationActionDestination) {
-        pendingTaiIntent = TaiLaunchIntent.fromHomeDestination(
-            destination,
-            dayContext: dependencies.nutritionDaySelection.dayContext()
-        )
-        hasOpenedTai = true
-        navV2Tab = .tai
+        switch destination {
+        case .manageGymPlans:
+            isGymPlansPresented = true
+        default:
+            pendingTaiIntent = TaiLaunchIntent.fromHomeDestination(
+                destination,
+                dayContext: dependencies.nutritionDaySelection.dayContext()
+            )
+            hasOpenedTai = true
+            navV2Tab = .tai
+        }
     }
 
     private func handleOpenTaiFromHome() {

@@ -168,4 +168,16 @@ enum ConversationDefaults {
             accessibilityHint: "Ask Tai a question"
         ),
     ]
+
+    static let gymStartQuickActions: [ConversationQuickAction] = [
+        ConversationAllowedQuickAction.gymStartUpperBody.asConversationQuickAction(),
+        ConversationAllowedQuickAction.gymStartLowerBody.asConversationQuickAction(),
+        ConversationAllowedQuickAction.gymManagePlans.asConversationQuickAction(),
+    ]
+
+    static let gymActiveQuickActions: [ConversationQuickAction] = [
+        ConversationAllowedQuickAction.gymTakeSetPhoto.asConversationQuickAction(),
+        ConversationAllowedQuickAction.gymManagePlans.asConversationQuickAction(),
+        ConversationAllowedQuickAction.gymFinishWorkout.asConversationQuickAction(),
+    ]
 }

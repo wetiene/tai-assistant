@@ -4,6 +4,10 @@ import Foundation
 enum RecommendationActionDestination: Equatable, Sendable {
     case checkInMeal
     case reviewGoal
+    case manageGymPlans
+    case startGymWorkout(GymProgramTemplateID)
+    case startGymWorkoutPlan(GymPlanReference)
+    case resumeGymWorkout
 }
 
 /// Structured reason Tai can show in a “Why this?” sheet.

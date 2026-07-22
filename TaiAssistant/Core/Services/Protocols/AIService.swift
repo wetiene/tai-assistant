@@ -4,6 +4,8 @@ protocol AIService {
     func send(message: String, context: [String: String]) async throws -> String
     func interpretMeal(request: AIInterpretMealRequest) async throws -> AIInterpretMealResponse
     func interpretGoal(request: AIInterpretGoalRequest) async throws -> AIInterpretGoalResponse
+    func interpretGymPhoto(request: AIInterpretGymPhotoRequest) async throws -> AIInterpretGymPhotoResponse
+    func interpretWorkoutPlan(request: AIInterpretWorkoutPlanRequest) async throws -> AIInterpretWorkoutPlanResponse
     func coach(request: AICoachRequest) async throws -> AICoachResponse
 }
 
@@ -323,6 +325,130 @@ struct AIInterpretedMealItem: Codable {
     var fiberGrams: Double
 }
 
+// MARK: - Gym photo interpretation (`POST /ai/interpret-gym-photo`)
+
+struct AIInterpretGymPhotoRequest: Codable, Sendable {
+    var image: AIInterpretMealImageInput
+    var context: AIInterpretGymPhotoContext?
+}
+
+struct AIInterpretGymPhotoContext: Codable, Sendable {
+    var localeIdentifier: String?
+    var weightUnitPreference: String?
+    var plannedWorkout: AIProxyGymPlannedWorkoutContext?
+    var expectedExerciseID: String?
+    var allowedExerciseCandidates: [AIProxyGymExerciseCandidateContext]
+}
+
+struct AIProxyGymPlannedWorkoutContext: Codable, Sendable {
+    var templateID: String
+    var title: String
+    var exercises: [AIProxyGymExerciseCandidateContext]
+}
+
+struct AIProxyGymExerciseCandidateContext: Codable, Sendable {
+    var exerciseID: String
+    var displayName: String
+    var isOptional: Bool
+}
+
+struct AIInterpretGymPhotoResponse: Codable, Sendable {
+    var schemaVersion: Int
+    var exerciseCandidates: [AIInterpretGymExerciseCandidate]
+    var detectedWeight: AIInterpretGymDetectedWeight?
+    var limitations: [String]
+    var requiresConfirmation: Bool
+}
+
+struct AIInterpretGymExerciseCandidate: Codable, Sendable {
+    var exerciseID: String
+    var confidence: Double
+    var reason: String
+}
+
+struct AIInterpretGymDetectedWeight: Codable, Sendable {
+    var value: Double
+    var unit: String
+    var confidence: Double
+    var reason: String
+}
+
+// MARK: - Workout plan import (`POST /ai/interpret-workout-plan`)
+
+struct AIInterpretWorkoutPlanRequest: Codable, Sendable {
+    var schemaVersion: Int
+    var source: AIWorkoutPlanSourcePayload
+    var context: AIWorkoutPlanInterpretContext?
+}
+
+struct AIWorkoutPlanSourcePayload: Codable, Sendable {
+    var type: String
+    var text: String?
+    var attachment: AIWorkoutPlanAttachmentPayload?
+}
+
+struct AIWorkoutPlanAttachmentPayload: Codable, Sendable {
+    var base64Data: String?
+    var mimeType: String?
+}
+
+struct AIWorkoutPlanInterpretContext: Codable, Sendable {
+    var localeIdentifier: String?
+    var preferredWeightUnit: String?
+    var knownExercises: [AIWorkoutPlanKnownExercise]
+}
+
+struct AIWorkoutPlanKnownExercise: Codable, Sendable {
+    var id: String
+    var name: String
+}
+
+struct AIInterpretWorkoutPlanResponse: Codable, Sendable {
+    var schemaVersion: Int
+    var suggestedPlan: AIWorkoutPlanSuggestion
+    var unresolvedItems: [AIWorkoutPlanUnresolvedItem]
+    var warnings: [String]
+    var confidence: String
+    var requiresUserConfirmation: Bool
+}
+
+struct AIWorkoutPlanSuggestion: Codable, Sendable {
+    var name: String
+    var sections: [AIWorkoutPlanSectionProposal]
+    var generalInstructions: [String]
+    var suggestedDurationWeeks: Int?
+}
+
+struct AIWorkoutPlanSectionProposal: Codable, Sendable {
+    var name: String
+    var orderIndex: Int
+    var exercises: [AIWorkoutPlanExerciseProposal]
+}
+
+struct AIWorkoutPlanExerciseProposal: Codable, Sendable {
+    var sourceName: String
+    var matchedExerciseID: String?
+    var displayName: String
+    var orderIndex: Int
+    var targetSets: Int?
+    var minimumRepetitions: Int?
+    var maximumRepetitions: Int?
+    var isOptional: Bool
+    var notes: String?
+    var matchConfidence: Double
+}
+
+struct AIWorkoutPlanUnresolvedItem: Codable, Sendable {
+    var sourceText: String
+    var reason: String
+    var suggestedMatches: [AIWorkoutPlanMatchSuggestion]
+}
+
+struct AIWorkoutPlanMatchSuggestion: Codable, Sendable {
+    var exerciseID: String
+    var confidence: Double
+}
+
 enum AIServiceError: LocalizedError {
     case invalidURL(String)
     case invalidRequestPayload
@@ -351,6 +477,8 @@ struct OpenAIProxyServiceConfig {
     var baseURL: URL
     var interpretMealPath: String
     var interpretGoalPath: String
+    var interpretGymPhotoPath: String
+    var interpretWorkoutPlanPath: String
     var coachPath: String
     /// Optional proxy credential. This is for the app -> backend proxy hop only.
     var proxyBearerToken: String?
@@ -359,16 +487,19 @@ struct OpenAIProxyServiceConfig {
         baseURL: URL(string: "http://localhost:8080")!,
         interpretMealPath: "/ai/interpret-meal",
         interpretGoalPath: "/ai/interpret-goal",
+        interpretGymPhotoPath: "/ai/interpret-gym-photo",
+        interpretWorkoutPlanPath: "/ai/interpret-workout-plan",
         coachPath: "/ai/coach",
         proxyBearerToken: nil
     )
 }
 
-struct OpenAIProxyAIService: AIService {
+final class OpenAIProxyAIService: AIService, AIProxyDiagnosticsReporting {
     private let config: OpenAIProxyServiceConfig
     private let session: URLSession
     private let jsonEncoder: JSONEncoder
     private let jsonDecoder: JSONDecoder
+    private(set) var lastCallDiagnostics: AIProxyCallDiagnostics?
 
     init(
         config: OpenAIProxyServiceConfig,
@@ -378,6 +509,10 @@ struct OpenAIProxyAIService: AIService {
         self.session = session
         self.jsonEncoder = JSONEncoder()
         self.jsonDecoder = JSONDecoder()
+    }
+
+    func clearLastCallDiagnostics() {
+        lastCallDiagnostics = nil
     }
 
     func send(message: String, context: [String: String]) async throws -> String {
@@ -402,6 +537,14 @@ struct OpenAIProxyAIService: AIService {
         try await postJSON(path: config.interpretGoalPath, body: request, decode: AIInterpretGoalResponse.self)
     }
 
+    func interpretGymPhoto(request: AIInterpretGymPhotoRequest) async throws -> AIInterpretGymPhotoResponse {
+        try await postJSON(path: config.interpretGymPhotoPath, body: request, decode: AIInterpretGymPhotoResponse.self)
+    }
+
+    func interpretWorkoutPlan(request: AIInterpretWorkoutPlanRequest) async throws -> AIInterpretWorkoutPlanResponse {
+        try await postJSON(path: config.interpretWorkoutPlanPath, body: request, decode: AIInterpretWorkoutPlanResponse.self)
+    }
+
     func coach(request: AICoachRequest) async throws -> AICoachResponse {
         try await postJSON(path: config.coachPath, body: request, decode: AICoachResponse.self)
     }
@@ -416,18 +559,27 @@ struct OpenAIProxyAIService: AIService {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        let token = config.proxyBearerToken?.trimmingCharacters(in: .whitespacesAndNewlines)
         #if DEBUG
-        if config.proxyBearerToken?.isEmpty != false {
+        if token?.isEmpty != false {
             print("AI proxy token missing from local config")
         }
         #endif
-        if let token = config.proxyBearerToken, !token.isEmpty {
+        if let token, !token.isEmpty {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
         do {
             urlRequest.httpBody = try jsonEncoder.encode(body)
         } catch {
+            lastCallDiagnostics = AIProxyCallDiagnostics(
+                requestURL: endpoint.absoluteString,
+                httpStatus: nil,
+                contentType: nil,
+                responseByteCount: nil,
+                responseBodyPreview: nil,
+                underlyingError: AIServiceError.invalidRequestPayload
+            )
             throw AIServiceError.invalidRequestPayload
         }
 
@@ -436,36 +588,73 @@ struct OpenAIProxyAIService: AIService {
         do {
             (responsePayload, response) = try await session.data(for: urlRequest)
         } catch {
+            lastCallDiagnostics = AIProxyCallDiagnostics(
+                requestURL: endpoint.absoluteString,
+                httpStatus: nil,
+                contentType: nil,
+                responseByteCount: nil,
+                responseBodyPreview: nil,
+                underlyingError: error
+            )
             throw AIServiceError.transport(underlying: error)
         }
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AIServiceError.malformedResponse(bodyPreview: nil)
+        let httpResponse = response as? HTTPURLResponse
+        let contentType = httpResponse?.value(forHTTPHeaderField: "Content-Type")
+        #if DEBUG
+        let bodyPreview = Self.responseBodySnippet(from: responsePayload)
+        #else
+        let bodyPreview: String? = nil
+        #endif
+        lastCallDiagnostics = AIProxyCallDiagnostics(
+            requestURL: endpoint.absoluteString,
+            httpStatus: httpResponse?.statusCode,
+            contentType: contentType,
+            responseByteCount: responsePayload.count,
+            responseBodyPreview: bodyPreview,
+            underlyingError: nil
+        )
+
+        guard let httpResponse else {
+            throw AIServiceError.malformedResponse(bodyPreview: bodyPreview)
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             #if DEBUG
-            if httpResponse.statusCode == 401, config.proxyBearerToken?.isEmpty != false {
+            if httpResponse.statusCode == 401, token?.isEmpty != false {
                 print("AI proxy token missing from local config")
             }
             #endif
-            let errorBody: String
-            #if DEBUG
-            errorBody = Self.responseBodySnippet(from: responsePayload)
-            #else
-            errorBody = "<redacted>"
-            #endif
+            let errorBody = bodyPreview ?? "<redacted>"
+            lastCallDiagnostics?.underlyingError = AIServiceError.unexpectedStatusCode(httpResponse.statusCode, body: errorBody)
             throw AIServiceError.unexpectedStatusCode(httpResponse.statusCode, body: errorBody)
+        }
+
+        guard Self.looksLikeJSONResponse(contentType: contentType, body: responsePayload) else {
+            lastCallDiagnostics?.underlyingError = AIServiceError.malformedResponse(bodyPreview: bodyPreview)
+            throw AIServiceError.malformedResponse(bodyPreview: bodyPreview)
         }
 
         do {
             return try jsonDecoder.decode(Response.self, from: responsePayload)
         } catch {
-            #if DEBUG
-            throw AIServiceError.malformedResponse(bodyPreview: Self.responseBodySnippet(from: responsePayload))
-            #else
-            throw AIServiceError.malformedResponse(bodyPreview: nil)
-            #endif
+            lastCallDiagnostics?.underlyingError = error
+            throw AIServiceError.malformedResponse(bodyPreview: bodyPreview)
         }
+    }
+
+    private static func looksLikeJSONResponse(contentType: String?, body: Data) -> Bool {
+        if let contentType, !contentType.lowercased().contains("json") {
+            return false
+        }
+        guard let first = body.first(where: { byte in
+            byte != UInt8(ascii: " ")
+                && byte != UInt8(ascii: "\n")
+                && byte != UInt8(ascii: "\r")
+                && byte != UInt8(ascii: "\t")
+        }) else {
+            return true
+        }
+        return first == UInt8(ascii: "{") || first == UInt8(ascii: "[")
     }
 
     private static func resolvedURL(path: String, baseURL: URL) throws -> URL {

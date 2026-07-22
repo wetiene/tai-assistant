@@ -46,6 +46,11 @@ struct ConversationMessageRenderer: View {
     var onQuickAction: (ConversationQuickAction) -> Void
     var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
     var onMealCardLoggingDayChange: (UUID, Date) -> Void
+    var onGymPlanTakePhoto: () -> Void
+    var onGymPlanFinish: () -> Void
+    var onGymManagePlans: () -> Void
+    var onGymSetCardAction: (GymCapabilityID.CardAction, UUID, GymSetConfirmationCardPayload) -> Void
+    var onGymSetDraftChange: (UUID, GymSetConfirmationCardPayload) -> Void
     var onWhy: (() -> Void)? = nil
 
     var body: some View {
@@ -139,6 +144,29 @@ struct ConversationMessageRenderer: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Why Tai said this")
+            }
+        case GymCapabilityID.workoutPlanCardType:
+            if let payload = GymWorkoutPlanCardCodec.decode(card.payload) {
+                GymWorkoutPlanCardView(
+                    payload: payload,
+                    isInteractive: card.isInteractive,
+                    onTakePhoto: onGymPlanTakePhoto,
+                    onFinishWorkout: onGymPlanFinish,
+                    onManagePlans: onGymManagePlans
+                )
+            }
+        case GymCapabilityID.setConfirmCardType:
+            if let payload = GymSetConfirmationCardCodec.decode(card.payload) {
+                GymSetConfirmationCardView(
+                    payload: payload,
+                    isInteractive: card.isInteractive,
+                    onDraftChange: { updated in
+                        onGymSetDraftChange(card.id, updated)
+                    },
+                    onAction: { action, updated in
+                        onGymSetCardAction(action, card.id, updated)
+                    }
+                )
             }
         default:
             EmptyView()

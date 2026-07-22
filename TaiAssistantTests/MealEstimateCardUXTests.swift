@@ -9,6 +9,10 @@ final class MealEstimateCardUXTests: XCTestCase {
         return cal
     }
 
+    private var locale: Locale {
+        Locale(identifier: "en_GB")
+    }
+
     private var july11Afternoon: Date {
         calendar.date(from: DateComponents(year: 2026, month: 7, day: 11, hour: 14))!
     }
@@ -39,7 +43,8 @@ final class MealEstimateCardUXTests: XCTestCase {
         let label = MealEstimateCardFormatting.loggingDateLabel(
             for: today,
             calendar: calendar,
-            now: july11Afternoon
+            now: july11Afternoon,
+            locale: locale
         )
 
         XCTAssertTrue(label.hasPrefix("Today ·"))
@@ -51,7 +56,8 @@ final class MealEstimateCardUXTests: XCTestCase {
         let label = MealEstimateCardFormatting.loggingDateLabel(
             for: yesterday,
             calendar: calendar,
-            now: july11Afternoon
+            now: july11Afternoon,
+            locale: locale
         )
 
         XCTAssertEqual(label, "Logging for Yesterday · 10 Jul")
@@ -71,7 +77,10 @@ final class MealEstimateCardUXTests: XCTestCase {
         let vm = ConversationViewModel(
             store: store,
             meal: meal,
+            gym: ConversationTestSupport.makeGym(),
             liveTai: ConversationTestSupport.makeLiveTai(),
+            gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
+            ownerID: "ux.test",
             assistantName: "Tai"
         )
 
@@ -123,7 +132,10 @@ final class MealEstimateCardUXTests: XCTestCase {
         let vm = ConversationViewModel(
             store: store,
             meal: meal,
+            gym: ConversationTestSupport.makeGym(),
             liveTai: ConversationTestSupport.makeLiveTai(),
+            gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
+            ownerID: "ux.test",
             assistantName: "Tai"
         )
 
@@ -188,7 +200,12 @@ final class MealEstimateCardUXTests: XCTestCase {
         _ = await meal.interpret(userText: "breakfast shake", photoJPEG: nil, captureNutritionDay: day9)
 
         let labels = meal.currentDrafts.map {
-            MealEstimateCardFormatting.loggingDateLabel(for: $0.nutritionDay, calendar: calendar, now: july11Afternoon)
+            MealEstimateCardFormatting.loggingDateLabel(
+                for: $0.nutritionDay,
+                calendar: calendar,
+                now: july11Afternoon,
+                locale: locale
+            )
         }
 
         XCTAssertEqual(Set(labels).count, 2)
@@ -206,7 +223,10 @@ final class MealEstimateCardUXTests: XCTestCase {
         let vm = ConversationViewModel(
             store: store,
             meal: meal,
+            gym: ConversationTestSupport.makeGym(),
             liveTai: ConversationTestSupport.makeLiveTai(),
+            gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
+            ownerID: "ux.test",
             assistantName: "Tai"
         )
 
@@ -235,7 +255,10 @@ final class MealEstimateCardUXTests: XCTestCase {
         let vm = ConversationViewModel(
             store: store,
             meal: meal,
+            gym: ConversationTestSupport.makeGym(),
             liveTai: ConversationTestSupport.makeLiveTai(),
+            gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
+            ownerID: "ux.test",
             assistantName: "Tai"
         )
 
@@ -263,7 +286,10 @@ final class MealEstimateCardUXTests: XCTestCase {
         let vm = ConversationViewModel(
             store: store,
             meal: meal,
+            gym: ConversationTestSupport.makeGym(),
             liveTai: ConversationTestSupport.makeLiveTai(),
+            gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
+            ownerID: "ux.test",
             assistantName: "Tai"
         )
 

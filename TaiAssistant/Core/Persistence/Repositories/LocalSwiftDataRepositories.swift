@@ -308,6 +308,109 @@ final class LocalSwiftDataWeightLogRepository: WeightLogRepository {
     }
 }
 
+final class LocalSwiftDataWorkoutRepository: WorkoutRepository {
+    private let container: ModelContainer
+
+    init(container: ModelContainer) {
+        self.container = container
+    }
+
+    func fetchSessions(ownerID: String, from startDate: Date, to endDate: Date) async throws -> [WorkoutSessionLog] {
+        let context = ModelContext(container)
+        let predicate = #Predicate<WorkoutSessionLog> { session in
+            session.ownerID == ownerID && session.startedAt >= startDate && session.startedAt < endDate
+        }
+        let descriptor = FetchDescriptor<WorkoutSessionLog>(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
+    }
+
+    func fetchInProgressSession(ownerID: String) async throws -> WorkoutSessionLog? {
+        let context = ModelContext(container)
+        let inProgress = GymWorkoutSessionStatus.inProgress.rawValue
+        let predicate = #Predicate<WorkoutSessionLog> { session in
+            session.ownerID == ownerID && session.statusRaw == inProgress
+        }
+        let descriptor = FetchDescriptor<WorkoutSessionLog>(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor).first
+    }
+
+    func createSession(_ session: WorkoutSessionLog) async throws {
+        let context = ModelContext(container)
+        let sessionID = session.id
+        let clashDescriptor = FetchDescriptor<WorkoutSessionLog>(
+            predicate: #Predicate<WorkoutSessionLog> { $0.id == sessionID }
+        )
+        if try context.fetch(clashDescriptor).first != nil {
+            throw WorkoutRepositoryError.sessionAlreadyExists(id: session.id)
+        }
+        context.insert(session)
+        try context.save()
+    }
+
+    func updateSession(_ session: WorkoutSessionLog) async throws {
+        let context = ModelContext(container)
+        let sessionID = session.id
+        let descriptor = FetchDescriptor<WorkoutSessionLog>(
+            predicate: #Predicate<WorkoutSessionLog> { $0.id == sessionID }
+        )
+        guard let existing = try context.fetch(descriptor).first else {
+            throw WorkoutRepositoryError.sessionNotFound(id: session.id)
+        }
+        existing.templateID = session.templateID
+        existing.title = session.title
+        existing.startedAt = session.startedAt
+        existing.completedAt = session.completedAt
+        existing.statusRaw = session.statusRaw
+        existing.activeSessionJSON = session.activeSessionJSON
+        try context.save()
+    }
+
+    func appendSet(_ set: WorkoutSetLog, to sessionID: UUID) async throws {
+        let context = ModelContext(container)
+        let descriptor = FetchDescriptor<WorkoutSessionLog>(
+            predicate: #Predicate<WorkoutSessionLog> { $0.id == sessionID }
+        )
+        guard let session = try context.fetch(descriptor).first else {
+            throw WorkoutRepositoryError.sessionNotFound(id: sessionID)
+        }
+        set.session = session
+        context.insert(set)
+        try context.save()
+    }
+
+    func completeSession(id: UUID, completedAt: Date) async throws {
+        let context = ModelContext(container)
+        let descriptor = FetchDescriptor<WorkoutSessionLog>(
+            predicate: #Predicate<WorkoutSessionLog> { $0.id == id }
+        )
+        guard let session = try context.fetch(descriptor).first else {
+            throw WorkoutRepositoryError.sessionNotFound(id: id)
+        }
+        session.status = .completed
+        session.completedAt = completedAt
+        session.activeSessionJSON = nil
+        try context.save()
+    }
+
+    func abandonSession(id: UUID) async throws {
+        let context = ModelContext(container)
+        let descriptor = FetchDescriptor<WorkoutSessionLog>(
+            predicate: #Predicate<WorkoutSessionLog> { $0.id == id }
+        )
+        guard let session = try context.fetch(descriptor).first else {
+            throw WorkoutRepositoryError.sessionNotFound(id: id)
+        }
+        context.delete(session)
+        try context.save()
+    }
+}
+
 final class LocalSwiftDataAppConfigRepository: AppConfigRepository {
     private let container: ModelContainer
 

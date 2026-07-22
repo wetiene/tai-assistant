@@ -4,15 +4,19 @@ import SwiftUI
 struct TaiConversationContainerView: View {
     let conversationSession: ActiveConversationSessionController
     let goalRepository: GoalRepository
+    let gymPlanRepository: GymPlanRepository
     let aiService: AIService
     let ownerID: String
     let assistantName: String
     var analytics: any AnalyticsClient = NoOpAnalyticsClient()
     var launchIntent: TaiLaunchIntent?
     var onLaunchIntentConsumed: (() -> Void)? = nil
+    var onManageGymPlans: (() -> Void)? = nil
 
     @State private var isGoalsPresented = false
+    @State private var isGymPlansPresented = false
     @State private var isConsentPresented = false
+    @State private var pendingGymPlanImportReview: (draft: GymPlanImportDraft, sourceText: String?)?
 
     var body: some View {
         Group {
@@ -42,6 +46,11 @@ struct TaiConversationContainerView: View {
                         Label("Goals", systemImage: "target")
                     }
                     Button {
+                        isGymPlansPresented = true
+                    } label: {
+                        Label("Gym Plans", systemImage: "list.bullet.rectangle")
+                    }
+                    Button {
                         isConsentPresented = true
                     } label: {
                         Label("AI consent", systemImage: "hand.raised.fill")
@@ -57,6 +66,17 @@ struct TaiConversationContainerView: View {
         }
         .task {
             analytics.track(.taiConversationViewed)
+            conversationSession.updateOnManageGymPlans {
+                if let onManageGymPlans {
+                    onManageGymPlans()
+                } else {
+                    isGymPlansPresented = true
+                }
+            }
+            conversationSession.updateOnPresentGymPlanImportReview { draft, sourceText in
+                pendingGymPlanImportReview = (draft, sourceText)
+                isGymPlansPresented = true
+            }
             await conversationSession.ensureLoaded()
             consumeLaunchIntentIfNeeded()
         }
@@ -79,6 +99,30 @@ struct TaiConversationContainerView: View {
                 }
             }
         }
+        .sheet(isPresented: $isGymPlansPresented) {
+            NavigationStack {
+                GymPlansView(
+                    gymPlanRepository: gymPlanRepository,
+                    aiService: aiService,
+                    ownerID: ownerID,
+                    importRequestContext: RuntimeAppConfig.default.gymPlanImportRequestContext(
+                        sourceType: .text,
+                        sourceTextCharacterCount: 0,
+                        knownExerciseCount: GymExerciseID.allCases.count
+                    ),
+                    pendingImportReview: pendingGymPlanImportReview,
+                    onStartWorkout: { target in
+                        isGymPlansPresented = false
+                        pendingGymPlanImportReview = nil
+                        conversationSession.deliver(TaiLaunchIntent(kind: .startGymWorkout(target)))
+                    },
+                    onDismiss: {
+                        isGymPlansPresented = false
+                        pendingGymPlanImportReview = nil
+                    }
+                )
+            }
+        }
         .sheet(isPresented: $isConsentPresented) {
             AIDataProcessingConsentSheet(
                 onAccept: { isConsentPresented = false },
@@ -99,15 +143,18 @@ struct TaiConversationContainerView: View {
     let session = ActiveConversationSessionController(
         conversationRepository: InMemoryActiveConversationRepository(),
         mealRepository: MockMealRepository(),
+        workoutRepository: MockWorkoutRepository(),
+        gymPlanRepository: MockGymPlanRepository(),
         goalRepository: MockGoalRepository(),
         aiService: MockAIService(),
         ownerID: "preview.user",
         assistantName: "Tai"
     )
-    return NavigationStack {
+    NavigationStack {
         TaiConversationContainerView(
             conversationSession: session,
             goalRepository: MockGoalRepository(),
+            gymPlanRepository: MockGymPlanRepository(),
             aiService: MockAIService(),
             ownerID: "preview.user",
             assistantName: "Tai"
