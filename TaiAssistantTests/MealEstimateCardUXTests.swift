@@ -78,6 +78,7 @@ final class MealEstimateCardUXTests: XCTestCase {
             store: store,
             meal: meal,
             gym: ConversationTestSupport.makeGym(),
+            strengthConversation: ConversationTestSupport.makeStrengthConversation(ownerID: "ux.test"),
             liveTai: ConversationTestSupport.makeLiveTai(),
             gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
             ownerID: "ux.test",
@@ -133,6 +134,7 @@ final class MealEstimateCardUXTests: XCTestCase {
             store: store,
             meal: meal,
             gym: ConversationTestSupport.makeGym(),
+            strengthConversation: ConversationTestSupport.makeStrengthConversation(ownerID: "ux.test"),
             liveTai: ConversationTestSupport.makeLiveTai(),
             gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
             ownerID: "ux.test",
@@ -224,6 +226,7 @@ final class MealEstimateCardUXTests: XCTestCase {
             store: store,
             meal: meal,
             gym: ConversationTestSupport.makeGym(),
+            strengthConversation: ConversationTestSupport.makeStrengthConversation(ownerID: "ux.test"),
             liveTai: ConversationTestSupport.makeLiveTai(),
             gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
             ownerID: "ux.test",
@@ -256,6 +259,7 @@ final class MealEstimateCardUXTests: XCTestCase {
             store: store,
             meal: meal,
             gym: ConversationTestSupport.makeGym(),
+            strengthConversation: ConversationTestSupport.makeStrengthConversation(ownerID: "ux.test"),
             liveTai: ConversationTestSupport.makeLiveTai(),
             gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
             ownerID: "ux.test",
@@ -287,6 +291,7 @@ final class MealEstimateCardUXTests: XCTestCase {
             store: store,
             meal: meal,
             gym: ConversationTestSupport.makeGym(),
+            strengthConversation: ConversationTestSupport.makeStrengthConversation(ownerID: "ux.test"),
             liveTai: ConversationTestSupport.makeLiveTai(),
             gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(),
             ownerID: "ux.test",
@@ -320,6 +325,13 @@ private extension ConversationViewModel {
         switch outcome {
         case .failure(let message):
             store.append(ConversationMessage(actor: .assistant, text: message))
+        case .imageFailure(let failure):
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: ImageInterpretationFailurePresentation.message(for: failure)
+                )
+            )
         case .success(let success):
             store.freezeInteractiveCards(typeID: MealCapabilityID.estimateCardType)
             if let note = success.assistantNote {

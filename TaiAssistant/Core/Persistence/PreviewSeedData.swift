@@ -134,4 +134,43 @@ enum PreviewSeedData {
         context.insert(appConfig)
         try context.save()
     }
+
+    /// Seeds an in-progress strength workout for UI tests (`-UITestStrengthActiveWorkout`).
+    static func seedActiveStrengthWorkout(
+        in container: ModelContainer,
+        ownerID: String,
+        confirmedSets: Int = 0
+    ) throws {
+        let context = ModelContext(container)
+        let existing = try context.fetch(FetchDescriptor<WorkoutSessionLog>())
+        guard !existing.contains(where: { $0.status == .inProgress }) else { return }
+
+        var session = StrengthSessionBuilder.makeSession(
+            plan: GymProgramTemplateLibrary.resolvableStarter(.upperBody),
+            proposals: [],
+            acceptedProposals: [:],
+            historySessions: [],
+            origin: .home,
+            preFlightCompleted: true
+        )
+        if confirmedSets > 0, let exerciseID = session.exercises.first?.id {
+            session.currentExerciseInstanceID = exerciseID
+            for index in 0..<min(confirmedSets, session.exercises[0].workingSets.count) {
+                session.exercises[0].sets[index].status = .confirmed
+                session.exercises[0].sets[index].confirmedWeight = 40
+                session.exercises[0].sets[index].confirmedReps = 10
+            }
+        }
+
+        let log = WorkoutSessionLog(
+            id: session.sessionID,
+            ownerID: ownerID,
+            templateID: session.planReference.storageKey,
+            title: session.title,
+            statusRaw: GymWorkoutSessionStatus.inProgress.rawValue,
+            activeSessionJSON: try StrengthSessionPersistence.encode(session)
+        )
+        context.insert(log)
+        try context.save()
+    }
 }

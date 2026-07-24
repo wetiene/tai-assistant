@@ -1,11 +1,13 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct ConversationView: View {
     @Bindable var viewModel: ConversationViewModel
 
     @State private var isCameraPresented = false
     @State private var isConsentPresented = false
+    @State private var selectedLibraryItems: [PhotosPickerItem] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -14,6 +16,7 @@ struct ConversationView: View {
                 store: viewModel.store,
                 isMealBusy: viewModel.meal.isBusy,
                 isGymBusy: viewModel.gym.isBusy,
+                isStrengthBusy: viewModel.strengthConversation.isBusy,
                 reduceMotion: reduceMotion,
                 onQuickAction: { viewModel.handleQuickAction($0) },
                 onMealCardAction: { action, cardID in
@@ -31,6 +34,42 @@ struct ConversationView: View {
                 onGymSetDraftChange: { cardID, payload in
                     viewModel.handleGymSetDraftChange(cardID: cardID, payload: payload)
                 },
+                strengthSession: viewModel.strengthConversation.session,
+                onStrengthOverviewOpenDedicated: {
+                    Task { await viewModel.openDedicatedStrengthWorkoutScreen() }
+                },
+                onStrengthOverviewAcceptProgression: { exerciseID in
+                    viewModel.handleStrengthOverviewProgression(exerciseID: exerciseID, accept: true)
+                },
+                onStrengthOverviewHoldProgression: { exerciseID in
+                    viewModel.handleStrengthOverviewProgression(exerciseID: exerciseID, accept: false)
+                },
+                onStrengthOverviewAcceptAllProgressions: {
+                    viewModel.handleStrengthOverviewAcceptAllProgressions()
+                },
+                strengthPendingProposals: viewModel.strengthConversation.pendingProgressionProposals(),
+                onStrengthExerciseAction: { action, cardID, exerciseID, weight, reps in
+                    viewModel.handleStrengthExerciseWorkspaceAction(
+                        action,
+                        cardID: cardID,
+                        exerciseInstanceID: exerciseID,
+                        weight: weight,
+                        reps: reps
+                    )
+                },
+                onStrengthExerciseDraftChange: { exerciseID, weight, reps in
+                    viewModel.handleStrengthExerciseDraftChange(
+                        exerciseInstanceID: exerciseID,
+                        weight: weight,
+                        reps: reps
+                    )
+                },
+                onStrengthExerciseActivate: { exerciseID in
+                    viewModel.activateStrengthExerciseWorkspace(exerciseInstanceID: exerciseID)
+                },
+                onStrengthPhotoReviewAction: { action, cardID, payload in
+                    viewModel.handleStrengthPhotoReviewAction(action, cardID: cardID, payload: payload)
+                },
                 onWhy: {
                     viewModel.showLiveTaiWhy = true
                 }
@@ -39,19 +78,31 @@ struct ConversationView: View {
                 store: viewModel.store,
                 isBusy: viewModel.isProcessing,
                 onCamera: {
-                    viewModel.handleQuickAction(
-                        ConversationQuickAction(
-                            id: MealCapabilityID.QuickAction.takePhoto,
-                            title: "Take Photo",
-                            systemImage: "camera.fill"
+                    if viewModel.hasActiveStrengthConversation || viewModel.gym.hasActiveSession {
+                        viewModel.handleQuickAction(
+                            ConversationAllowedQuickAction.gymTakeSetPhoto.asConversationQuickAction()
                         )
-                    )
+                    } else {
+                        viewModel.handleQuickAction(
+                            ConversationQuickAction(
+                                id: MealCapabilityID.QuickAction.takePhoto,
+                                title: "Take Photo",
+                                systemImage: "camera.fill"
+                            )
+                        )
+                    }
                 },
-                onClearPhoto: { viewModel.clearPendingPhoto() },
+                onClearPhotos: { viewModel.clearPendingPhoto() },
+                onRemovePhoto: { viewModel.removePendingPhoto(at: $0) },
                 onSend: {
                     Task { await viewModel.sendComposer() }
                 },
-                onTextChange: { viewModel.updateComposerText($0) }
+                onTextChange: { viewModel.updateComposerText($0) },
+                selectedLibraryItems: $selectedLibraryItems,
+                showsPhotoLibraryPicker: viewModel.hasActiveStrengthConversation,
+                onLibrarySelection: { items in
+                    Task { await viewModel.importLibraryPhotos(items) }
+                }
             )
         }
         .background(DSColor.background.ignoresSafeArea())
@@ -78,7 +129,7 @@ struct ConversationView: View {
         .fullScreenCover(isPresented: $isCameraPresented) {
             CheckInCameraView { image in
                 if let data = CheckInPhotoUploadPreprocessor.prepareMealUploadJPEG(from: image) {
-                    if viewModel.gym.hasActiveSession {
+                    if viewModel.hasActiveStrengthConversation || viewModel.gym.hasActiveSession {
                         viewModel.handleGymCapturedPhoto(data)
                     } else {
                         viewModel.handleCapturedPhoto(data)
@@ -169,6 +220,23 @@ struct ConversationView: View {
                 Text("This will permanently discard your in-progress \(conflict.activeSessionTitle) workout and start \(conflict.requestedPlanTitle).")
             }
         }
+        .confirmationDialog(
+            "Finish workout?",
+            isPresented: $viewModel.isStrengthFinishConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Finish Anyway", role: .destructive) {
+                Task { await viewModel.confirmStrengthFinish(skipRemaining: true) }
+            }
+            .disabled(viewModel.isFinishingStrengthWorkout)
+            .accessibilityIdentifier("strength.conversation.finishAnyway")
+            Button("Keep Training", role: .cancel) {
+                viewModel.cancelStrengthFinishConfirmation()
+            }
+            .accessibilityIdentifier("strength.conversation.keepTraining")
+        } message: {
+            Text(viewModel.strengthFinishConfirmationMessage)
+        }
     }
 }
 
@@ -177,6 +245,7 @@ private struct ConversationMessageListView: View {
     @Bindable var store: ConversationSessionStore
     var isMealBusy: Bool
     var isGymBusy: Bool
+    var isStrengthBusy: Bool
     var reduceMotion: Bool
     var onQuickAction: (ConversationQuickAction) -> Void
     var onMealCardAction: (MealCapabilityID.CardAction, UUID) -> Void
@@ -186,11 +255,21 @@ private struct ConversationMessageListView: View {
     var onGymManagePlans: () -> Void
     var onGymSetCardAction: (GymCapabilityID.CardAction, UUID, GymSetConfirmationCardPayload) -> Void
     var onGymSetDraftChange: (UUID, GymSetConfirmationCardPayload) -> Void
+    var strengthSession: StrengthWorkoutSession?
+    var onStrengthOverviewOpenDedicated: () -> Void
+    var onStrengthOverviewAcceptProgression: (String) -> Void
+    var onStrengthOverviewHoldProgression: (String) -> Void
+    var onStrengthOverviewAcceptAllProgressions: () -> Void
+    var strengthPendingProposals: [StrengthProgressionProposal]
+    var onStrengthExerciseAction: (StrengthConversationCapabilityID.CardAction, UUID, UUID, Double, Int) -> Void
+    var onStrengthExerciseDraftChange: (UUID, Double, Int) -> Void
+    var onStrengthExerciseActivate: (UUID) -> Void
+    var onStrengthPhotoReviewAction: (StrengthConversationCapabilityID.CardAction, UUID, StrengthPhotoReviewCardPayload) -> Void
     var onWhy: () -> Void
 
     private var isProcessing: Bool {
         if case .processing = store.active.activity { return true }
-        return isMealBusy || isGymBusy
+        return isMealBusy || isGymBusy || isStrengthBusy
     }
 
     var body: some View {
@@ -212,6 +291,16 @@ private struct ConversationMessageListView: View {
                             onGymManagePlans: onGymManagePlans,
                             onGymSetCardAction: onGymSetCardAction,
                             onGymSetDraftChange: onGymSetDraftChange,
+                            strengthSession: strengthSession,
+                            onStrengthOverviewOpenDedicated: onStrengthOverviewOpenDedicated,
+                            onStrengthOverviewAcceptProgression: onStrengthOverviewAcceptProgression,
+                            onStrengthOverviewHoldProgression: onStrengthOverviewHoldProgression,
+                            onStrengthOverviewAcceptAllProgressions: onStrengthOverviewAcceptAllProgressions,
+                            strengthPendingProposals: strengthPendingProposals,
+                            onStrengthExerciseAction: onStrengthExerciseAction,
+                            onStrengthExerciseDraftChange: onStrengthExerciseDraftChange,
+                            onStrengthExerciseActivate: onStrengthExerciseActivate,
+                            onStrengthPhotoReviewAction: onStrengthPhotoReviewAction,
                             onWhy: onWhy
                         )
                         .id(message.id)
@@ -300,28 +389,57 @@ private struct ConversationComposerHost: View {
     @Bindable var store: ConversationSessionStore
     var isBusy: Bool
     var onCamera: () -> Void
-    var onClearPhoto: () -> Void
+    var onClearPhotos: () -> Void
+    var onRemovePhoto: (Int) -> Void
     var onSend: () -> Void
     var onTextChange: (String) -> Void
+    @Binding var selectedLibraryItems: [PhotosPickerItem]
+    var showsPhotoLibraryPicker: Bool
+    var onLibrarySelection: ([PhotosPickerItem]) -> Void
 
     @State private var localText: String = ""
     @State private var didSeedText = false
 
+    private var pendingPhotos: [Data] {
+        store.composerDraft.resolvedPendingPhotos
+    }
+
     private var isSendEnabled: Bool {
         let trimmed = localText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty || store.composerDraft.pendingPhotoJPEG != nil
+        return !trimmed.isEmpty || !pendingPhotos.isEmpty
     }
 
     var body: some View {
-        ConversationComposerView(
-            text: $localText,
-            pendingPhoto: store.composerDraft.pendingPhotoJPEG,
-            isSendEnabled: isSendEnabled,
-            isBusy: isBusy,
-            onCamera: onCamera,
-            onClearPhoto: onClearPhoto,
-            onSend: onSend
-        )
+        VStack(spacing: DSSpacing.xs) {
+            if showsPhotoLibraryPicker {
+                PhotosPicker(
+                    selection: $selectedLibraryItems,
+                    maxSelectionCount: 6,
+                    matching: .images
+                ) {
+                    Label("Add Photos", systemImage: "photo.on.rectangle.angled")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(DSColor.coralEnd)
+                }
+                .padding(.horizontal, DSSpacing.md)
+                .onChange(of: selectedLibraryItems) { _, items in
+                    guard !items.isEmpty else { return }
+                    onLibrarySelection(items)
+                    selectedLibraryItems = []
+                }
+            }
+
+            ConversationComposerView(
+                text: $localText,
+                pendingPhotos: pendingPhotos,
+                isSendEnabled: isSendEnabled,
+                isBusy: isBusy,
+                onCamera: onCamera,
+                onRemovePhoto: onRemovePhoto,
+                onClearPhotos: onClearPhotos,
+                onSend: onSend
+            )
+        }
         .onAppear {
             guard !didSeedText else { return }
             localText = store.composerDraft.text

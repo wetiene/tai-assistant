@@ -13,6 +13,8 @@ enum ConversationInputRoute: Equatable, Sendable {
     case gymSetPhoto
     case gymOpenPlanImport
     case gymImportPasteText(String)
+    case gymArrivedAtGym
+    case gymStrengthPhotoEvidence
     case gymShowCurrentProgram
 }
 
@@ -32,8 +34,31 @@ enum ConversationRouter {
         hasPhoto: Bool,
         targetedMealDraftID: UUID?,
         isExplicitMealCaptureIntent: Bool = false,
-        hasActiveGymSession: Bool = false
+        hasActiveGymSession: Bool = false,
+        hasActiveStrengthConversation: Bool = false
     ) -> ConversationInputRoute {
+        if hasActiveStrengthConversation {
+            if hasPhoto {
+                return .gymStrengthPhotoEvidence
+            }
+            switch ConversationGymIntentClassifier.classify(text) {
+            case .finishWorkout:
+                return .gymFinish
+            case .arrivedAtGym:
+                return .gymArrivedAtGym
+            case .startUpperBody, .startLowerBody:
+                return .liveTai
+            case .openPlanImport, .replacePlan:
+                return .gymOpenPlanImport
+            case .pastePlanText(let planText):
+                return .gymImportPasteText(planText)
+            case .showCurrentProgram:
+                return .gymShowCurrentProgram
+            case .general:
+                return .liveTai
+            }
+        }
+
         if hasActiveGymSession {
             if hasPhoto {
                 return .gymSetPhoto
@@ -41,6 +66,8 @@ enum ConversationRouter {
             switch ConversationGymIntentClassifier.classify(text) {
             case .finishWorkout:
                 return .gymFinish
+            case .arrivedAtGym:
+                return .gymArrivedAtGym
             case .startUpperBody, .startLowerBody:
                 return .liveTai
             case .openPlanImport, .replacePlan:
@@ -55,6 +82,8 @@ enum ConversationRouter {
         }
 
         switch ConversationGymIntentClassifier.classify(text) {
+        case .arrivedAtGym:
+            return .gymArrivedAtGym
         case .startUpperBody:
             return .gymStart(.upperBody)
         case .startLowerBody:

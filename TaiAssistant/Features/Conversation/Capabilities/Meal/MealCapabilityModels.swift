@@ -75,6 +75,7 @@ struct MealEstimateCardPayload: Codable, Equatable, Sendable {
     var draft: MealEstimateSnapshot
     var refinementAccepted: Bool
     var isLogged: Bool
+    var imageClassification: PersistedImageClassification?
 
     var showsLogMeal: Bool { refinementAccepted && !isLogged }
 }

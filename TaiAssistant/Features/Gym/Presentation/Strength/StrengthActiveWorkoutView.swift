@@ -488,7 +488,7 @@ struct StrengthActiveWorkoutView: View {
             let result = try await photoAssist.interpretPhoto(jpeg: data, session: session)
             photoReview = result
         } catch {
-            controller.reportError("Could not read that photo. Try another angle with the weight visible.")
+            controller.reportError("Could not read that photo. Try another angle or enter the weight manually.")
         }
     }
 

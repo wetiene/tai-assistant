@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+import PhotosUI
+import SwiftUI
+import UIKit
 
 @MainActor
 @Observable
@@ -7,6 +10,7 @@ final class ConversationViewModel {
     let store: ConversationSessionStore
     let meal: MealCapabilityController
     let gym: GymCapabilityController
+    let strengthConversation: StrengthConversationController
     let liveTai: LiveTaiCapabilityController
     let gymPlanRepository: GymPlanRepository
     let aiService: AIService
@@ -44,15 +48,30 @@ final class ConversationViewModel {
     var isWorkoutStartConflictDialogPresented = false
     var pendingWorkoutDiscardConfirmation = false
     private(set) var isResolvingWorkoutStartConflict = false
+    var isStrengthFinishConfirmationPresented = false
+    private(set) var isFinishingStrengthWorkout = false
 
     private var isStartingWorkout = false
+    private var isHandlingGymArrival = false
+
+    var strengthFinishConfirmationMessage: String {
+        let pending = strengthConversation.unresolvedSetCount
+        if pending == 1 {
+            return "1 set is still unresolved. You can keep training or finish and mark the remaining work as skipped."
+        }
+        return "\(pending) sets are still unresolved. You can keep training or finish and mark the remaining work as skipped."
+    }
 
     var conversation: ActiveConversation { store.snapshotIncludingComposer }
     var composer: ConversationComposerState { store.composerDraft }
     var errorMessage: String?
     var isProcessing: Bool {
         if case .processing = store.active.activity { return true }
-        return meal.isBusy || gym.isBusy
+        return meal.isBusy || gym.isBusy || strengthConversation.isBusy
+    }
+
+    var hasActiveStrengthConversation: Bool {
+        strengthConversation.hasActiveSession
     }
 
     /// Durable targeted meal refinement draft ID (restored from activity payload).
@@ -66,6 +85,7 @@ final class ConversationViewModel {
         store: ConversationSessionStore,
         meal: MealCapabilityController,
         gym: GymCapabilityController,
+        strengthConversation: StrengthConversationController,
         liveTai: LiveTaiCapabilityController,
         gymPlanRepository: GymPlanRepository,
         aiService: AIService = MockAIService(),
@@ -81,6 +101,7 @@ final class ConversationViewModel {
         self.store = store
         self.meal = meal
         self.gym = gym
+        self.strengthConversation = strengthConversation
         self.liveTai = liveTai
         self.gymPlanRepository = gymPlanRepository
         self.aiService = aiService
@@ -166,6 +187,11 @@ final class ConversationViewModel {
     }
 
     func handleQuickAction(_ action: ConversationQuickAction) {
+        if action.id == "strength.uitest.fixturePhotos" {
+            Task { await submitStrengthFixturePhotosForTesting() }
+            return
+        }
+
         guard let allowed = ConversationAllowedQuickAction.resolve(action.id) else {
             // Unknown / non-allowlisted ids never drive behaviour.
             return
@@ -221,9 +247,9 @@ final class ConversationViewModel {
                 self.needsGymCamera = true
             }
         case .gymFinishWorkout:
-            Task { await finishGymWorkout() }
+            requestStrengthFinish()
         case .gymResumeWorkout:
-            applyGymIntent(resume: true)
+            Task { await resumeConversationalStrengthInThread() }
         }
     }
 
@@ -245,7 +271,11 @@ final class ConversationViewModel {
     func handleGymCapturedPhoto(_ jpeg: Data) {
         needsGymCamera = false
         requestConsent(.gymPhoto) {
-            Task { await self.interpretGymSetPhoto(jpeg) }
+            if self.hasActiveStrengthConversation {
+                self.appendPendingPhotos([jpeg])
+            } else {
+                Task { await self.interpretGymSetPhoto(jpeg) }
+            }
         }
     }
 
@@ -254,20 +284,71 @@ final class ConversationViewModel {
     }
 
     func clearPendingPhoto() {
-        store.updateComposer { $0.pendingPhotoJPEG = nil }
+        store.updateComposer {
+            $0.pendingPhotoJPEG = nil
+            $0.pendingPhotoJPEGs = []
+        }
+    }
+
+    func removePendingPhoto(at index: Int) {
+        store.updateComposer { composer in
+            if !composer.pendingPhotoJPEGs.isEmpty {
+                guard composer.pendingPhotoJPEGs.indices.contains(index) else { return }
+                composer.pendingPhotoJPEGs.remove(at: index)
+            } else if index == 0 {
+                composer.pendingPhotoJPEG = nil
+            }
+        }
+    }
+
+    func appendPendingPhotos(_ photos: [Data]) {
+        guard !photos.isEmpty else { return }
+        store.updateComposer { composer in
+            if composer.pendingPhotoJPEGs.isEmpty, let single = composer.pendingPhotoJPEG {
+                composer.pendingPhotoJPEGs = [single]
+                composer.pendingPhotoJPEG = nil
+            }
+            composer.pendingPhotoJPEGs.append(contentsOf: photos)
+        }
+    }
+
+    func importLibraryPhotos(_ items: [PhotosPickerItem]) async {
+        var photos: [Data] = []
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let prepared = CheckInPhotoUploadPreprocessor.prepareMealUploadJPEG(from: UIImage(data: data) ?? UIImage()) {
+                photos.append(prepared)
+            }
+        }
+        guard !photos.isEmpty else {
+            errorMessage = "Could not load selected photos."
+            return
+        }
+        appendPendingPhotos(photos)
     }
 
     func sendComposer() async {
         let text = store.composerDraft.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let photo = store.composerDraft.pendingPhotoJPEG
-        guard !text.isEmpty || photo != nil else { return }
+        let photos = store.composerDraft.resolvedPendingPhotos
+        let hasPhoto = !photos.isEmpty
+        guard !text.isEmpty || hasPhoto else { return }
+
+        if !hasPhoto,
+           let correction = ImageDomainCorrectionClassifier.detect(in: text)
+        {
+            store.append(ConversationMessage(actor: .user, text: text))
+            store.updateComposer { $0.text = "" }
+            await handleImageDomainCorrection(correction)
+            return
+        }
 
         let route = ConversationRouter.route(
             text: text,
-            hasPhoto: photo != nil,
+            hasPhoto: hasPhoto,
             targetedMealDraftID: targetedMealDraftID,
             isExplicitMealCaptureIntent: ConversationRouter.isMealCollecting(store.active.activity),
-            hasActiveGymSession: gym.hasActiveSession
+            hasActiveGymSession: gym.hasActiveSession && !hasActiveStrengthConversation,
+            hasActiveStrengthConversation: hasActiveStrengthConversation
         )
 
         switch route {
@@ -292,7 +373,7 @@ final class ConversationViewModel {
                 store.append(ConversationMessage(actor: .user, text: text))
                 store.updateComposer { $0.text = "" }
             }
-            await finishGymWorkout()
+            requestStrengthFinish()
             return
         case .gymOpenPlanImport:
             if !text.isEmpty {
@@ -308,6 +389,28 @@ final class ConversationViewModel {
             }
             await interpretPastedWorkoutPlan(planText)
             return
+        case .gymArrivedAtGym:
+            if !text.isEmpty {
+                store.append(ConversationMessage(actor: .user, text: text))
+                store.updateComposer { $0.text = "" }
+            }
+            guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.gymPhotoVersion) else {
+                pendingConsentKind = .gymPhoto
+                pendingAfterConsent = { Task { await self.handleGymArrival() } }
+                needsAIConsent = true
+                return
+            }
+            await handleGymArrival()
+            return
+        case .gymStrengthPhotoEvidence:
+            guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.gymPhotoVersion) else {
+                pendingConsentKind = .gymPhoto
+                pendingAfterConsent = { Task { await self.sendComposer() } }
+                needsAIConsent = true
+                return
+            }
+            await performStrengthPhotoSend(text: text, photos: photos)
+            return
         case .gymShowCurrentProgram:
             if !text.isEmpty {
                 store.append(ConversationMessage(actor: .user, text: text))
@@ -322,7 +425,7 @@ final class ConversationViewModel {
                 needsAIConsent = true
                 return
             }
-            await performGymPhotoSend(text: text, photo: photo)
+            await performGymPhotoSend(text: text, photo: photos.first)
             return
         case .liveTai:
             guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.liveTaiVersion) else {
@@ -339,7 +442,7 @@ final class ConversationViewModel {
                 needsAIConsent = true
                 return
             }
-            await performMealSend(text: text, photo: photo, route: route)
+            await performMealSend(text: text, photo: photos.first, route: route)
         }
     }
 
@@ -502,7 +605,7 @@ final class ConversationViewModel {
             await runTargetedRefinement(userText: text, draftID: draftID)
         case .mealInterpret:
             await runInterpretation(userText: text, photoJPEG: photo)
-        case .liveTai, .clarifyMealOrAsk, .gymStart, .gymFinish, .gymSetPhoto, .gymOpenPlanImport, .gymImportPasteText, .gymShowCurrentProgram:
+        case .liveTai, .clarifyMealOrAsk, .gymStart, .gymFinish, .gymSetPhoto, .gymOpenPlanImport, .gymImportPasteText, .gymShowCurrentProgram, .gymArrivedAtGym, .gymStrengthPhotoEvidence:
             break
         }
     }
@@ -670,6 +773,13 @@ final class ConversationViewModel {
             store.setActivity(.awaitingUser)
             store.setQuickActions(Self.defaultQuickActions)
 
+        case .imageFailure(let failure):
+            await handleImageInterpretationFailure(
+                failure,
+                photos: photoJPEG.map { [$0] } ?? [],
+                submittedViaGymRoute: false
+            )
+
         case .success(let success):
             store.freezeInteractiveCards(typeID: MealCapabilityID.estimateCardType)
             if let note = success.assistantNote {
@@ -679,7 +789,8 @@ final class ConversationViewModel {
                 let payload = MealEstimateCardPayload(
                     draft: MealEstimateSnapshot(draft: draft),
                     refinementAccepted: false,
-                    isLogged: false
+                    isLogged: false,
+                    imageClassification: success.imageClassification
                 )
                 store.append(
                     ConversationMessage(
@@ -715,6 +826,13 @@ final class ConversationViewModel {
             store.setQuickActions([
                 ConversationAllowedQuickAction.mealCancelRefine.asConversationQuickAction()
             ])
+
+        case .imageFailure(let failure):
+            await handleImageInterpretationFailure(
+                failure,
+                photos: [],
+                submittedViaGymRoute: false
+            )
 
         case .success(let success):
             guard let updated = success.drafts.first(where: { $0.id == draftID }) ?? success.drafts.first else {
@@ -922,7 +1040,7 @@ final class ConversationViewModel {
     }
 
     func handleGymPlanCardFinish() {
-        Task { await finishGymWorkout() }
+        requestStrengthFinish()
     }
 
     func handleGymSetCardAction(_ action: GymCapabilityID.CardAction, cardID: UUID, payload: GymSetConfirmationCardPayload) {
@@ -1042,8 +1160,8 @@ final class ConversationViewModel {
         isStartingWorkout = true
         defer { isStartingWorkout = false }
 
-        if usesShellWorkoutEntryRouting {
-            onRequestStrengthWorkoutStart?(target, .conversation)
+        if usesShellWorkoutEntryRouting || strengthWorkoutCoordinator != nil {
+            await beginConversationalStrengthWorkout(target: target)
             return
         }
 
@@ -1125,16 +1243,102 @@ final class ConversationViewModel {
         }
     }
 
-    private func resumeStrengthWorkoutFromConversation() async {
-        if usesShellWorkoutEntryRouting {
-            onRequestStrengthWorkoutResume?(.conversation)
+    func beginConversationalStrengthFromHome() async {
+        guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.gymPhotoVersion) else {
+            pendingConsentKind = .gymPhoto
+            pendingAfterConsent = { Task { await self.handleGymArrival() } }
+            needsAIConsent = true
             return
         }
-        if let coordinator = strengthWorkoutCoordinator,
-           let presentation = try? await coordinator.buildResumePresentation(source: .conversation) {
-            onPresentStrengthWorkout?(presentation)
+        await handleGymArrival()
+    }
+
+    func resumeConversationalStrengthFromHome() async {
+        await resumeConversationalStrengthInThread()
+    }
+
+    func beginConversationalStrengthWorkout(
+        target: GymPlanWorkoutTarget,
+        entrySource: StrengthWorkoutEntrySource = .conversation
+    ) async {
+        await Task.yield()
+        guard AIDataProcessingConsentStore.hasAccepted(version: AIDataProcessingConsentStore.gymPhotoVersion) else {
+            pendingConsentKind = .gymPhoto
+            pendingAfterConsent = { Task { await self.beginConversationalStrengthWorkout(target: target, entrySource: entrySource) } }
+            needsAIConsent = true
             return
         }
+
+        if let coordinator = strengthWorkoutCoordinator {
+            do {
+                if let active = try await coordinator.fetchActiveWorkout(),
+                   active.planReference == target.reference
+                {
+                    await resumeConversationalStrengthInThread()
+                    return
+                }
+
+                let plan = try await gymPlanRepository.resolvePlan(
+                    reference: target.reference,
+                    sectionIndex: target.sectionIndex,
+                    ownerID: ownerID
+                )
+                if let conflict = try await coordinator.detectStartConflict(
+                    requestedTarget: target,
+                    requestedTitle: plan.title,
+                    entrySource: entrySource
+                ) {
+                    presentWorkoutStartConflict(conflict)
+                    return
+                }
+            } catch {
+                errorMessage = "Could not start this workout."
+                store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+                return
+            }
+        }
+
+        store.setActivity(.processing(reason: "starting_strength_workout"))
+        store.setQuickActions([])
+        do {
+            let result = try await strengthConversation.startOrResumeFromTarget(target)
+            try await presentConversationalStrengthStartResult(result)
+        } catch {
+            errorMessage = "Could not start this workout."
+            store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+            store.setActivity(.awaitingUser)
+            store.setQuickActions(Self.defaultQuickActions)
+        }
+    }
+
+    func openDedicatedStrengthWorkoutScreen() async {
+        await openDedicatedStrengthWorkout()
+    }
+
+    private func resumeConversationalStrengthInThread() async {
+        _ = try? await strengthConversation.workoutController.restoreInProgressSession()
+        if strengthConversation.session != nil {
+            appendOrRefreshStrengthOverviewCard()
+            if let session = strengthConversation.session {
+                store.setActivity(
+                    StrengthConversationActivityCodec.makeActivity(
+                        phase: .active,
+                        sessionID: session.sessionID
+                    )
+                )
+            }
+            store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+            if store.active.messages.last?.card?.typeID != StrengthConversationCapabilityID.workoutOverviewCardType {
+                store.append(
+                    ConversationMessage(
+                        actor: .assistant,
+                        text: "Welcome back — your \(strengthConversation.session?.title ?? "workout") is still in progress."
+                    )
+                )
+            }
+            return
+        }
+
         if gym.hasActiveSession {
             appendOrRefreshWorkoutPlanCard()
             store.setActivity(GymCapabilityActivityCodec.makeActivity(phase: .active, session: gym.session!))
@@ -1147,12 +1351,49 @@ final class ConversationViewModel {
             )
             return
         }
+
         store.append(
             ConversationMessage(
                 actor: .assistant,
                 text: "I couldn't find an active workout to resume."
             )
         )
+    }
+
+    private func presentConversationalStrengthStartResult(
+        _ result: StrengthConversationController.GymArrivalResult
+    ) async throws {
+        let session: StrengthWorkoutSession
+        let greeting: String
+        switch result {
+        case .resumed(let resumed):
+            session = resumed
+            greeting = "Welcome back — your \(resumed.title) is still in progress."
+        case .started(let started):
+            session = started
+            if strengthConversation.pendingProgressionProposals().isEmpty {
+                greeting = "Well done making it to the gym. Here's what's expected today."
+            } else {
+                greeting = "Well done making it to the gym. Review today's progression suggestions when you're ready."
+            }
+        }
+        store.append(ConversationMessage(actor: .assistant, text: greeting))
+        appendOrRefreshStrengthOverviewCard()
+        store.setActivity(
+            StrengthConversationActivityCodec.makeActivity(
+                phase: .active,
+                sessionID: session.sessionID
+            )
+        )
+        store.setQuickActions(
+            StrengthConversationUITestSupport.isEnabled
+                ? ConversationDefaults.strengthConversationQuickActionsForUITest
+                : ConversationDefaults.strengthConversationQuickActions
+        )
+    }
+
+    private func resumeStrengthWorkoutFromConversation() async {
+        await resumeConversationalStrengthInThread()
     }
 
     private func interpretPastedWorkoutPlan(_ text: String) async {
@@ -1220,16 +1461,24 @@ final class ConversationViewModel {
     private func finishCurrentAndStartWorkout(target: GymPlanWorkoutTarget) async {
         if let coordinator = strengthWorkoutCoordinator {
             do {
-                try await coordinator.finishActiveWorkout()
+                if hasActiveStrengthConversation {
+                    _ = try await strengthConversation.finishWorkout()
+                } else {
+                    try await coordinator.finishActiveWorkout()
+                }
                 onWorkoutSaved?()
-                let presentation = try await coordinator.buildStartPresentation(
-                    request: StrengthWorkoutStartRequest(
-                        target: target,
-                        source: .conversation,
-                        skipPreFlight: false
+                if strengthWorkoutCoordinator != nil {
+                    await beginConversationalStrengthWorkout(target: target)
+                } else {
+                    let presentation = try await coordinator.buildStartPresentation(
+                        request: StrengthWorkoutStartRequest(
+                            target: target,
+                            source: .conversation,
+                            skipPreFlight: false
+                        )
                     )
-                )
-                onPresentStrengthWorkout?(presentation)
+                    onPresentStrengthWorkout?(presentation)
+                }
             } catch {
                 errorMessage = "Could not start this workout."
                 store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
@@ -1294,15 +1543,23 @@ final class ConversationViewModel {
     private func discardCurrentAndStartWorkout(target: GymPlanWorkoutTarget) async {
         if let coordinator = strengthWorkoutCoordinator {
             do {
-                try await coordinator.abandonActiveWorkout()
-                let presentation = try await coordinator.buildStartPresentation(
-                    request: StrengthWorkoutStartRequest(
-                        target: target,
-                        source: .conversation,
-                        skipPreFlight: false
+                if hasActiveStrengthConversation {
+                    try await strengthConversation.workoutController.abandonWorkout()
+                } else {
+                    try await coordinator.abandonActiveWorkout()
+                }
+                if strengthWorkoutCoordinator != nil {
+                    await beginConversationalStrengthWorkout(target: target)
+                } else {
+                    let presentation = try await coordinator.buildStartPresentation(
+                        request: StrengthWorkoutStartRequest(
+                            target: target,
+                            source: .conversation,
+                            skipPreFlight: false
+                        )
                     )
-                )
-                onPresentStrengthWorkout?(presentation)
+                    onPresentStrengthWorkout?(presentation)
+                }
             } catch {
                 errorMessage = "Could not start this workout."
                 store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
@@ -1532,7 +1789,43 @@ final class ConversationViewModel {
         }
     }
 
+    func requestStrengthFinish() {
+        guard hasActiveStrengthConversation else {
+            Task { await finishGymWorkout() }
+            return
+        }
+        guard !isFinishingStrengthWorkout else { return }
+        if strengthConversation.hasUnresolvedWork {
+            isStrengthFinishConfirmationPresented = true
+        } else {
+            Task { await confirmStrengthFinish(skipRemaining: false) }
+        }
+    }
+
+    func cancelStrengthFinishConfirmation() {
+        isStrengthFinishConfirmationPresented = false
+    }
+
+    func confirmStrengthFinish(skipRemaining: Bool) async {
+        guard !isFinishingStrengthWorkout else { return }
+        isFinishingStrengthWorkout = true
+        isStrengthFinishConfirmationPresented = false
+        defer { isFinishingStrengthWorkout = false }
+        await finishStrengthWorkout(skipRemaining: skipRemaining)
+    }
+
+    func refreshStrengthSessionFromRepository() async {
+        _ = try? await strengthConversation.workoutController.restoreInProgressSession()
+        guard strengthConversation.session != nil else { return }
+        appendOrRefreshStrengthOverviewCard()
+        refreshStrengthExerciseWorkspaceCards()
+    }
+
     private func finishGymWorkout() async {
+        if hasActiveStrengthConversation {
+            await finishStrengthWorkout(skipRemaining: false)
+            return
+        }
         guard gym.hasActiveSession else { return }
         store.setActivity(.processing(reason: "finishing_workout"))
         let result = await gym.finishWorkoutExplicitly()
@@ -1556,6 +1849,71 @@ final class ConversationViewModel {
             onWorkoutSaved?()
             store.setActivity(.awaitingUser)
             store.setQuickActions(Self.defaultQuickActions + ConversationDefaults.gymStartQuickActions)
+        }
+    }
+
+    private func finishStrengthWorkout(skipRemaining: Bool) async {
+        store.setActivity(.processing(reason: "finishing_workout"))
+        do {
+            let title = strengthConversation.session?.title ?? "your workout"
+            let debrief: StrengthWorkoutDebrief
+            if skipRemaining {
+                debrief = try await strengthConversation.skipRemainingSetsAndComplete()
+            } else {
+                debrief = try await strengthConversation.finishWorkout()
+            }
+            deactivateStrengthConversationCards()
+            let wins = debrief.wins.prefix(2).map(\.summaryLine).joined(separator: " ")
+            let summary = wins.isEmpty
+                ? "Finished \(title). Your logged sets are on Home for today."
+                : "Finished \(title). \(wins)"
+            store.append(ConversationMessage(actor: .assistant, text: summary))
+            onWorkoutSaved?()
+            store.setActivity(.awaitingUser)
+            store.setQuickActions(Self.defaultQuickActions + ConversationDefaults.gymStartQuickActions)
+        } catch {
+            errorMessage = "Could not finish the workout."
+            store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+            if let session = strengthConversation.session {
+                store.setActivity(
+                    StrengthConversationActivityCodec.makeActivity(
+                        phase: .active,
+                        sessionID: session.sessionID
+                    )
+                )
+                store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+            } else {
+                store.setActivity(.awaitingUser)
+            }
+        }
+    }
+
+    private func deactivateStrengthConversationCards() {
+        let strengthCardTypes: Set<String> = [
+            StrengthConversationCapabilityID.workoutOverviewCardType,
+            StrengthConversationCapabilityID.exerciseWorkspaceCardType,
+            StrengthConversationCapabilityID.photoReviewCardType,
+        ]
+        store.mutate { conversation in
+            conversation.messages = conversation.messages.map { message in
+                guard let card = message.card,
+                      strengthCardTypes.contains(card.typeID)
+                else { return message }
+                return ConversationMessage(
+                    id: message.id,
+                    actor: message.actor,
+                    createdAt: message.createdAt,
+                    text: message.text,
+                    attachment: message.attachment,
+                    card: ConversationCard(
+                        id: card.id,
+                        typeID: card.typeID,
+                        payload: card.payload,
+                        isInteractive: false
+                    ),
+                    quickActions: message.quickActions
+                )
+            }
         }
     }
 
@@ -1624,6 +1982,598 @@ final class ConversationViewModel {
     private func cancelGymSetCard(cardID: UUID, payload: GymSetConfirmationCardPayload) {
         replaceGymSetCardPayload(cardID: cardID, payload: payload, interactive: false)
         gym.clearPendingSetDraft()
+    }
+
+    // MARK: - Conversational strength workout
+
+    func handleGymArrival() async {
+        guard !isHandlingGymArrival else { return }
+        isHandlingGymArrival = true
+        defer { isHandlingGymArrival = false }
+
+        store.setActivity(.processing(reason: "starting_strength_workout"))
+        store.setQuickActions([])
+        do {
+            let result = try await strengthConversation.startOrResumeFromGymArrival()
+            try await presentConversationalStrengthStartResult(result)
+            if ProcessInfo.processInfo.environment["UITEST_AUTO_SUBMIT_STRENGTH_PHOTOS"] == "1"
+                || ImageDomainUITestSupport.autoSubmitPhoto
+            {
+                Task {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    await submitStrengthFixturePhotosForTesting()
+                }
+            }
+        } catch {
+            errorMessage = "Could not start today's workout."
+            store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+            store.setActivity(.awaitingUser)
+            store.setQuickActions(Self.defaultQuickActions)
+        }
+    }
+
+    private func performStrengthPhotoSend(text: String, photos: [Data]) async {
+        store.updateComposer {
+            $0.text = ""
+            $0.pendingPhotoJPEG = nil
+            $0.pendingPhotoJPEGs = []
+        }
+        if !text.isEmpty {
+            store.append(ConversationMessage(actor: .user, text: text))
+        }
+
+        var evidenceAttachmentIDs: [UUID] = []
+        for photo in photos {
+            if let attachment = try? ConversationAttachment.storedPhotoJPEG(photo) {
+                evidenceAttachmentIDs.append(attachment.id)
+            }
+        }
+
+        if !photos.isEmpty {
+            let attachment: ConversationAttachment?
+            if let attachmentID = evidenceAttachmentIDs.first {
+                attachment = ConversationAttachment(id: attachmentID, kind: .photoJPEGFile)
+            } else {
+                attachment = ConversationAttachment(kind: .photoJPEG(photos[0]))
+            }
+            store.append(
+                ConversationMessage(
+                    actor: .user,
+                    text: photos.count == 1 ? "📷 Gym photo" : "📷 \(photos.count) gym photos",
+                    attachment: attachment
+                )
+            )
+        }
+
+        store.setActivity(.processing(reason: "interpreting_gym_photo"))
+        store.setQuickActions([])
+
+        do {
+            let review = try await strengthConversation.interpretPhotoEvidence(
+                photos,
+                evidenceAttachmentIDs: evidenceAttachmentIDs
+            )
+            if let clarification = photoClarificationMessage(for: review) {
+                store.append(ConversationMessage(actor: .assistant, text: clarification))
+            }
+            guard let payload = strengthConversation.makePhotoReviewCardPayload(from: review) else { return }
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    card: StrengthPhotoReviewCardCodec.makeCard(payload: payload, interactive: true)
+                )
+            )
+            if let session = strengthConversation.session {
+                store.setActivity(
+                    StrengthConversationActivityCodec.makeActivity(
+                        phase: .reviewingPhoto,
+                        sessionID: session.sessionID
+                    )
+                )
+            }
+            scheduleImageDomainCorrectionForTestingIfNeeded()
+        } catch {
+            if let failure = error as? ImageInterpretationFailure {
+                await handleImageInterpretationFailure(
+                    failure,
+                    photos: photos,
+                    submittedViaGymRoute: true
+                )
+                if case .processing(let reason) = store.active.activity, reason == "interpreting_gym_photo" {
+                    restoreStrengthActivityAfterPhotoFailure()
+                }
+                return
+            }
+            errorMessage = "Could not read those photos. Try another angle or choose an exercise manually."
+            store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+            if let session = strengthConversation.session {
+                store.setActivity(
+                    StrengthConversationActivityCodec.makeActivity(
+                        phase: .active,
+                        sessionID: session.sessionID
+                    )
+                )
+            }
+            store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+        }
+    }
+
+    func handleStrengthPhotoReviewAction(
+        _ action: StrengthConversationCapabilityID.CardAction,
+        cardID: UUID,
+        payload: StrengthPhotoReviewCardPayload
+    ) {
+        switch action {
+        case .applyPhotoReview:
+            Task { await applyStrengthPhotoReview(cardID: cardID, payload: payload) }
+        case .dismissPhotoReview:
+            strengthConversation.dismissPhotoReview(reviewID: payload.reviewID)
+            replaceStrengthPhotoReviewCard(cardID: cardID, payload: payload, interactive: false)
+        default:
+            break
+        }
+    }
+
+    private func applyStrengthPhotoReview(
+        cardID: UUID,
+        payload: StrengthPhotoReviewCardPayload
+    ) async {
+        do {
+            let exerciseInstanceID = try await strengthConversation.applyPhotoReview(
+                reviewID: payload.reviewID,
+                fallbackPayload: payload
+            )
+            var applied = payload
+            applied.isApplied = true
+            replaceStrengthPhotoReviewCard(cardID: cardID, payload: applied, interactive: false)
+            appendOrActivateStrengthExerciseWorkspace(exerciseInstanceID: exerciseInstanceID)
+            onWorkoutSaved?()
+            if let session = strengthConversation.session {
+                store.setActivity(
+                    StrengthConversationActivityCodec.makeActivity(
+                        phase: .active,
+                        sessionID: session.sessionID
+                    )
+                )
+            }
+            store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+        } catch {
+            errorMessage = "Could not apply that photo result."
+            store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+        }
+    }
+
+    func handleStrengthExerciseWorkspaceAction(
+        _ action: StrengthConversationCapabilityID.CardAction,
+        cardID: UUID,
+        exerciseInstanceID: UUID,
+        weight: Double,
+        reps: Int
+    ) {
+        switch action {
+        case .confirmSet:
+            Task { await confirmStrengthSet(cardID: cardID, exerciseInstanceID: exerciseInstanceID, weight: weight, reps: reps) }
+        case .skipSet:
+            Task { await skipStrengthSet(cardID: cardID, exerciseInstanceID: exerciseInstanceID) }
+        case .addEvidence:
+            needsGymCamera = true
+        case .openDedicatedWorkout:
+            Task { await self.openDedicatedStrengthWorkout() }
+        default:
+            break
+        }
+    }
+
+    func activateStrengthExerciseWorkspace(exerciseInstanceID: UUID) {
+        Task {
+            try? await strengthConversation.workoutController.selectExercise(
+                exerciseInstanceID: exerciseInstanceID
+            )
+            refreshStrengthExerciseWorkspaceCards()
+            onWorkoutSaved?()
+        }
+    }
+
+    func handleStrengthOverviewProgression(exerciseID: String, accept: Bool) {
+        Task {
+            do {
+                if accept {
+                    try await strengthConversation.acceptProgressionProposal(exerciseID: exerciseID)
+                } else {
+                    try await strengthConversation.holdProgressionProposal(exerciseID: exerciseID)
+                }
+                appendOrRefreshStrengthOverviewCard()
+                onWorkoutSaved?()
+            } catch {
+                errorMessage = "Could not update that progression."
+            }
+        }
+    }
+
+    func handleStrengthOverviewAcceptAllProgressions() {
+        Task {
+            do {
+                try await strengthConversation.acceptAllProgressionProposals()
+                appendOrRefreshStrengthOverviewCard()
+                onWorkoutSaved?()
+            } catch {
+                errorMessage = "Could not accept progressions."
+            }
+        }
+    }
+
+    /// UITest hook — submits deterministic fixture photos without camera or PhotosPicker.
+    func submitStrengthFixturePhotosForTesting() async {
+        await performStrengthPhotoSend(
+            text: "",
+            photos: StrengthConversationTestFixtures.multiPhotoEvidence
+        )
+    }
+
+    private func openDedicatedStrengthWorkout() async {
+        if usesShellWorkoutEntryRouting {
+            onRequestStrengthWorkoutResume?(.conversation)
+            return
+        }
+        if let coordinator = strengthWorkoutCoordinator,
+           let presentation = try? await coordinator.buildResumePresentation(source: .conversation) {
+            onPresentStrengthWorkout?(presentation)
+        }
+    }
+
+    func handleStrengthExerciseDraftChange(
+        exerciseInstanceID: UUID,
+        weight: Double,
+        reps: Int
+    ) {
+        Task {
+            try? await strengthConversation.updateCurrentSetDraft(
+                exerciseInstanceID: exerciseInstanceID,
+                weight: weight,
+                reps: reps
+            )
+            refreshStrengthExerciseWorkspaceCards()
+        }
+    }
+
+    private func confirmStrengthSet(
+        cardID: UUID,
+        exerciseInstanceID: UUID,
+        weight: Double,
+        reps: Int
+    ) async {
+        store.setActivity(.processing(reason: "saving_gym_set"))
+        do {
+            try await strengthConversation.confirmSet(
+                exerciseInstanceID: exerciseInstanceID,
+                weight: weight,
+                reps: reps
+            )
+            refreshStrengthExerciseWorkspaceCard(cardID: cardID, exerciseInstanceID: exerciseInstanceID)
+            appendOrRefreshStrengthOverviewCard()
+            onWorkoutSaved?()
+
+            if let exercise = strengthConversation.session?.exercises.first(where: { $0.id == exerciseInstanceID }),
+               exercise.status == .completed,
+               let name = strengthConversation.session?.exercises.first(where: { $0.id == exerciseInstanceID })?.displayName {
+                store.append(
+                    ConversationMessage(
+                        actor: .assistant,
+                        text: "\(name) complete."
+                    )
+                )
+            }
+
+            if let session = strengthConversation.session {
+                store.setActivity(
+                    StrengthConversationActivityCodec.makeActivity(
+                        phase: .active,
+                        sessionID: session.sessionID
+                    )
+                )
+            }
+            store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+        } catch {
+            errorMessage = "Could not save this set."
+            store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+        }
+    }
+
+    private func skipStrengthSet(cardID: UUID, exerciseInstanceID: UUID) async {
+        do {
+            try await strengthConversation.skipSet(exerciseInstanceID: exerciseInstanceID)
+            refreshStrengthExerciseWorkspaceCard(cardID: cardID, exerciseInstanceID: exerciseInstanceID)
+            appendOrRefreshStrengthOverviewCard()
+            onWorkoutSaved?()
+        } catch {
+            errorMessage = "Could not skip this set."
+            store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+        }
+    }
+
+    private func appendOrRefreshStrengthOverviewCard(interactive: Bool = true) {
+        guard let payload = strengthConversation.makeOverviewCardPayload() else { return }
+        if let existingIndex = store.active.messages.lastIndex(where: {
+            $0.card?.typeID == StrengthConversationCapabilityID.workoutOverviewCardType
+        }) {
+            store.mutate { conversation in
+                let message = conversation.messages[existingIndex]
+                conversation.messages[existingIndex] = ConversationMessage(
+                    id: message.id,
+                    actor: message.actor,
+                    createdAt: message.createdAt,
+                    text: message.text,
+                    attachment: message.attachment,
+                    card: StrengthWorkoutOverviewCardCodec.makeCard(payload: payload, interactive: interactive),
+                    quickActions: message.quickActions
+                )
+            }
+        } else {
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    card: StrengthWorkoutOverviewCardCodec.makeCard(payload: payload, interactive: interactive)
+                )
+            )
+        }
+    }
+
+    private func appendOrActivateStrengthExerciseWorkspace(exerciseInstanceID: UUID) {
+        guard let payload = strengthConversation.makeExerciseWorkspacePayload(
+            exerciseInstanceID: exerciseInstanceID
+        ) else { return }
+
+        if let existingIndex = store.active.messages.lastIndex(where: {
+            guard let card = $0.card,
+                  card.typeID == StrengthConversationCapabilityID.exerciseWorkspaceCardType,
+                  let existing = StrengthExerciseWorkspaceCardCodec.decode(card.payload)
+            else { return false }
+            return existing.exerciseInstanceID == exerciseInstanceID
+        }) {
+            refreshStrengthExerciseWorkspaceCard(
+                cardID: store.active.messages[existingIndex].card!.id,
+                exerciseInstanceID: exerciseInstanceID
+            )
+            return
+        }
+
+        store.append(
+            ConversationMessage(
+                actor: .assistant,
+                card: StrengthExerciseWorkspaceCardCodec.makeCard(payload: payload, interactive: true)
+            )
+        )
+    }
+
+    private func refreshStrengthExerciseWorkspaceCards() {
+        for message in store.active.messages {
+            guard let card = message.card,
+                  card.typeID == StrengthConversationCapabilityID.exerciseWorkspaceCardType,
+                  let payload = StrengthExerciseWorkspaceCardCodec.decode(card.payload)
+            else { continue }
+            refreshStrengthExerciseWorkspaceCard(
+                cardID: card.id,
+                exerciseInstanceID: payload.exerciseInstanceID
+            )
+        }
+    }
+
+    private func refreshStrengthExerciseWorkspaceCard(cardID: UUID, exerciseInstanceID: UUID) {
+        guard let payload = strengthConversation.makeExerciseWorkspacePayload(
+            exerciseInstanceID: exerciseInstanceID
+        ) else { return }
+        store.mutate { conversation in
+            conversation.messages = conversation.messages.map { message in
+                guard let card = message.card, card.id == cardID else { return message }
+                let updated = StrengthExerciseWorkspaceCardCodec.makeCard(payload: payload, interactive: true)
+                return ConversationMessage(
+                    id: message.id,
+                    actor: message.actor,
+                    createdAt: message.createdAt,
+                    text: message.text,
+                    attachment: message.attachment,
+                    card: ConversationCard(
+                        id: card.id,
+                        typeID: updated.typeID,
+                        payload: updated.payload,
+                        isInteractive: true
+                    ),
+                    quickActions: message.quickActions
+                )
+            }
+        }
+    }
+
+    private func replaceStrengthPhotoReviewCard(
+        cardID: UUID,
+        payload: StrengthPhotoReviewCardPayload,
+        interactive: Bool
+    ) {
+        store.mutate { conversation in
+            conversation.messages = conversation.messages.map { message in
+                guard let card = message.card, card.id == cardID else { return message }
+                let updated = StrengthPhotoReviewCardCodec.makeCard(payload: payload, interactive: interactive)
+                return ConversationMessage(
+                    id: message.id,
+                    actor: message.actor,
+                    createdAt: message.createdAt,
+                    text: message.text,
+                    attachment: message.attachment,
+                    card: ConversationCard(
+                        id: card.id,
+                        typeID: updated.typeID,
+                        payload: updated.payload,
+                        isInteractive: interactive
+                    ),
+                    quickActions: message.quickActions
+                )
+            }
+        }
+    }
+
+    private func supersedeUnconfirmedImageArtifacts() {
+        store.freezeInteractiveCards(typeID: MealCapabilityID.estimateCardType)
+        store.freezeInteractiveCards(typeID: StrengthConversationCapabilityID.photoReviewCardType)
+        if let reviewID = strengthConversation.pendingPhotoReview?.reviewID {
+            strengthConversation.dismissPhotoReview(reviewID: reviewID)
+        }
+        meal.syncUnloggedDrafts(from: [])
+    }
+
+    private func latestUserPhotoJPEG() -> Data? {
+        for message in store.active.messages.reversed() {
+            guard message.actor == .user, let attachment = message.attachment else { continue }
+            if let data = ConversationAttachmentStore.shared.resolvedJPEGData(for: attachment) {
+                return data
+            }
+        }
+        return nil
+    }
+
+    private func handleImageDomainCorrection(_ intent: ImageDomainCorrectionIntent) async {
+        guard let photo = latestUserPhotoJPEG() else {
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: "I don't have a recent photo to correct. Send the image again and tell me what it is."
+                )
+            )
+            store.setActivity(.awaitingUser)
+            store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+            return
+        }
+
+        supersedeUnconfirmedImageArtifacts()
+
+        switch intent {
+        case .reclassifyAsMeal:
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: "Got it — I'll treat that as a meal."
+                )
+            )
+            await runInterpretation(userText: "", photoJPEG: photo)
+        case .reclassifyAsGym:
+            guard hasActiveStrengthConversation else {
+                store.append(
+                    ConversationMessage(
+                        actor: .assistant,
+                        text: "Got it — that looks like gym equipment. Start or resume a workout if you want to apply it."
+                    )
+                )
+                store.setActivity(.awaitingUser)
+                return
+            }
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: "Got it — I'll treat that as gym equipment."
+                )
+            )
+            await performStrengthPhotoSend(text: "", photos: [photo])
+        }
+    }
+
+    private func handleImageInterpretationFailure(
+        _ failure: ImageInterpretationFailure,
+        photos: [Data],
+        submittedViaGymRoute: Bool
+    ) async {
+        switch failure {
+        case .wrongDomain(_, let actual, _) where actual == .meal && submittedViaGymRoute:
+            supersedeUnconfirmedImageArtifacts()
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: "This looks like a meal rather than gym equipment. Here's a draft estimate — confirm before logging."
+                )
+            )
+            await runInterpretation(userText: "", photoJPEG: photos.first)
+        case .wrongDomain(_, let actual, _) where actual == .gymEquipment && !submittedViaGymRoute && hasActiveStrengthConversation:
+            supersedeUnconfirmedImageArtifacts()
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: "This looks like gym equipment rather than a meal. Review it before applying to your workout."
+                )
+            )
+            await performStrengthPhotoSend(text: "", photos: photos)
+        case .ambiguous:
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: ImageInterpretationFailurePresentation.message(for: failure)
+                )
+            )
+            if let session = strengthConversation.session {
+                store.setActivity(
+                    StrengthConversationActivityCodec.makeActivity(
+                        phase: .active,
+                        sessionID: session.sessionID
+                    )
+                )
+            } else {
+                store.setActivity(.awaitingUser)
+            }
+            store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+        default:
+            errorMessage = ImageInterpretationFailurePresentation.message(for: failure)
+            store.append(ConversationMessage(actor: .assistant, text: errorMessage!))
+            if let session = strengthConversation.session {
+                store.setActivity(
+                    StrengthConversationActivityCodec.makeActivity(
+                        phase: .active,
+                        sessionID: session.sessionID
+                    )
+                )
+            } else {
+                store.setActivity(.awaitingUser)
+            }
+            store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+        }
+    }
+
+    private func scheduleImageDomainCorrectionForTestingIfNeeded() {
+        guard ImageDomainUITestSupport.autoSubmitCorrection,
+              ImageDomainUITestSupport.scenario == .wrongGymArtifact
+        else { return }
+        Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            store.updateComposer { $0.text = "Thats my lunch" }
+            await sendComposer()
+        }
+    }
+
+    private func restoreStrengthActivityAfterPhotoFailure() {
+        if let session = strengthConversation.session {
+            store.setActivity(
+                StrengthConversationActivityCodec.makeActivity(
+                    phase: .active,
+                    sessionID: session.sessionID
+                )
+            )
+            store.setQuickActions(ConversationDefaults.strengthConversationQuickActions)
+        } else {
+            store.setActivity(.awaitingUser)
+            store.setQuickActions(Self.defaultQuickActions)
+        }
+    }
+
+    private func photoClarificationMessage(for review: StrengthPhotoReviewState) -> String? {
+        if review.detectedExerciseID == nil,
+           review.interpretation.exerciseCandidates.count > 1 {
+            return "I found a few possible matches. Choose the exercise on the review card before applying."
+        }
+        if review.detectedExerciseID == nil {
+            return "I couldn't match this to a planned exercise. Pick the closest option, send a clearer machine label, or choose an exercise manually."
+        }
+        if review.suggestedWeight == nil,
+           review.interpretation.detectedWeight == nil,
+           let name = review.detectedExerciseName {
+            return "I identified the \(name), but I couldn't read the selected weight. You can enter it manually after applying."
+        }
+        return nil
     }
 
     private static func preferredWeightUnit() -> String {

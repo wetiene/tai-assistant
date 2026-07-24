@@ -16,6 +16,35 @@ final class StrengthWorkoutEntryRoutingTests: XCTestCase {
         super.tearDown()
     }
 
+    func testConversationStartUsesConversationalOverviewWhenShellRouting() async {
+        let repository = MockWorkoutRepository()
+        let coordinator = StrengthWorkoutCoordinator(
+            workoutRepository: repository,
+            gymPlanRepository: MockGymPlanRepository(),
+            ownerID: ownerID
+        )
+        var presented: StrengthWorkoutPresentation?
+        let store = ConversationSessionStore()
+        let (vm, _) = ConversationTestSupport.makeViewModel(
+            store: store,
+            workoutRepository: repository,
+            ownerID: ownerID
+        )
+        vm.strengthWorkoutCoordinator = coordinator
+        vm.onRequestStrengthWorkoutStart = { _, _ in }
+        vm.onPresentStrengthWorkout = { presented = $0 }
+
+        await vm.requestStartGymWorkout(
+            target: GymPlanWorkoutTarget(reference: .starter(.upperBody), sectionIndex: 0)
+        )
+
+        XCTAssertNil(presented)
+        XCTAssertTrue(
+            store.active.messages.contains { $0.card?.typeID == StrengthConversationCapabilityID.workoutOverviewCardType }
+        )
+        XCTAssertTrue(vm.hasActiveStrengthConversation)
+    }
+
     func testConversationStartUsesStrengthPresentation() async {
         let repository = MockWorkoutRepository()
         let coordinator = StrengthWorkoutCoordinator(

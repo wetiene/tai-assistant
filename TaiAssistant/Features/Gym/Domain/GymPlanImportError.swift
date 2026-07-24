@@ -169,6 +169,7 @@ enum GymPlanImportErrorMapper {
         }
 
         let nsError = (serviceDiagnostics?.underlyingError ?? error as NSError?) as NSError?
+        #if DEBUG
         return GymPlanImportDiagnostics(
             stage: error.stage,
             requestURL: serviceDiagnostics?.requestURL ?? context.requestURL,
@@ -189,6 +190,27 @@ enum GymPlanImportErrorMapper {
             errorReflection: String(reflecting: error),
             responseBodyPreview: serviceDiagnostics?.responseBodyPreview
         )
+        #else
+        return GymPlanImportDiagnostics(
+            stage: error.stage,
+            requestURL: serviceDiagnostics?.requestURL ?? context.requestURL,
+            httpMethod: "POST",
+            sourceType: context.sourceType.rawValue,
+            schemaVersion: context.schemaVersion,
+            sourceTextCharacterCount: context.sourceTextCharacterCount,
+            knownExerciseCount: context.knownExerciseCount,
+            httpStatus: serviceDiagnostics?.httpStatus,
+            contentType: serviceDiagnostics?.contentType,
+            responseByteCount: serviceDiagnostics?.responseByteCount,
+            tokenPresent: context.tokenPresent,
+            tokenLength: context.tokenLength,
+            tokenFingerprint: context.tokenFingerprint,
+            underlyingDomain: nsError?.domain,
+            underlyingCode: nsError?.code,
+            decodingPath: decodingPath,
+            errorReflection: String(reflecting: error)
+        )
+        #endif
     }
 
     private static func decodingPathDescription(_ error: DecodingError) -> String {

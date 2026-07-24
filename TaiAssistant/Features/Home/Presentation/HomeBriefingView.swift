@@ -23,6 +23,7 @@ struct HomeBriefingView: View {
     @State private var resolvedPlannedWorkout: GymResolvablePlan?
     @State private var strengthHistorySessions: [WorkoutSessionLog] = []
     @State private var inProgressStrengthSession: StrengthWorkoutSession?
+    @State private var didAutoStartStrengthForUITest = false
     @State private var historicalSummary: HomeHistoricalDaySummary?
     @State private var displayedMeals: [HomeMealSummary] = []
     @State private var displayedWorkouts: [HomeWorkoutSummary] = []
@@ -470,15 +471,46 @@ struct HomeBriefingView: View {
             historySessions: allSessions
         )
         inProgressStrengthSession = inProgressStrength
+        if ProcessInfo.processInfo.arguments.contains("-UITestStrengthAutoStartFromHome"),
+           !didAutoStartStrengthForUITest,
+           inProgressStrength == nil,
+           planned != nil
+        {
+            didAutoStartStrengthForUITest = true
+            startStrengthWorkout()
+        }
     }
 
     private func startStrengthWorkout() {
-        guard let plan = resolvedPlannedWorkout else { return }
-        let proposals = StrengthSessionBuilder.proposals(
-            for: plan,
-            historySessions: strengthHistorySessions
-        )
-        onStartStrengthWorkout?(plan, proposals, strengthHistorySessions)
+        guard case .planned(let model) = strengthCardState else { return }
+        if let plan = resolvedPlannedWorkout {
+            let proposals = StrengthSessionBuilder.proposals(
+                for: plan,
+                historySessions: strengthHistorySessions
+            )
+            onStartStrengthWorkout?(plan, proposals, strengthHistorySessions)
+            return
+        }
+        Task {
+            do {
+                let plan = try await gymPlanRepository.resolvePlan(
+                    reference: model.planReference,
+                    sectionIndex: model.sectionIndex,
+                    ownerID: ownerID
+                )
+                let proposals = StrengthSessionBuilder.proposals(
+                    for: plan,
+                    historySessions: strengthHistorySessions
+                )
+                await MainActor.run {
+                    onStartStrengthWorkout?(plan, proposals, strengthHistorySessions)
+                }
+            } catch {
+                await MainActor.run {
+                    actionError = "Could not start this workout."
+                }
+            }
+        }
     }
 
     private func resumeStrengthWorkout() {

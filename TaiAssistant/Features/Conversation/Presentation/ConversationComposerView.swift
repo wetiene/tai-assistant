@@ -3,31 +3,47 @@ import UIKit
 
 struct ConversationComposerView: View {
     @Binding var text: String
-    var pendingPhoto: Data?
+    var pendingPhotos: [Data]
     var isSendEnabled: Bool
     var isBusy: Bool
     var onCamera: () -> Void
-    var onClearPhoto: () -> Void
+    var onRemovePhoto: (Int) -> Void
+    var onClearPhotos: () -> Void
     var onSend: () -> Void
 
     @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(spacing: DSSpacing.xs) {
-            if let pendingPhoto {
-                HStack(spacing: DSSpacing.sm) {
-                    photoThumbnail(pendingPhoto)
-                    Text("Photo ready")
+            if !pendingPhotos.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: DSSpacing.sm) {
+                        ForEach(Array(pendingPhotos.enumerated()), id: \.offset) { index, photo in
+                            ZStack(alignment: .topTrailing) {
+                                photoThumbnail(photo, index: index)
+                                Button {
+                                    onRemovePhoto(index)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.white, DSColor.destructiveCoral)
+                                }
+                                .offset(x: 4, y: -4)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, DSSpacing.sm)
+                }
+                HStack {
+                    Text(pendingPhotos.count == 1 ? "Photo ready" : "\(pendingPhotos.count) photos ready")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(DSColor.textSecondary)
                     Spacer()
-                    Button("Remove", action: onClearPhoto)
+                    Button("Clear", action: onClearPhotos)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(DSColor.destructiveCoral)
                 }
                 .padding(.horizontal, DSSpacing.sm)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Photo attached, ready to send")
             }
 
             HStack(alignment: .bottom, spacing: DSSpacing.sm) {
@@ -42,9 +58,8 @@ struct ConversationComposerView: View {
                 .buttonStyle(.plain)
                 .disabled(isBusy)
                 .accessibilityLabel("Camera")
-                .accessibilityHint("Take a meal photo")
+                .accessibilityHint("Take a photo")
 
-                // Stable identity: do not recreate this field when sibling chrome updates.
                 TextField("Message Tai…", text: $text, axis: .vertical)
                     .lineLimit(1...5)
                     .focused($isFocused)
@@ -58,7 +73,7 @@ struct ConversationComposerView: View {
                     )
                     .disabled(isBusy)
                     .accessibilityLabel("Message")
-                    .id("tai.composer.textField")
+                    .accessibilityIdentifier("tai.composer.textField")
 
                 Button(action: onSend) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -73,6 +88,7 @@ struct ConversationComposerView: View {
                 .buttonStyle(.plain)
                 .disabled(!isSendEnabled || isBusy)
                 .accessibilityLabel("Send")
+                .accessibilityIdentifier("tai.composer.send")
             }
         }
         .padding(.horizontal, DSSpacing.md)
@@ -90,8 +106,8 @@ struct ConversationComposerView: View {
         }
     }
 
-    private func photoThumbnail(_ data: Data) -> some View {
-        let key = "composer-pending-\(data.count)"
+    private func photoThumbnail(_ data: Data, index: Int) -> some View {
+        let key = "composer-pending-\(index)-\(data.count)"
         return Group {
             if let image = ConversationImageCache.cached(key: key)
                 ?? ConversationImageCache.image(key: key, data: data) {
@@ -102,7 +118,7 @@ struct ConversationComposerView: View {
                 Color.secondary.opacity(0.2)
             }
         }
-        .frame(width: 40, height: 40)
+        .frame(width: 56, height: 56)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityHidden(true)
     }

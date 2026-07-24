@@ -148,6 +148,7 @@ extension CheckInInterpreting {
 struct CheckInInterpretationResult {
     var meals: [CheckInMealDraft]
     var uiNotes: String?
+    var imageClassification: PersistedImageClassification?
 }
 
 extension CheckInMealDraft {

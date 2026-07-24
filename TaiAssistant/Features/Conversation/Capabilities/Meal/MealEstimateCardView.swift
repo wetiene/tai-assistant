@@ -68,6 +68,7 @@ struct MealEstimateCardView: View {
         }
         .frame(maxWidth: 340, alignment: .leading)
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("meal.estimate.card")
         .accessibilityLabel("Meal estimate, \(draft.label), \(draft.calories) calories")
         .sheet(isPresented: $isDatePickerPresented) {
             HomeNutritionDayPickerSheet(

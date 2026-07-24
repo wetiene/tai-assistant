@@ -21,7 +21,12 @@ final class LocalSwiftDataActiveConversationRepository: ActiveConversationReposi
             if healed.didHeal {
                 conversation = healed.0
                 try write(conversation, ownerID: ownerID, context: context)
-            } else if messagesJSONContainsInlineJPEG(existing.messagesJSON) {
+            }
+            let sanitized = ImageArtifactRestoration.sanitizeConversation(conversation)
+            if sanitized.didSanitize {
+                conversation = sanitized.0
+                try write(conversation, ownerID: ownerID, context: context)
+            } else if !healed.didHeal && messagesJSONContainsInlineJPEG(existing.messagesJSON) {
                 // Rewrite once so subsequent loads stay file-referenced and small.
                 try write(conversation, ownerID: ownerID, context: context)
             }

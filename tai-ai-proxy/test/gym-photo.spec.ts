@@ -32,6 +32,11 @@ function gymProviderPayload(overrides: Record<string, unknown> = {}) {
 							},
 							limitations: ["Confirm before saving"],
 							requiresConfirmation: true,
+							contentType: "gymEquipment",
+							classificationConfidence: 0.9,
+							classificationReason: "Leg press machine visible.",
+							containsFood: false,
+							containsGymEquipment: true,
 							...overrides,
 						}),
 					},
@@ -102,6 +107,21 @@ describe("interpret-gym-photo mapping", () => {
 		);
 		expect(mapped?.detectedWeight).toBeNull();
 		expect(mapped?.limitations).toContain("Weight label obscured");
+	});
+
+	it("preserves low-confidence weight in proxy payload for client-side filtering", () => {
+		const mapped = __test.mapProviderStructuredToGymPhotoResponse(
+			gymProviderPayload({
+				detectedWeight: {
+					value: 80,
+					unit: "kg",
+					confidence: 0.2,
+					reason: "Pin position unclear",
+				},
+			})
+		);
+		expect(mapped?.detectedWeight?.value).toBe(80);
+		expect(mapped?.detectedWeight?.confidence).toBe(0.2);
 	});
 
 	it("returns null for malformed provider response", () => {

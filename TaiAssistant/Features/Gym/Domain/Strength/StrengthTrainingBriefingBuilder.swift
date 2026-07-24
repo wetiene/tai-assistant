@@ -66,6 +66,10 @@ enum StrengthTrainingBriefingBuilder {
         calendar: Calendar = .current,
         now: Date = .now
     ) async throws -> GymResolvablePlan? {
+        if StrengthConversationUITestSupport.forcesLowerBodyPlan {
+            return GymProgramTemplateLibrary.resolvableStarter(.lowerBody)
+        }
+
         if let active = library.activePlan {
             let sectionIndex = sectionIndexForToday(
                 sectionCount: max(1, active.sectionCount),

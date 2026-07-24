@@ -33,6 +33,7 @@ struct ConversationQuickActionsRow: View {
                     .buttonStyle(.plain)
                     .disabled(!isEnabled)
                     .accessibilityLabel(action.title)
+                    .accessibilityIdentifier("conversation.quickAction.\(action.id)")
                     .accessibilityHint(action.accessibilityHint ?? "")
                 }
             }
@@ -51,6 +52,22 @@ struct ConversationMessageRenderer: View {
     var onGymManagePlans: () -> Void
     var onGymSetCardAction: (GymCapabilityID.CardAction, UUID, GymSetConfirmationCardPayload) -> Void
     var onGymSetDraftChange: (UUID, GymSetConfirmationCardPayload) -> Void
+    var strengthSession: StrengthWorkoutSession?
+    var onStrengthOverviewOpenDedicated: () -> Void
+    var onStrengthOverviewAcceptProgression: (String) -> Void
+    var onStrengthOverviewHoldProgression: (String) -> Void
+    var onStrengthOverviewAcceptAllProgressions: () -> Void
+    var strengthPendingProposals: [StrengthProgressionProposal]
+    var onStrengthExerciseAction: (
+        StrengthConversationCapabilityID.CardAction,
+        UUID,
+        UUID,
+        Double,
+        Int
+    ) -> Void
+    var onStrengthExerciseDraftChange: (UUID, Double, Int) -> Void
+    var onStrengthExerciseActivate: (UUID) -> Void
+    var onStrengthPhotoReviewAction: (StrengthConversationCapabilityID.CardAction, UUID, StrengthPhotoReviewCardPayload) -> Void
     var onWhy: (() -> Void)? = nil
 
     var body: some View {
@@ -165,6 +182,78 @@ struct ConversationMessageRenderer: View {
                     },
                     onAction: { action, updated in
                         onGymSetCardAction(action, card.id, updated)
+                    }
+                )
+            }
+        case StrengthConversationCapabilityID.workoutOverviewCardType:
+            if let payload = StrengthWorkoutOverviewCardCodec.decode(card.payload),
+               let session = strengthSession,
+               session.sessionID == payload.sessionID {
+                StrengthWorkoutOverviewCardView(
+                    session: session,
+                    pendingProposals: strengthPendingProposals,
+                    isInteractive: card.isInteractive,
+                    onAcceptProgression: onStrengthOverviewAcceptProgression,
+                    onHoldProgression: onStrengthOverviewHoldProgression,
+                    onAcceptAllProgressions: onStrengthOverviewAcceptAllProgressions,
+                    onOpenDedicatedWorkout: onStrengthOverviewOpenDedicated
+                )
+            }
+        case StrengthConversationCapabilityID.exerciseWorkspaceCardType:
+            if let payload = StrengthExerciseWorkspaceCardCodec.decode(card.payload),
+               let session = strengthSession,
+               session.sessionID == payload.sessionID,
+               let exercise = session.exercises.first(where: { $0.id == payload.exerciseInstanceID }) {
+                StrengthExerciseWorkspaceCardView(
+                    exercise: exercise,
+                    session: session,
+                    isExpanded: exercise.id == session.currentExerciseInstanceID,
+                    isInteractive: card.isInteractive,
+                    onActivate: {
+                        onStrengthExerciseActivate(payload.exerciseInstanceID)
+                    },
+                    onDraftChange: { weight, reps in
+                        onStrengthExerciseDraftChange(payload.exerciseInstanceID, weight, reps)
+                    },
+                    onConfirmSet: { weight, reps in
+                        onStrengthExerciseAction(
+                            .confirmSet,
+                            card.id,
+                            payload.exerciseInstanceID,
+                            weight,
+                            reps
+                        )
+                    },
+                    onSkipSet: {
+                        onStrengthExerciseAction(
+                            .skipSet,
+                            card.id,
+                            payload.exerciseInstanceID,
+                            0,
+                            0
+                        )
+                    },
+                    onAddEvidence: {
+                        onStrengthExerciseAction(
+                            .addEvidence,
+                            card.id,
+                            payload.exerciseInstanceID,
+                            0,
+                            0
+                        )
+                    }
+                )
+            }
+        case StrengthConversationCapabilityID.photoReviewCardType:
+            if let payload = StrengthPhotoReviewCardCodec.decode(card.payload) {
+                StrengthPhotoReviewCardView(
+                    payload: payload,
+                    isInteractive: card.isInteractive,
+                    onApply: { updated in
+                        onStrengthPhotoReviewAction(.applyPhotoReview, card.id, updated)
+                    },
+                    onDismiss: {
+                        onStrengthPhotoReviewAction(.dismissPhotoReview, card.id, payload)
                     }
                 )
             }

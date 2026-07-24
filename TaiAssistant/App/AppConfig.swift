@@ -99,6 +99,38 @@ struct RuntimeAppConfig {
         navV2Enabled: true
     )
 
+    static let uiTestImageDomain = RuntimeAppConfig(
+        assistantName: "Tai",
+        useInMemoryStore: true,
+        isIPhoneOnlyV1: true,
+        localOwnerID: "uitest.image.domain.user",
+        mealInterpretationProvider: .mock,
+        aiProxyBaseURL: nil,
+        aiProxyBearerToken: nil,
+        aiInterpretMealPath: "/ai/interpret-meal",
+        aiInterpretGoalPath: "/ai/interpret-goal",
+        aiInterpretGymPhotoPath: "/ai/interpret-gym-photo",
+        aiInterpretWorkoutPlanPath: "/ai/interpret-workout-plan",
+        aiCoachPath: "/ai/coach",
+        navV2Enabled: true
+    )
+
+    static let uiTestStrengthConversation = RuntimeAppConfig(
+        assistantName: "Tai",
+        useInMemoryStore: true,
+        isIPhoneOnlyV1: true,
+        localOwnerID: "uitest.strength.conversation.user",
+        mealInterpretationProvider: .mock,
+        aiProxyBaseURL: nil,
+        aiProxyBearerToken: nil,
+        aiInterpretMealPath: "/ai/interpret-meal",
+        aiInterpretGoalPath: "/ai/interpret-goal",
+        aiInterpretGymPhotoPath: "/ai/interpret-gym-photo",
+        aiInterpretWorkoutPlanPath: "/ai/interpret-workout-plan",
+        aiCoachPath: "/ai/coach",
+        navV2Enabled: true
+    )
+
     func gymPlanImportRequestContext(
         sourceType: GymPlanImportSourceType,
         sourceTextCharacterCount: Int,

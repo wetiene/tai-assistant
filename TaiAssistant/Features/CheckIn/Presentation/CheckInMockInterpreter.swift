@@ -167,10 +167,18 @@ struct AIServiceCheckInInterpreter: CheckInInterpreting {
                 )
             )
 
+            let validated = try ImageInterpretationValidator.validateMealResponse(
+                response,
+                requiresImageClassification: imageInput != nil
+            ).get()
+
             return CheckInInterpretationResult(
-                meals: response.interpretedMeals.map { CheckInMealDraft(aiMeal: $0) },
-                uiNotes: response.uiNotes
+                meals: validated.interpretedMeals.map { CheckInMealDraft(aiMeal: $0) },
+                uiNotes: validated.uiNotes,
+                imageClassification: PersistedImageClassification.fromMealResponse(validated)
             )
+        } catch let failure as ImageInterpretationFailure {
+            throw failure
         } catch { throw error }
     }
 }

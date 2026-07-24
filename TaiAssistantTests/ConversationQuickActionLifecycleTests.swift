@@ -22,7 +22,7 @@ final class ConversationQuickActionLifecycleTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), strengthConversation: ConversationTestSupport.makeStrengthConversation(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
         vm.startIfNeeded()
 
         let ask = ConversationViewModel.defaultQuickActions.first {
@@ -41,7 +41,7 @@ final class ConversationQuickActionLifecycleTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), strengthConversation: ConversationTestSupport.makeStrengthConversation(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
         vm.applyMealIntent()
 
         let ids = store.active.activeQuickActions.map(\.id)

@@ -130,6 +130,7 @@ final class GymSetCardUXTests: XCTestCase {
                 interpreter: MockCheckInInterpreter()
             ),
             gym: gym,
+            strengthConversation: ConversationTestSupport.makeStrengthConversation(ownerID: "ux.test"),
             liveTai: ConversationTestSupport.makeLiveTai(ownerID: "ux.test"),
             gymPlanRepository: MockGymPlanRepository(),
             ownerID: "ux.test",
@@ -184,7 +185,12 @@ private struct FilteringGymAIService: AIService {
             ],
             detectedWeight: nil,
             limitations: ["Weight plate not visible"],
-            requiresConfirmation: true
+            requiresConfirmation: true,
+            contentType: .gymEquipment,
+            classificationConfidence: 0.55,
+            classificationReason: "Possible gym equipment, but it does not match the planned workout.",
+            containsFood: false,
+            containsGymEquipment: true
         )
     }
 

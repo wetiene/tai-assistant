@@ -9,12 +9,21 @@ enum ConversationGymIntentClassifier {
         case pastePlanText(String)
         case showCurrentProgram
         case replacePlan
+        case arrivedAtGym
         case general
     }
 
     static func classify(_ text: String) -> Classification {
         let normalized = text.lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if isExcludedGymArrivalPhrase(normalized) {
+            return .general
+        }
+
+        if matchesArrivedAtGym(normalized) {
+            return .arrivedAtGym
+        }
 
         if normalized.contains("finish workout")
             || normalized.contains("end workout")
@@ -81,6 +90,52 @@ enum ConversationGymIntentClassifier {
         }
 
         return .general
+    }
+
+    private static func matchesArrivedAtGym(_ normalized: String) -> Bool {
+        if normalized.contains("arrived at the gym")
+            || normalized.contains("i've arrived at the gym")
+            || normalized.contains("ive arrived at the gym")
+            || normalized.contains("just got to the gym")
+            || normalized.contains("just arrived at the gym")
+        {
+            return true
+        }
+
+        if normalized.contains("i'm at the gym")
+            || normalized.contains("im at the gym")
+            || normalized == "at the gym"
+        {
+            return true
+        }
+
+        return false
+    }
+
+    private static func isExcludedGymArrivalPhrase(_ normalized: String) -> Bool {
+        if normalized.contains("at the gym") {
+            if normalized.contains("later")
+                || normalized.contains("will be")
+                || normalized.contains("going to")
+                || normalized.contains("before i go")
+                || normalized.contains("before going")
+                || normalized.contains("yesterday")
+                || normalized.contains("wasn't at")
+                || normalized.contains("wasnt at")
+                || normalized.contains("was at the gym")
+                || normalized.contains("weren't at")
+                || normalized.contains("werent at")
+                || normalized.hasPrefix("how ")
+                || normalized.hasPrefix("what ")
+                || normalized.hasPrefix("when ")
+                || normalized.hasPrefix("where ")
+                || normalized.hasPrefix("why ")
+                || normalized.contains("how often")
+            {
+                return true
+            }
+        }
+        return false
     }
 
     /// Heuristic for pasted trainer programs (multi-section bullet lists).

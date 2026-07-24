@@ -33,6 +33,20 @@ enum ConversationTestSupport {
         )
     }
 
+    static func makeStrengthConversation(
+        workoutRepository: WorkoutRepository = MockWorkoutRepository(),
+        gymPlanRepository: GymPlanRepository = MockGymPlanRepository(),
+        aiService: AIService = MockAIService(),
+        ownerID: String = "test.user"
+    ) -> StrengthConversationController {
+        StrengthConversationController(
+            workoutRepository: workoutRepository,
+            gymPlanRepository: gymPlanRepository,
+            aiService: aiService,
+            ownerID: ownerID
+        )
+    }
+
     static func makeViewModel(
         store: ConversationSessionStore,
         mealRepository: MealRepository = MockMealRepository(),
@@ -54,6 +68,12 @@ enum ConversationTestSupport {
             aiService: aiService,
             ownerID: ownerID
         )
+        let strengthConversation = StrengthConversationController(
+            workoutRepository: workoutRepository,
+            gymPlanRepository: gymPlanRepository,
+            aiService: aiService,
+            ownerID: ownerID
+        )
         let liveTai = makeLiveTai(
             mealRepository: mealRepository,
             goalRepository: goalRepository,
@@ -64,6 +84,7 @@ enum ConversationTestSupport {
             store: store,
             meal: meal,
             gym: gym,
+            strengthConversation: strengthConversation,
             liveTai: liveTai,
             gymPlanRepository: gymPlanRepository,
             ownerID: ownerID,

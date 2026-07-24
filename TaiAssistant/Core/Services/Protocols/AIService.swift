@@ -242,6 +242,29 @@ struct AIInterpretMealContext: Codable {
 struct AIInterpretMealResponse: Codable {
     var interpretedMeals: [AIInterpretedMeal]
     var uiNotes: String?
+    var contentType: MediaContentType?
+    var classificationConfidence: Double?
+    var classificationReason: String?
+    var containsFood: Bool?
+    var containsGymEquipment: Bool?
+
+    init(
+        interpretedMeals: [AIInterpretedMeal],
+        uiNotes: String? = nil,
+        contentType: MediaContentType? = nil,
+        classificationConfidence: Double? = nil,
+        classificationReason: String? = nil,
+        containsFood: Bool? = nil,
+        containsGymEquipment: Bool? = nil
+    ) {
+        self.interpretedMeals = interpretedMeals
+        self.uiNotes = uiNotes
+        self.contentType = contentType
+        self.classificationConfidence = classificationConfidence
+        self.classificationReason = classificationReason
+        self.containsFood = containsFood
+        self.containsGymEquipment = containsGymEquipment
+    }
 }
 
 struct AIInterpretedMeal: Codable {
@@ -328,8 +351,43 @@ struct AIInterpretedMealItem: Codable {
 // MARK: - Gym photo interpretation (`POST /ai/interpret-gym-photo`)
 
 struct AIInterpretGymPhotoRequest: Codable, Sendable {
-    var image: AIInterpretMealImageInput
+    var image: AIInterpretMealImageInput?
+    var images: [AIInterpretMealImageInput]?
     var context: AIInterpretGymPhotoContext?
+
+    init(
+        image: AIInterpretMealImageInput? = nil,
+        images: [AIInterpretMealImageInput]? = nil,
+        context: AIInterpretGymPhotoContext? = nil
+    ) {
+        self.image = image
+        self.images = images
+        self.context = context
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case image, images, context
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        image = try container.decodeIfPresent(AIInterpretMealImageInput.self, forKey: .image)
+        images = try container.decodeIfPresent([AIInterpretMealImageInput].self, forKey: .images)
+        context = try container.decodeIfPresent(AIInterpretGymPhotoContext.self, forKey: .context)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if let images, !images.isEmpty {
+            try container.encode(images, forKey: .images)
+            if images.count == 1, image == nil {
+                try container.encode(images[0], forKey: .image)
+            }
+        } else if let image {
+            try container.encode(image, forKey: .image)
+        }
+        try container.encodeIfPresent(context, forKey: .context)
+    }
 }
 
 struct AIInterpretGymPhotoContext: Codable, Sendable {
@@ -358,6 +416,35 @@ struct AIInterpretGymPhotoResponse: Codable, Sendable {
     var detectedWeight: AIInterpretGymDetectedWeight?
     var limitations: [String]
     var requiresConfirmation: Bool
+    var contentType: MediaContentType?
+    var classificationConfidence: Double?
+    var classificationReason: String?
+    var containsFood: Bool?
+    var containsGymEquipment: Bool?
+
+    init(
+        schemaVersion: Int,
+        exerciseCandidates: [AIInterpretGymExerciseCandidate],
+        detectedWeight: AIInterpretGymDetectedWeight?,
+        limitations: [String],
+        requiresConfirmation: Bool,
+        contentType: MediaContentType? = nil,
+        classificationConfidence: Double? = nil,
+        classificationReason: String? = nil,
+        containsFood: Bool? = nil,
+        containsGymEquipment: Bool? = nil
+    ) {
+        self.schemaVersion = schemaVersion
+        self.exerciseCandidates = exerciseCandidates
+        self.detectedWeight = detectedWeight
+        self.limitations = limitations
+        self.requiresConfirmation = requiresConfirmation
+        self.contentType = contentType
+        self.classificationConfidence = classificationConfidence
+        self.classificationReason = classificationReason
+        self.containsFood = containsFood
+        self.containsGymEquipment = containsGymEquipment
+    }
 }
 
 struct AIInterpretGymExerciseCandidate: Codable, Sendable {

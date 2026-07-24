@@ -20,6 +20,8 @@ final class CheckInViewModel {
     var isInterpreting = false
     var isSaving = false
     var errorMessage: String?
+    private(set) var lastImageInterpretationFailure: ImageInterpretationFailure?
+    private(set) var lastImageClassification: PersistedImageClassification?
     #if DEBUG
     /// Dev-only: full AI interpret failure detail for screenshot / triage (not used for meal save errors).
     var aiInterpretFailureDebugText: String?
@@ -121,6 +123,8 @@ final class CheckInViewModel {
         #endif
         isInterpreting = true
         defer { isInterpreting = false }
+        lastImageInterpretationFailure = nil
+        lastImageClassification = nil
         let interpretRequestStarted = Date()
         do {
             let refinementPayload = buildMealRefinementPayload(
@@ -146,8 +150,12 @@ final class CheckInViewModel {
                 session.interpretedMeals[idx].lastMacroEstimateBasis = session.interpretedMeals[idx].label
             }
             session.interpretationNotes = interpretation.uiNotes
+            lastImageClassification = interpretation.imageClassification
             appendContextRow(kind: .ai, text: aiSummaryText(from: interpretation))
             await refreshDayProgress()
+        } catch let failure as ImageInterpretationFailure {
+            lastImageInterpretationFailure = failure
+            errorMessage = ImageInterpretationFailurePresentation.message(for: failure)
         } catch {
             if let raw = rawUserMessageForRefinement?.trimmingCharacters(in: .whitespacesAndNewlines),
                !raw.isEmpty,

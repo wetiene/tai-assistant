@@ -239,19 +239,31 @@ final class GymCapabilityController {
 
         do {
             let response = try await aiService.interpretGymPhoto(request: request)
-            let interpretation = mapInterpretation(response, allowedExerciseIDs: allowedExerciseIDs)
+            switch ImageInterpretationValidator.validateGymResponse(response) {
+            case .failure:
+                let message = "I couldn't classify that photo safely for this workout."
+                lastError = message
+                return .failure(message)
+            case .success(let validated):
+            let interpretation = mapInterpretation(validated, allowedExerciseIDs: allowedExerciseIDs)
             let allowedOptions = GymSetCardValidation.templateExerciseOptions(for: active)
-            let topCandidate = interpretation.exerciseCandidates.first
+            let exerciseMatch = GymPhotoInterpretationMapper.resolveExerciseMatch(from: interpretation)
             let selectedID: String
             let selectedName: String
-            if let top = topCandidate, allowedOptions.contains(where: { $0.exerciseID == top.exerciseID }) {
-                selectedID = top.exerciseID
-                selectedName = top.displayName
+            if let detectedID = exerciseMatch.detectedExerciseID,
+               allowedOptions.contains(where: { $0.exerciseID == detectedID })
+            {
+                selectedID = detectedID
+                selectedName = exerciseMatch.detectedExerciseName ?? ""
             } else {
                 selectedID = ""
                 selectedName = ""
             }
 
+            let resolvedWeight = GymPhotoInterpretationMapper.resolveSuggestedWeight(
+                from: interpretation,
+                fallbackUnit: weightUnitPreference
+            )
             let draft = GymSetDraft(
                 draftID: UUID(),
                 sessionID: active.sessionID,
@@ -260,8 +272,8 @@ final class GymCapabilityController {
                 setNumber: active.currentSetNumber,
                 selectedExerciseID: selectedID,
                 selectedExerciseName: selectedName,
-                weightValue: interpretation.detectedWeight?.value,
-                weightUnit: interpretation.detectedWeight?.unit ?? weightUnitPreference,
+                weightValue: resolvedWeight.value,
+                weightUnit: resolvedWeight.unit,
                 repetitions: nil,
                 interpretation: interpretation
             )
@@ -271,6 +283,7 @@ final class GymCapabilityController {
                 draft: draft,
                 assistantNote: assistantNote(for: interpretation)
             ))
+            }
         } catch {
             let message = "I couldn’t read that setup. Try another angle with the weight label visible."
             lastError = message

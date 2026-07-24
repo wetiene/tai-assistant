@@ -87,6 +87,9 @@ final class MealCapabilityController {
         if let error = engine.errorMessage {
             lastError = error
             phase = currentDrafts.isEmpty ? .collecting : .reviewing
+            if let imageFailure = engine.lastImageInterpretationFailure {
+                return .imageFailure(imageFailure)
+            }
             return .failure(error)
         }
 
@@ -119,7 +122,8 @@ final class MealCapabilityController {
         return .success(
             MealInterpretationOutcome.Success(
                 drafts: successDrafts,
-                assistantNote: (notes?.isEmpty == false) ? notes : defaultAssistantNote(for: successDrafts)
+                assistantNote: (notes?.isEmpty == false) ? notes : defaultAssistantNote(for: successDrafts),
+                imageClassification: engine.lastImageClassification
             )
         )
     }
@@ -429,8 +433,10 @@ enum MealInterpretationOutcome {
     struct Success {
         var drafts: [CheckInMealDraft]
         var assistantNote: String?
+        var imageClassification: PersistedImageClassification?
     }
 
     case success(Success)
     case failure(String)
+    case imageFailure(ImageInterpretationFailure)
 }

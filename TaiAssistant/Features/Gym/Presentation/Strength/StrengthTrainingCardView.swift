@@ -80,6 +80,8 @@ struct StrengthTrainingCardView: View {
 
             Button(action: onStart) {
                 Text("Start Workout")
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(CoralGradientButtonStyle())
             .accessibilityIdentifier("strength.home.start")

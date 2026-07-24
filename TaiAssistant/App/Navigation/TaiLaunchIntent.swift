@@ -11,6 +11,10 @@ struct TaiLaunchIntent: Equatable, Sendable {
         case startMealCapture
         case focusComposer
         case manageGymPlans
+        /// Start today's planned strength workout inside Tai (conversational cards).
+        case startConversationalStrength
+        /// Resume an in-progress strength workout inside Tai.
+        case resumeConversationalStrength
         case startGymWorkout(GymPlanWorkoutTarget)
         case resumeGymWorkout
     }

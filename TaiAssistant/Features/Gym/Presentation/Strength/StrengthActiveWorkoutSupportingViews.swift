@@ -159,7 +159,7 @@ struct StrengthPhotoAssistReviewSheet: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                    .disabled(result.suggestedWeight == nil)
+                    .disabled(result.detectedExerciseID == nil)
                 }
             }
             .safeAreaInset(edge: .bottom) {

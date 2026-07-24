@@ -101,9 +101,25 @@ struct ConversationQuickAction: Identifiable, Equatable, Sendable {
 struct ConversationComposerState: Equatable, Sendable {
     var text: String = ""
     var pendingPhotoJPEG: Data? = nil
+    var pendingPhotoJPEGs: [Data] = []
+
+    var hasPendingPhotos: Bool {
+        pendingPhotoJPEG != nil || !pendingPhotoJPEGs.isEmpty
+    }
+
+    var resolvedPendingPhotos: [Data] {
+        if !pendingPhotoJPEGs.isEmpty {
+            return pendingPhotoJPEGs
+        }
+        if let pendingPhotoJPEG {
+            return [pendingPhotoJPEG]
+        }
+        return []
+    }
+
     var isSendEnabled: Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty || pendingPhotoJPEG != nil
+        return !trimmed.isEmpty || hasPendingPhotos
     }
 }
 
@@ -180,4 +196,19 @@ enum ConversationDefaults {
         ConversationAllowedQuickAction.gymManagePlans.asConversationQuickAction(),
         ConversationAllowedQuickAction.gymFinishWorkout.asConversationQuickAction(),
     ]
+
+    static let strengthConversationQuickActions: [ConversationQuickAction] = [
+        ConversationAllowedQuickAction.gymTakeSetPhoto.asConversationQuickAction(),
+        ConversationAllowedQuickAction.gymFinishWorkout.asConversationQuickAction(),
+    ]
+
+    static var strengthConversationQuickActionsForUITest: [ConversationQuickAction] {
+        [
+            ConversationQuickAction(
+                id: "strength.uitest.fixturePhotos",
+                title: "Send test photos",
+                systemImage: "photo.on.rectangle"
+            ),
+        ] + strengthConversationQuickActions
+    }
 }

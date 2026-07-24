@@ -80,8 +80,12 @@ type TaiInterpretedMeal = {
 type TaiInterpretMealResponse = {
 	interpretedMeals: TaiInterpretedMeal[];
 	uiNotes?: string | null;
-	/** Optional aggregate signal; iOS decoder ignores unknown keys. */
 	confidence?: number;
+	contentType?: "meal" | "gymEquipment" | "ambiguous" | "unsupported";
+	classificationConfidence?: number;
+	classificationReason?: string;
+	containsFood?: boolean;
+	containsGymEquipment?: boolean;
 };
 
 /** JSON Schema for Responses API structured outputs (`strict: true`). Matches app contract camelCase keys. */
@@ -162,8 +166,25 @@ const TAI_MEAL_RESPONSE_JSON_SCHEMA = {
 			type: "number",
 			description: "Aggregate confidence 0–1; use 0 if not applicable",
 		},
+		contentType: {
+			type: "string",
+			enum: ["meal", "gymEquipment", "ambiguous", "unsupported"],
+		},
+		classificationConfidence: { type: "number" },
+		classificationReason: { type: "string" },
+		containsFood: { type: "boolean" },
+		containsGymEquipment: { type: "boolean" },
 	},
-	required: ["interpretedMeals", "uiNotes", "confidence"],
+	required: [
+		"interpretedMeals",
+		"uiNotes",
+		"confidence",
+		"contentType",
+		"classificationConfidence",
+		"classificationReason",
+		"containsFood",
+		"containsGymEquipment",
+	],
 } satisfies Record<string, unknown>;
 
 /** JSON Schema for goal interpretation (`POST /ai/interpret-goal`). Every property is required for `strict: true`. */
@@ -519,6 +540,17 @@ function mapProviderStructuredToAppResponse(providerJson: unknown): TaiInterpret
 		const sum = interpretedMeals.reduce((a, m) => a + m.confidence, 0);
 		out.confidence = sum / interpretedMeals.length;
 	}
+	const contentType = readContentType(root.contentType);
+	if (contentType) out.contentType = contentType;
+	if (typeof root.classificationConfidence === "number" && Number.isFinite(root.classificationConfidence)) {
+		out.classificationConfidence = root.classificationConfidence;
+	}
+	const reason = readString(root.classificationReason);
+	if (reason !== undefined) out.classificationReason = reason;
+	if (readBoolean(root.containsFood) !== undefined) out.containsFood = readBoolean(root.containsFood);
+	if (readBoolean(root.containsGymEquipment) !== undefined) {
+		out.containsGymEquipment = readBoolean(root.containsGymEquipment);
+	}
 	return out;
 }
 
@@ -681,22 +713,22 @@ function buildSystemPrompt(): string {
 		"",
 		"When user text conflicts with the image, follow the user and update the estimate. Do not treat explicit corrections as weak optional notes.",
 		"",
-		"B) First pass (no `mealRefinement` and empty user `text`): use the image with cautious labeling, honest confidence, and alternatives when ambiguous.",
-		"",
-		"C) Generic correction rules (no food-specific shortcuts):",
+		"B) First pass (no `mealRefinement` and empty user `text`): classify the image first. If the image shows gym equipment rather than food, set contentType to gymEquipment and return an empty interpretedMeals array.",
+		"C) User intent hints (meal photo vs gym photo) are not ground truth. A gym-photo submission may contain food; a meal-photo submission may contain equipment. Report what is actually visible.",
+		"D) Generic correction rules (no food-specific shortcuts):",
 		"- Dish type: update `label` to align with the user's correction.",
 		"- If `isUserConfirmedLabel` is true for a meal row, keep that `label` exactly unless the user's latest text clearly renames or re-identifies the dish; still refresh `items` and macro totals for their corrections.",
 		"- Ingredients: add/remove items and adjust macros; honor removals and exclusions.",
 		"- Portion / quantity: when the user states a clear portion change, serving count, or scalar multiplier, scale calories and macros proportionally from the structured prior meal totals unless new details require a full re-estimate.",
 		"- Uncertainty: reflect in `confidence` and briefly in `uiNotes` without overriding user-stated facts.",
 		"",
-		"D) `uiNotes`: at most 1–2 short sentences. After a refinement, state the outcome plainly (what changed). Do not claim the result is mainly from the photo when the user corrected it. Do not repeat that the image is unclear after the user already clarified.",
+		"E) `uiNotes`: at most 1–2 short sentences. After a refinement, state the outcome plainly (what changed). Do not claim the result is mainly from the photo when the user corrected it. Do not repeat that the image is unclear after the user already clarified.",
 		"",
-		"E) `confidence`: reflect genuine limits of evidence. Never use low confidence to ignore explicit user corrections. If photo and user disagree, follow the user. When totals are driven mainly by user-stated corrections rather than new independent visual evidence, do not output very high confidence — obedience to instructions is not the same as visual certainty.",
+		"F) `confidence`: reflect genuine limits of evidence. Never use low confidence to ignore explicit user corrections. If photo and user disagree, follow the user. When totals are driven mainly by user-stated corrections rather than new independent visual evidence, do not output very high confidence — obedience to instructions is not the same as visual certainty.",
 		"",
-		"F) If instructions are impossible or unsafe, refuse briefly in `uiNotes` and keep JSON schema-valid output.",
+		"G) If instructions are impossible or unsafe, refuse briefly in `uiNotes` and keep JSON schema-valid output.",
 		"",
-		"G) Output only JSON matching the schema (no markdown fences, no extra prose). `alternatives` must always be an array ([] when none).",
+		"H) Output only JSON matching the schema (no markdown fences, no extra prose). `alternatives` must always be an array ([] when none).",
 	].join("\n");
 }
 
@@ -1082,8 +1114,22 @@ async function handleInterpretGoal(request: Request, env: Env): Promise<Response
 
 export type TaiInterpretGymPhotoRequest = {
 	image?: { base64Data?: string; mimeType?: string | null };
+	images?: Array<{ base64Data?: string; mimeType?: string | null }>;
 	context?: Record<string, unknown>;
 };
+
+function resolveGymPhotoImages(body: TaiInterpretGymPhotoRequest): Array<{ base64Data: string; mimeType: string }> {
+	if (Array.isArray(body.images) && body.images.length > 0) {
+		return body.images.flatMap((item) => {
+			const base64Data = item?.base64Data?.trim();
+			if (!base64Data) return [];
+			return [{ base64Data, mimeType: item?.mimeType?.trim() || "image/jpeg" }];
+		});
+	}
+	const single = body.image?.base64Data?.trim();
+	if (!single) return [];
+	return [{ base64Data: single, mimeType: body.image?.mimeType?.trim() || "image/jpeg" }];
+}
 
 export type TaiInterpretGymPhotoResponse = {
 	schemaVersion: number;
@@ -1091,6 +1137,11 @@ export type TaiInterpretGymPhotoResponse = {
 	detectedWeight?: { value: number; unit: string; confidence: number; reason: string } | null;
 	limitations: string[];
 	requiresConfirmation: boolean;
+	contentType: "meal" | "gymEquipment" | "ambiguous" | "unsupported";
+	classificationConfidence: number;
+	classificationReason: string;
+	containsFood: boolean;
+	containsGymEquipment: boolean;
 };
 
 const TAI_GYM_PHOTO_RESPONSE_JSON_SCHEMA = {
@@ -1129,18 +1180,43 @@ const TAI_GYM_PHOTO_RESPONSE_JSON_SCHEMA = {
 		},
 		limitations: { type: "array", items: { type: "string" } },
 		requiresConfirmation: { type: "boolean" },
+		contentType: {
+			type: "string",
+			enum: ["meal", "gymEquipment", "ambiguous", "unsupported"],
+		},
+		classificationConfidence: { type: "number" },
+		classificationReason: { type: "string" },
+		containsFood: { type: "boolean" },
+		containsGymEquipment: { type: "boolean" },
 	},
-	required: ["schemaVersion", "exerciseCandidates", "detectedWeight", "limitations", "requiresConfirmation"],
+	required: [
+		"schemaVersion",
+		"exerciseCandidates",
+		"detectedWeight",
+		"limitations",
+		"requiresConfirmation",
+		"contentType",
+		"classificationConfidence",
+		"classificationReason",
+		"containsFood",
+		"containsGymEquipment",
+	],
 } as const;
 
 function buildGymPhotoSystemPrompt(): string {
 	return [
 		"You are Tai's gym equipment vision assistant.",
-		"Identify the exercise/machine from the photo and read the selected weight when visible.",
-		"Only choose exerciseID values from allowedExerciseCandidates in context.",
-		"Prefer expectedExerciseID when the image is consistent with the planned workout.",
+		"First classify what the image actually shows. User intent hints and workout context are not ground truth.",
+		"A gym-photo submission may contain food. A meal-photo submission may contain gym equipment. Report visible evidence only.",
+		"Identify the exercise or machine only when gym equipment is actually visible.",
+		"Only choose exerciseID values from allowedExerciseCandidates when equipment is visible and plausibly matches.",
+		"Never identify an exercise merely because expectedExerciseID or allowedExerciseCandidates were provided.",
 		"Return schemaVersion 1 JSON only.",
-		"Never identify people. If weight is unclear, set detectedWeight null and explain in limitations.",
+		"If the image shows food rather than equipment, set contentType to meal, containsFood true, containsGymEquipment false, and return an empty exerciseCandidates array.",
+		"If equipment is visible, set contentType to gymEquipment.",
+		"Weight is optional evidence. If the weight label, pin, or plates are unclear, set detectedWeight to null and explain why in limitations.",
+		"Never guess or infer a weight value.",
+		"Never identify people.",
 		"requiresConfirmation must always be true.",
 	].join(" ");
 }
@@ -1228,21 +1304,37 @@ function mapProviderStructuredToGymPhotoResponse(providerJson: unknown): TaiInte
 		detectedWeight,
 		limitations: readStringArray(root.limitations, 8),
 		requiresConfirmation: root.requiresConfirmation === true || root.requiresConfirmation === undefined,
+		contentType: readContentType(root.contentType) ?? "ambiguous",
+		classificationConfidence: readFiniteNumber(root.classificationConfidence, 0),
+		classificationReason: readString(root.classificationReason) ?? "",
+		containsFood: readBoolean(root.containsFood) ?? false,
+		containsGymEquipment: readBoolean(root.containsGymEquipment) ?? false,
 	};
+}
+
+function readContentType(value: unknown): TaiInterpretGymPhotoResponse["contentType"] | null {
+	const raw = readString(value);
+	if (raw === "meal" || raw === "gymEquipment" || raw === "ambiguous" || raw === "unsupported") {
+		return raw;
+	}
+	return null;
 }
 
 async function interpretGymPhotoWithOpenAI(
 	env: Env,
 	body: TaiInterpretGymPhotoRequest,
-	imageB64: string
+	images: Array<{ base64Data: string; mimeType: string }>
 ): Promise<
 	| { status: "success"; payload: TaiInterpretGymPhotoResponse }
 	| { status: "ai_provider_error"; openaiHttpStatus: number; openAIDetail?: string }
 	| { status: "malformed_ai_response" }
 > {
-	const mime = body.image?.mimeType?.trim() || "image/jpeg";
 	const ctx = body.context !== undefined ? JSON.stringify(body.context) : "{}";
 	const attempt = async (isRetry: boolean) => {
+		const imageBlocks = images.map((image) => ({
+			type: "input_image",
+			image_url: `data:${image.mimeType};base64,${image.base64Data}`,
+		}));
 		const requestBody = {
 			model: OPENAI_MEAL_MODEL,
 			input: [
@@ -1251,7 +1343,7 @@ async function interpretGymPhotoWithOpenAI(
 					role: "user",
 					content: [
 						{ type: "input_text", text: `Workout context JSON:\n${ctx}` },
-						{ type: "input_image", image_url: `data:${mime};base64,${imageB64}` },
+						...imageBlocks,
 						...(isRetry
 							? [{ type: "input_text", text: "Return valid JSON matching the schema exactly." }]
 							: []),
@@ -1315,13 +1407,13 @@ async function handleInterpretGymPhoto(request: Request, env: Env): Promise<Resp
 		return json({ error: "invalid_json" }, 400);
 	}
 
-	const imageB64 = body.image?.base64Data;
-	if (!imageB64) {
+	const imageB64List = resolveGymPhotoImages(body);
+	if (imageB64List.length === 0) {
 		return json({ error: "image_required" }, 400);
 	}
 
 	console.log("[interpret-gym-photo] content_length_header=", contentLength, "request_meta=", JSON.stringify(redactGymPhotoRequestForLogging(body)));
-	const outcome = await interpretGymPhotoWithOpenAI(env, body, imageB64);
+	const outcome = await interpretGymPhotoWithOpenAI(env, body, imageB64List);
 	if (outcome.status === "success") {
 		const allowed = readAllowedExerciseIDsFromContext(
 			body.context && typeof body.context === "object" ? (body.context as Record<string, unknown>) : undefined

@@ -121,6 +121,16 @@ final class ActiveConversationSessionController {
         apply(intent, to: viewModel)
     }
 
+    /// Waits for the single conversation bootstrap, then applies a launch intent once.
+    func deliverWhenReady(_ intent: TaiLaunchIntent) async {
+        await ensureLoaded()
+        deliver(intent)
+    }
+
+    func refreshStrengthAfterDedicatedDismiss() async {
+        await viewModel?.refreshStrengthSessionFromRepository()
+    }
+
     // MARK: - Private
 
     private func performLoad() async {
@@ -185,6 +195,14 @@ final class ActiveConversationSessionController {
             )
             await gym.restoreFromConversation(restored)
 
+            let strengthConversation = StrengthConversationController(
+                workoutRepository: workoutRepository,
+                gymPlanRepository: gymPlanRepository,
+                aiService: aiService,
+                ownerID: ownerID
+            )
+            await strengthConversation.restoreFromConversation(restored)
+
             let liveTai = LiveTaiCapabilityController(
                 mealRepository: mealRepository,
                 goalRepository: goalRepository,
@@ -196,6 +214,7 @@ final class ActiveConversationSessionController {
                 store: store,
                 meal: meal,
                 gym: gym,
+                strengthConversation: strengthConversation,
                 liveTai: liveTai,
                 gymPlanRepository: gymPlanRepository,
                 aiService: aiService,
@@ -239,18 +258,18 @@ final class ActiveConversationSessionController {
             viewModel.applyMealIntent(dayContext: intent.dayContext)
         case .focusComposer:
             viewModel.startIfNeeded()
+        case .startConversationalStrength:
+            viewModel.startIfNeeded()
+            Task { await viewModel.beginConversationalStrengthFromHome() }
+        case .resumeConversationalStrength:
+            viewModel.startIfNeeded()
+            Task { await viewModel.resumeConversationalStrengthFromHome() }
         case .startGymWorkout(let target):
-            if let router = strengthWorkoutEntryRouter {
-                Task { await router.requestStart(target: target, source: .home) }
-            } else {
-                viewModel.applyGymIntent(workoutTarget: target)
-            }
+            viewModel.startIfNeeded()
+            Task { await viewModel.beginConversationalStrengthWorkout(target: target, entrySource: .home) }
         case .resumeGymWorkout:
-            if let router = strengthWorkoutEntryRouter {
-                Task { await router.requestResume(source: .home) }
-            } else {
-                viewModel.applyGymIntent(resume: true)
-            }
+            viewModel.startIfNeeded()
+            Task { await viewModel.resumeConversationalStrengthFromHome() }
         case .manageGymPlans:
             viewModel.onManageGymPlans?()
         }

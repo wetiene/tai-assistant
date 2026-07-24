@@ -9,8 +9,15 @@ struct TaiAssistantApp: App {
 
     init() {
         let config: RuntimeAppConfig
-        if ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke") {
+        if StrengthConversationUITestSupport.isEnabled {
+            config = .uiTestStrengthConversation
+            AIDataProcessingConsentStore.accept()
+        } else if ImageDomainUITestSupport.isEnabled {
+            config = .uiTestImageDomain
+            AIDataProcessingConsentStore.accept()
+        } else if ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke") {
             config = .uiTestStrengthSmoke
+            AIDataProcessingConsentStore.accept()
         } else {
             config = .default
         }
@@ -22,6 +29,15 @@ struct TaiAssistantApp: App {
         )
         if ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke") {
             try? PreviewSeedData.seedIfNeeded(in: container, ownerID: config.localOwnerID)
+            if ProcessInfo.processInfo.arguments.contains("-UITestStrengthActiveWorkout") {
+                try? PreviewSeedData.seedActiveStrengthWorkout(
+                    in: container,
+                    ownerID: config.localOwnerID,
+                    confirmedSets: ProcessInfo.processInfo.arguments.contains("-UITestStrengthConfirmedSets")
+                        ? 1
+                        : 0
+                )
+            }
         }
         self.modelContainer = container
         self.dependencies = AppDependencies.live(modelContainer: container, config: config)

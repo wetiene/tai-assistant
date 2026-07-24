@@ -53,7 +53,7 @@ final class MealCapabilityConfirmationTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), strengthConversation: ConversationTestSupport.makeStrengthConversation(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
         vm.startIfNeeded()
         await vm.sendComposerWithTestHooks(text: "lunch bowl", photo: nil)
 
@@ -83,7 +83,7 @@ final class MealCapabilityConfirmationTests: XCTestCase {
             ownerID: "test.user",
             interpreter: MockCheckInInterpreter()
         )
-        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
+        let vm = ConversationViewModel(store: store, meal: meal, gym: ConversationTestSupport.makeGym(), strengthConversation: ConversationTestSupport.makeStrengthConversation(), liveTai: ConversationTestSupport.makeLiveTai(), gymPlanRepository: ConversationTestSupport.makeGymPlanRepository(), ownerID: "test.user", assistantName: "Tai")
         vm.startIfNeeded()
         await vm.sendComposerWithTestHooks(text: "dinner steak", photo: nil)
 
@@ -143,6 +143,13 @@ private extension ConversationViewModel {
         switch outcome {
         case .failure(let message):
             store.append(ConversationMessage(actor: .assistant, text: message))
+        case .imageFailure(let failure):
+            store.append(
+                ConversationMessage(
+                    actor: .assistant,
+                    text: ImageInterpretationFailurePresentation.message(for: failure)
+                )
+            )
         case .success(let success):
             store.freezeInteractiveCards(typeID: MealCapabilityID.estimateCardType)
             if let note = success.assistantNote {

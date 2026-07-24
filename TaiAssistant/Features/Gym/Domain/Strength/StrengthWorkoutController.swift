@@ -83,7 +83,8 @@ final class StrengthWorkoutController {
 
     func startSession(
         _ prepared: StrengthWorkoutSession,
-        replacingExisting: Bool = false
+        replacingExisting: Bool = false,
+        activateFirstExercise: Bool = true
     ) async throws {
         clearError()
         if !replacingExisting, let existing = try await workoutRepository.fetchInProgressSession(ownerID: ownerID) {
@@ -94,8 +95,9 @@ final class StrengthWorkoutController {
         }
 
         var active = prepared
-        active.preFlightCompleted = active.preFlightCompleted || !active.preFlightProposals.isNilOrEmpty
-        activateFirstExercise(&active)
+        if activateFirstExercise {
+            self.activateFirstExercise(&active)
+        }
         try StrengthSessionInvariants.validate(active)
 
         let log = WorkoutSessionLog(
@@ -114,6 +116,30 @@ final class StrengthWorkoutController {
         }
         session = active
         debrief = nil
+    }
+
+    // MARK: - Progression decisions
+
+    func recordProgressionDecision(_ accepted: StrengthAcceptedProposal) async throws {
+        guard var active = session else { return }
+        active.acceptedProposals[accepted.exerciseID] = accepted
+
+        if let exerciseIndex = active.exercises.firstIndex(where: { $0.exerciseID == accepted.exerciseID }) {
+            for setIndex in active.exercises[exerciseIndex].sets.indices
+                where active.exercises[exerciseIndex].sets[setIndex].status == .pending
+            {
+                active.exercises[exerciseIndex].sets[setIndex].suggestedWeight = accepted.weight
+            }
+        }
+
+        if let proposals = active.preFlightProposals, !proposals.isEmpty {
+            active.preFlightCompleted = proposals.allSatisfy {
+                active.acceptedProposals[$0.exerciseID] != nil
+            }
+        }
+
+        try await persistSession(active)
+        session = active
     }
 
     // MARK: - Set operations
@@ -423,8 +449,17 @@ final class StrengthWorkoutController {
             return
         }
 
-        if let nextSet = session.exercises[exerciseIndex].sets.first(where: { $0.status == .pending }) {
-            session.currentSetID = nextSet.id
+        if let nextIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.status == .pending }) {
+            let confirmedSet = session.exercises[exerciseIndex].sets.first {
+                $0.status == .confirmed && $0.setNumber < session.exercises[exerciseIndex].sets[nextIndex].setNumber
+            } ?? session.exercises[exerciseIndex].sets.first { $0.status == .confirmed }
+            if let confirmedSet {
+                session.exercises[exerciseIndex].sets[nextIndex].suggestedWeight =
+                    confirmedSet.confirmedWeight ?? confirmedSet.suggestedWeight
+                session.exercises[exerciseIndex].sets[nextIndex].suggestedReps =
+                    confirmedSet.confirmedReps ?? confirmedSet.suggestedReps
+            }
+            session.currentSetID = session.exercises[exerciseIndex].sets[nextIndex].id
             return
         }
 

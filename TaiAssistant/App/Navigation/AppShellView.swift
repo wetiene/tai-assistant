@@ -1,6 +1,10 @@
 import SwiftUI
 import UIKit
 
+extension Notification.Name {
+    static let uiTestHomeStrengthStartButtonTapped = Notification.Name("UITestHomeStrengthStartButtonTapped")
+}
+
 struct AppShellView: View {
     fileprivate enum LegacyTab: Hashable {
         case dashboard
@@ -12,7 +16,8 @@ struct AppShellView: View {
     let config: RuntimeAppConfig
 
     @State private var legacyTab: LegacyTab = .dashboard
-    @State private var navV2Tab: NavV2PrimaryTab = .home
+    @State private var navV2Tab: NavV2PrimaryTab =
+        (StrengthConversationUITestSupport.isEnabled || ImageDomainUITestSupport.isEnabled) ? .tai : .home
     @State private var isAskTaiPresented = false
     @State private var askTaiSeedPrompt: String?
     @State private var isKeyboardVisible = false
@@ -20,7 +25,10 @@ struct AppShellView: View {
     @State private var workoutAddedFeedbackTrigger = 0
     @State private var isAskTaiDeemphasized = false
     @State private var pendingTaiIntent: TaiLaunchIntent?
-    @State private var hasOpenedTai = false
+    @State private var hasOpenedTai = ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke")
+        || StrengthConversationUITestSupport.isEnabled
+        || ImageDomainUITestSupport.isEnabled
+    @State private var uiTestHomeStrengthStartSignal = "idle"
     @State private var isGymPlansPresented = false
     @State private var pendingGymPlanImportReview: (draft: GymPlanImportDraft, sourceText: String?)?
     @State private var strengthWorkoutPresentation: StrengthWorkoutPresentation?
@@ -68,6 +76,17 @@ struct AppShellView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isKeyboardVisible = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .uiTestHomeStrengthStartButtonTapped)) { _ in
+            uiTestHomeStrengthStartSignal = "button"
+        }
+        .overlay {
+            if ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke") {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityIdentifier("uitest.home.strength.\(uiTestHomeStrengthStartSignal)")
+            }
         }
     }
 
@@ -128,18 +147,18 @@ struct AppShellView: View {
                     onOpenTai: handleOpenTaiFromHome,
                     onManageGymPlans: { isGymPlansPresented = true },
                     onStartStrengthWorkout: { plan, _, _ in
-                        Task {
-                            await workoutEntryRouter?.requestStart(
-                                target: GymPlanWorkoutTarget(
-                                    reference: plan.reference,
-                                    sectionIndex: plan.sectionIndex
-                                ),
-                                source: .home
-                            )
+                        if ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke") {
+                            NotificationCenter.default.post(name: .uiTestHomeStrengthStartButtonTapped, object: nil)
                         }
+                        openTaiForConversationalStrengthWorkout(
+                            target: GymPlanWorkoutTarget(
+                                reference: plan.reference,
+                                sectionIndex: plan.sectionIndex
+                            )
+                        )
                     },
                     onResumeStrengthWorkout: {
-                        Task { await workoutEntryRouter?.requestResume(source: .home) }
+                        openTaiForConversationalStrengthResume()
                     }
                 )
             }
@@ -162,7 +181,9 @@ struct AppShellView: View {
                         },
                         onManageGymPlans: { isGymPlansPresented = true },
                         onStartWorkout: { target in
-                            Task { await workoutEntryRouter?.requestStart(target: target, source: .gymPlans) }
+                            isGymPlansPresented = false
+                            pendingGymPlanImportReview = nil
+                            openTaiForConversationalStrengthWorkout(target: target)
                         }
                     )
                 } else {
@@ -195,7 +216,7 @@ struct AppShellView: View {
                     onStartWorkout: { target in
                         isGymPlansPresented = false
                         pendingGymPlanImportReview = nil
-                        Task { await workoutEntryRouter?.requestStart(target: target, source: .gymPlans) }
+                        openTaiForConversationalStrengthWorkout(target: target)
                     },
                     onDismiss: {
                         isGymPlansPresented = false
@@ -214,12 +235,21 @@ struct AppShellView: View {
                     onComplete: {
                         strengthWorkoutPresentation = nil
                         workoutAddedFeedbackTrigger += 1
+                        Task {
+                            await dependencies.conversationSession.refreshStrengthAfterDedicatedDismiss()
+                        }
                     },
                     onLeave: {
                         strengthWorkoutPresentation = nil
+                        Task {
+                            await dependencies.conversationSession.refreshStrengthAfterDedicatedDismiss()
+                        }
                     },
                     onCancel: {
                         strengthWorkoutPresentation = nil
+                        Task {
+                            await dependencies.conversationSession.refreshStrengthAfterDedicatedDismiss()
+                        }
                     }
                 )
             }
@@ -354,21 +384,15 @@ struct AppShellView: View {
         case .manageGymPlans:
             isGymPlansPresented = true
         case .startGymWorkout(let templateID):
-            Task {
-                await workoutEntryRouter?.requestStart(
-                    target: GymPlanWorkoutTarget(reference: .starter(templateID), sectionIndex: 0),
-                    source: .home
-                )
-            }
+            openTaiForConversationalStrengthWorkout(
+                target: GymPlanWorkoutTarget(reference: .starter(templateID), sectionIndex: 0)
+            )
         case .startGymWorkoutPlan(let reference):
-            Task {
-                await workoutEntryRouter?.requestStart(
-                    target: GymPlanWorkoutTarget(reference: reference, sectionIndex: 0),
-                    source: .home
-                )
-            }
+            openTaiForConversationalStrengthWorkout(
+                target: GymPlanWorkoutTarget(reference: reference, sectionIndex: 0)
+            )
         case .resumeGymWorkout:
-            Task { await workoutEntryRouter?.requestResume(source: .home) }
+            openTaiForConversationalStrengthResume()
         default:
             pendingTaiIntent = TaiLaunchIntent.fromHomeDestination(
                 destination,
@@ -386,6 +410,48 @@ struct AppShellView: View {
         )
         hasOpenedTai = true
         navV2Tab = .tai
+    }
+
+    private func openTaiForConversationalStrengthStart() {
+        openTaiForConversationalStrength(
+            TaiLaunchIntent(
+                kind: .startConversationalStrength,
+                dayContext: dependencies.nutritionDaySelection.dayContext()
+            )
+        )
+    }
+
+    private func openTaiForConversationalStrengthResume() {
+        openTaiForConversationalStrength(
+            TaiLaunchIntent(
+                kind: .resumeConversationalStrength,
+                dayContext: dependencies.nutritionDaySelection.dayContext()
+            )
+        )
+    }
+
+    private func openTaiForConversationalStrengthWorkout(target: GymPlanWorkoutTarget) {
+        openTaiForConversationalStrength(
+            TaiLaunchIntent(
+                kind: .startGymWorkout(target),
+                dayContext: dependencies.nutritionDaySelection.dayContext()
+            )
+        )
+    }
+
+    /// Switches to Tai and delivers strength intents directly so lazy tab mount cannot miss them.
+    private func openTaiForConversationalStrength(_ intent: TaiLaunchIntent) {
+        if ProcessInfo.processInfo.arguments.contains("-UITestStrengthSmoke") {
+            uiTestHomeStrengthStartSignal = "started"
+        }
+        hasOpenedTai = true
+        navV2Tab = .tai
+        Task {
+            await dependencies.conversationSession.ensureLoaded()
+            // Let Home strength-card loading finish before starting a session on the shared store.
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            dependencies.conversationSession.deliver(intent)
+        }
     }
 }
 

@@ -1,11 +1,30 @@
 import Foundation
 
 struct MockAIService: AIService {
+    private func mealResponse(
+        interpretedMeals: [AIInterpretedMeal],
+        uiNotes: String,
+        includesImage: Bool
+    ) -> AIInterpretMealResponse {
+        AIInterpretMealResponse(
+            interpretedMeals: interpretedMeals,
+            uiNotes: uiNotes,
+            contentType: includesImage ? .meal : nil,
+            classificationConfidence: includesImage ? 0.88 : nil,
+            classificationReason: includesImage ? "Food is visible in the image." : nil,
+            containsFood: includesImage ? true : nil,
+            containsGymEquipment: includesImage ? false : nil
+        )
+    }
+
     func send(message: String, context: [String: String]) async throws -> String {
         "Mock response from Tai: \(message)"
     }
 
     func interpretMeal(request: AIInterpretMealRequest) async throws -> AIInterpretMealResponse {
+        if let scenario = ImageDomainUITestSupport.scenario {
+            return ImageDomainUITestFixtures.interpretMeal(request: request, scenario: scenario)
+        }
         try await Task.sleep(nanoseconds: 300_000_000)
 
         let normalized = request.text?.lowercased() ?? ""
@@ -48,7 +67,7 @@ struct MockAIService: AIService {
         )
 
         if normalized.contains("breakfast") || normalized.contains("shake") {
-            return AIInterpretMealResponse(
+            return mealResponse(
                 interpretedMeals: [
                     AIInterpretedMeal(
                         label: normalized.contains("shake") ? "Protein shake" : "Usual breakfast",
@@ -67,12 +86,13 @@ struct MockAIService: AIService {
                         alternatives: []
                     )
                 ],
-                uiNotes: "Mock AI interpretation. Adjust items before saving."
+                uiNotes: "Mock AI interpretation. Adjust items before saving.",
+                includesImage: containsImage
             )
         }
 
         if normalized.contains("lunch") || normalized.contains("dinner") || normalized.contains("family") {
-            return AIInterpretMealResponse(
+            return mealResponse(
                 interpretedMeals: [
                     AIInterpretedMeal(
                         label: normalized.contains("family") ? "Family dinner" : "Inferred meal",
@@ -91,13 +111,15 @@ struct MockAIService: AIService {
                         alternatives: []
                     )
                 ],
-                uiNotes: "Mock AI interpretation. Nutrients are approximate."
+                uiNotes: "Mock AI interpretation. Nutrients are approximate.",
+                includesImage: containsImage
             )
         }
 
-        return AIInterpretMealResponse(
+        return mealResponse(
             interpretedMeals: [defaultMeal],
-            uiNotes: "Mock AI interpretation from generic meal template."
+            uiNotes: "Mock AI interpretation from generic meal template.",
+            includesImage: containsImage
         )
     }
 
@@ -228,15 +250,49 @@ struct MockAIService: AIService {
     }
 
     func interpretGymPhoto(request: AIInterpretGymPhotoRequest) async throws -> AIInterpretGymPhotoResponse {
+        if let scenario = ImageDomainUITestSupport.scenario {
+            return ImageDomainUITestFixtures.interpretGymPhoto(request: request, scenario: scenario)
+        }
         try await Task.sleep(nanoseconds: 250_000_000)
-        let expectedID = request.context?.expectedExerciseID ?? GymExerciseID.legPress.rawValue
-        let displayName = GymExerciseCatalog.displayName(for: expectedID)
+        let allowedCandidates = request.context?.allowedExerciseCandidates ?? []
+        let allowedIDs = Set(allowedCandidates.map(\.exerciseID))
         let unit = request.context?.weightUnitPreference ?? "kg"
+        let photoCount = request.images?.count ?? (request.image != nil ? 1 : 0)
+
+        let resolvedExerciseID: String? = {
+            if let expected = request.context?.expectedExerciseID, allowedIDs.contains(expected) {
+                return expected
+            }
+            if allowedCandidates.count == 1 {
+                return allowedCandidates[0].exerciseID
+            }
+            if allowedIDs.contains(GymExerciseID.legPress.rawValue) {
+                return GymExerciseID.legPress.rawValue
+            }
+            return allowedCandidates.first?.exerciseID
+        }()
+
+        guard let exerciseID = resolvedExerciseID else {
+            return AIInterpretGymPhotoResponse(
+                schemaVersion: 1,
+                exerciseCandidates: [],
+                detectedWeight: nil,
+                limitations: ["Could not match equipment to the planned workout."],
+                requiresConfirmation: true,
+                contentType: .ambiguous,
+                classificationConfidence: 0.42,
+                classificationReason: "Equipment is unclear against the planned workout.",
+                containsFood: false,
+                containsGymEquipment: false
+            )
+        }
+
+        let displayName = GymExerciseCatalog.displayName(for: exerciseID)
         return AIInterpretGymPhotoResponse(
             schemaVersion: 1,
             exerciseCandidates: [
                 AIInterpretGymExerciseCandidate(
-                    exerciseID: expectedID,
+                    exerciseID: exerciseID,
                     confidence: 0.86,
                     reason: "Machine setup matches \(displayName)"
                 ),
@@ -247,8 +303,17 @@ struct MockAIService: AIService {
                 confidence: 0.72,
                 reason: "Selector pin appears aligned with the labeled plate"
             ),
-            limitations: ["Mock interpretation — confirm exercise and weight before saving."],
-            requiresConfirmation: true
+            limitations: [
+                photoCount > 1
+                    ? "Mock interpretation from \(photoCount) photos — confirm exercise and weight before saving."
+                    : "Mock interpretation — confirm exercise and weight before saving."
+            ],
+            requiresConfirmation: true,
+            contentType: .gymEquipment,
+            classificationConfidence: 0.9,
+            classificationReason: "The image shows gym equipment that matches \(displayName).",
+            containsFood: false,
+            containsGymEquipment: true
         )
     }
 
